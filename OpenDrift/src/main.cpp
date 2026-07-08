@@ -3,16 +3,28 @@
 
 #include "LGFX_OpenDrift.hpp"
 #include "IMU.h"
+#include "Servo.h"
 
 
 LGFX lcd;
 
 IMU imu;
 
+ServoOutput steeringServo;
+
+
+// Servo output pin
+#define SERVO_PIN 16
+
+
+// First gyro tuning value
+float gyroGain = 1.5f;
+
 
 // WiFi
 const char* ssid = "OpenDrift";
 const char* password = "opendrift";
+
 
 
 void setup()
@@ -22,6 +34,7 @@ void setup()
 
     pinMode(2, OUTPUT);
     digitalWrite(2, HIGH);
+
 
 
     lcd.init();
@@ -35,17 +48,51 @@ void setup()
 
 
     lcd.setTextSize(3);
-    lcd.drawCenterString("OpenDrift",120,30);
+
+    lcd.drawCenterString(
+        "OpenDrift",
+        120,
+        20
+    );
 
 
 
-    // Start IMU
+    // IMU
 
     if(!imu.begin())
     {
         lcd.setTextSize(2);
+
         lcd.drawCenterString(
             "IMU ERROR",
+            120,
+            90
+        );
+
+        while(true)
+        {
+            delay(1000);
+        }
+    }
+
+
+
+    lcd.setTextSize(2);
+
+    lcd.drawCenterString(
+        "IMU OK",
+        120,
+        60
+    );
+
+
+
+    // Servo
+
+    if(!steeringServo.begin(SERVO_PIN))
+    {
+        lcd.drawCenterString(
+            "SERVO ERROR",
             120,
             100
         );
@@ -57,11 +104,14 @@ void setup()
     }
 
 
-    lcd.setTextSize(2);
+    steeringServo.center();
+
+
+
     lcd.drawCenterString(
-        "IMU OK",
+        "SERVO OK",
         120,
-        80
+        90
     );
 
 
@@ -96,13 +146,15 @@ void setup()
     );
 
 
-
     delay(1500);
+
 
 
     lcd.fillScreen(TFT_BLACK);
 
+
     lcd.setTextSize(3);
+
     lcd.drawCenterString(
         "OpenDrift",
         120,
@@ -112,16 +164,47 @@ void setup()
 
 
 
+
 void loop()
 {
     imu.update();
 
 
+    float yaw = imu.getYawRate();
+
+
+
+    // Basic gyro correction
+    // Clockwise = positive Z
+    // Counter steer = negative servo movement
+
+    int servoCommand =
+        1500 - (yaw * gyroGain);
+
+
+
+    // Servo safety limits
+
+    servoCommand = constrain(
+        servoCommand,
+        1000,
+        2000
+    );
+
+
+    steeringServo.writeMicroseconds(
+        servoCommand
+    );
+
+
+
+    // Screen refresh
+
     lcd.fillRect(
         0,
         70,
         240,
-        100,
+        150,
         TFT_BLACK
     );
 
@@ -138,7 +221,7 @@ void loop()
 
 
     lcd.drawFloat(
-        imu.getYawRate(),
+        yaw,
         2,
         90,
         80
@@ -154,35 +237,50 @@ void loop()
 
 
     lcd.drawString(
-        "X:",
+        "Gain:",
         20,
-        120
+        110
     );
 
 
     lcd.drawFloat(
-        imu.getGyroX(),
+        gyroGain,
         2,
-        60,
-        120
+        100,
+        110
     );
 
 
 
     lcd.drawString(
-        "Y:",
-        130,
-        120
+        "Servo:",
+        20,
+        140
     );
 
 
-    lcd.drawFloat(
-        imu.getGyroY(),
-        2,
+    lcd.drawNumber(
+        steeringServo.getPosition(),
+        110,
+        140
+    );
+
+
+    lcd.drawString(
+        "us",
         170,
-        120
+        140
     );
 
 
-    delay(100);
+
+    Serial.print("Yaw: ");
+    Serial.print(yaw);
+
+    Serial.print("  Servo: ");
+    Serial.println(servoCommand);
+
+
+
+    delay(20);
 }
