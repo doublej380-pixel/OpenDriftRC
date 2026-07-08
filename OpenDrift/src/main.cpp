@@ -1,81 +1,31 @@
 #include <Arduino.h>
-#include <Wire.h>
-#include "SensorQMI8658.hpp"
+#include "LGFX_OpenDrift.hpp"
 
-#define I2C_SDA 6
-#define I2C_SCL 7
-
-SensorQMI8658 qmi;
+LGFX lcd;
 
 void setup()
 {
-    Serial.begin(115200);
-    delay(1000);
+    pinMode(2, OUTPUT);
+    digitalWrite(2, HIGH);     // Backlight ON
 
-    Serial.println();
-    Serial.println("OpenDrift Starting...");
+    lcd.init();
 
-    if (!qmi.begin(Wire, QMI8658_L_SLAVE_ADDRESS, I2C_SDA, I2C_SCL))
-    {
-        Serial.println("QMI8658 NOT detected!");
+    lcd.setRotation(0);
 
-        while (true)
-        {
-            delay(1000);
-        }
-    }
+    lcd.fillScreen(TFT_BLACK);
 
-    Serial.println("QMI8658 detected!");
+    lcd.setTextColor(TFT_WHITE);
 
-    // Configure accelerometer
-    qmi.configAccelerometer(
-        SensorQMI8658::ACC_RANGE_4G,
-        SensorQMI8658::ACC_ODR_1000Hz,
-        SensorQMI8658::LPF_MODE_0
-    );
+    lcd.setTextSize(3);
 
-    // Configure gyro
-    qmi.configGyroscope(
-        SensorQMI8658::GYR_RANGE_1024DPS,
-        SensorQMI8658::GYR_ODR_896_8Hz,
-        SensorQMI8658::LPF_MODE_0
-    );
+    lcd.drawCenterString("OpenDrift",120,80);
 
-    qmi.enableAccelerometer();
-    qmi.enableGyroscope();
+    lcd.setTextSize(2);
 
-    Serial.println("IMU ready!");
+    lcd.drawCenterString("Hello World!",120,130);
 }
-
 
 void loop()
 {
-    float gx;
-    float gy;
-    float gz;
 
-    float ax;
-    float ay;
-    float az;
-
-    qmi.getGyroscope(gx, gy, gz);
-    qmi.getAccelerometer(ax, ay, az);
-
-    Serial.println("--------------------");
-
-    Serial.print("Gyro X: ");
-    Serial.print(gx);
-    Serial.print("  Y: ");
-    Serial.print(gy);
-    Serial.print("  Z: ");
-    Serial.println(gz);
-
-    Serial.print("Accel X: ");
-    Serial.print(ax);
-    Serial.print("  Y: ");
-    Serial.print(ay);
-    Serial.print("  Z: ");
-    Serial.println(az);
-
-    delay(100);
 }
