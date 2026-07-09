@@ -7,6 +7,7 @@
 #include "GyroController.h"
 #include "Touch.h"
 #include "UI.h"
+#include "WiFiManager.h"
 
 
 
@@ -22,6 +23,8 @@ Touch touch;
 
 UI ui;
 
+WiFiManager wifi;
+
 
 
 #define SERVO_PIN 16
@@ -34,8 +37,11 @@ const char* password = "opendrift";
 
 
 
+
+
 void setup()
 {
+
     Serial.begin(115200);
 
     delay(500);
@@ -45,7 +51,9 @@ void setup()
 
 
     pinMode(2, OUTPUT);
+
     digitalWrite(2, HIGH);
+
 
 
 
@@ -61,11 +69,13 @@ void setup()
 
     lcd.setTextSize(3);
 
+
     lcd.drawCenterString(
         "OpenDrift",
         120,
         20
     );
+
 
 
 
@@ -75,6 +85,7 @@ void setup()
 
     if(!imu.begin())
     {
+
         lcd.setTextSize(2);
 
         lcd.drawCenterString(
@@ -83,9 +94,12 @@ void setup()
             90
         );
 
+
         while(true)
             delay(1000);
+
     }
+
 
 
     lcd.drawCenterString(
@@ -99,21 +113,27 @@ void setup()
 
 
 
+
+
     // -------------------
     // SERVO
     // -------------------
 
     if(!steeringServo.begin(SERVO_PIN))
     {
+
         lcd.drawCenterString(
             "SERVO ERROR",
             120,
             100
         );
 
+
         while(true)
             delay(1000);
+
     }
+
 
 
 
@@ -132,6 +152,10 @@ void setup()
 
 
 
+
+
+
+
     // -------------------
     // GYRO CONTROLLER
     // -------------------
@@ -145,6 +169,8 @@ void setup()
 
 
 
+
+
     // -------------------
     // TOUCH
     // -------------------
@@ -152,17 +178,22 @@ void setup()
     Serial.println("Starting Touch");
 
 
+
     if(!touch.begin())
     {
+
         lcd.drawCenterString(
             "TOUCH ERROR",
             120,
             120
         );
 
+
         while(true)
             delay(1000);
+
     }
+
 
 
     lcd.drawCenterString(
@@ -181,6 +212,9 @@ void setup()
 
 
 
+
+
+
     // -------------------
     // CALIBRATION
     // -------------------
@@ -192,10 +226,13 @@ void setup()
     );
 
 
+
     delay(2000);
 
 
+
     imu.update();
+
 
 
     gyro.calibrate(
@@ -203,7 +240,10 @@ void setup()
     );
 
 
-    Serial.println("Gyro calibrated");
+
+    Serial.println(
+        "Gyro calibrated"
+    );
 
 
 
@@ -212,17 +252,17 @@ void setup()
 
 
 
+
+
     // -------------------
-    // WIFI
+    // WIFI MANAGER
     // -------------------
 
-    WiFi.mode(WIFI_AP);
-
-
-    WiFi.softAP(
+    wifi.begin(
         ssid,
         password
     );
+
 
 
     IPAddress IP =
@@ -230,8 +270,13 @@ void setup()
 
 
 
-    Serial.print("WiFi IP: ");
+    Serial.print(
+        "WiFi IP: "
+    );
+
+
     Serial.println(IP);
+
 
 
 
@@ -249,7 +294,9 @@ void setup()
     );
 
 
+
     lcd.setTextSize(1);
+
 
 
     lcd.drawCenterString(
@@ -264,14 +311,21 @@ void setup()
 
 
 
+
+
+
     // -------------------
     // START UI
     // -------------------
 
-    ui.begin(&lcd);
+    ui.begin(
+        &lcd
+    );
 
 
 }
+
+
 
 
 
@@ -285,19 +339,33 @@ void loop()
     imu.update();
 
 
+
     touch.update();
 
 
 
     // -------------------
-    // TOUCH BUTTONS
+    // WIFI POWER MANAGER
+    // -------------------
+
+    wifi.update();
+
+
+
+
+
+    // -------------------
+    // UI
     // -------------------
 
     ui.update(
         touch,
         gyro,
-        imu
+        imu,
+        wifi
     );
+
+
 
 
 
@@ -310,8 +378,12 @@ void loop()
 
 
 
+
     int servoCommand =
-        gyro.update(yaw);
+        gyro.update(
+            yaw
+        );
+
 
 
 
@@ -322,21 +394,35 @@ void loop()
 
 
 
+
     // Debug
 
-    Serial.print("Yaw: ");
+    Serial.print(
+        "Yaw: "
+    );
 
-    Serial.print(yaw);
+
+    Serial.print(
+        yaw
+    );
 
 
-    Serial.print(" Filtered: ");
+
+    Serial.print(
+        " Filtered: "
+    );
+
 
     Serial.print(
         gyro.getFilteredYaw()
     );
 
 
-    Serial.print(" Servo: ");
+
+    Serial.print(
+        " Servo: "
+    );
+
 
     Serial.println(
         gyro.getServoOutput()

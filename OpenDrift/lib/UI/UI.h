@@ -6,6 +6,7 @@
 #include "Touch.h"
 #include "GyroController.h"
 #include "IMU.h"
+#include "WiFiManager.h"
 
 
 class UI
@@ -21,7 +22,8 @@ public:
     void update(
         Touch& touch,
         GyroController& gyro,
-        IMU& imu
+        IMU& imu,
+        WiFiManager& wifi
     );
 
 
@@ -30,15 +32,35 @@ private:
     LGFX* lcd;
 
 
+    uint8_t page = 0;
+
+
     bool lastTouchState = false;
 
 
     unsigned long lastPressTime = 0;
 
 
+    int touchStartX = 0;
 
-    void drawScreen(
+
+    bool trackingSwipe = false;
+
+
+
+    void drawPage(
+        GyroController& gyro,
+        WiFiManager& wifi
+    );
+
+
+    void drawMainPage(
         GyroController& gyro
+    );
+
+
+    void drawWifiPage(
+        WiFiManager& wifi
     );
 
 
