@@ -26,16 +26,46 @@ bool ServoOutput::begin(int pin)
 
 void ServoOutput::writeMicroseconds(int us)
 {
-    currentPulse = us;
+    int correction =
+        us - 1500;
 
-    servo.writeMicroseconds(us);
+    if(reversed)
+    {
+        correction =
+            -correction;
+    }
+
+    correction =
+        (correction * travelPercent)
+        /
+        100;
+
+    currentPulse =
+        constrain(
+            centerPulse + correction,
+            1000,
+            2000
+        );
+
+    servo.writeMicroseconds(
+        currentPulse
+    );
 }
 
 
 
 void ServoOutput::center()
 {
-    writeMicroseconds(1500);
+    currentPulse =
+        constrain(
+            centerPulse,
+            1000,
+            2000
+        );
+
+    servo.writeMicroseconds(
+        currentPulse
+    );
 }
 
 
@@ -43,4 +73,35 @@ void ServoOutput::center()
 int ServoOutput::getPosition()
 {
     return currentPulse;
+}
+
+
+
+void ServoOutput::configure(
+    int centerPulseValue,
+    bool reversedValue,
+    int travelPercentValue
+)
+{
+    centerPulse =
+        constrain(
+            centerPulseValue,
+            1000,
+            2000
+        );
+
+    reversed =
+        reversedValue;
+
+    travelPercent =
+        constrain(
+            travelPercentValue,
+            1,
+            100
+        );
+
+    if(travelPercentValue <= 0)
+    {
+        travelPercent = 100;
+    }
 }

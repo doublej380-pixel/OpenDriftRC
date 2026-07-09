@@ -9,18 +9,37 @@ public:
 
     bool begin();
 
-    int update(float yawRate);
+
+    int update(
+        float yawRate
+    );
 
 
-    void calibrate(float yawRate);
+    void calibrate(
+        float yawRate
+    );
 
 
-    void setGain(float gain);
+
+    void setGain(
+        float gain
+    );
+
 
     float getGain();
 
 
-    void setDeadband(float deadband);
+
+
+    void setDeadband(
+        float deadband
+    );
+
+
+    float getDeadband();   // NEW
+
+
+
 
     float getFilteredYaw();
 
@@ -47,4 +66,5 @@ private:
 
 
     bool calibrated = false;
+
 };

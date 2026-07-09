@@ -11,7 +11,8 @@ public:
 
     void begin(
         const char* ssid,
-        const char* password
+        const char* password,
+        bool startEnabled = true
     );
 
 
@@ -35,9 +36,9 @@ public:
 
 private:
 
-    const char* wifiSSID;
+    const char* wifiSSID = nullptr;
 
-    const char* wifiPassword;
+    const char* wifiPassword = nullptr;
 
 
     bool enabled = false;

@@ -7,6 +7,7 @@
 #include "GyroController.h"
 #include "IMU.h"
 #include "WiFiManager.h"
+#include "Settings.h"
 
 
 class UI
@@ -15,7 +16,10 @@ class UI
 public:
 
     void begin(
-        LGFX* display
+        LGFX* display,
+        GyroController& gyro,
+        WiFiManager& wifi,
+        Settings& settings
     );
 
 
@@ -23,22 +27,33 @@ public:
         Touch& touch,
         GyroController& gyro,
         IMU& imu,
-        WiFiManager& wifi
+        WiFiManager& wifi,
+        Settings& settings
     );
+
 
 
 private:
 
-    LGFX* lcd;
+    LGFX* lcd = nullptr;
 
+
+
+    // Pages
+    // 0 = Main
+    // 1 = Control
+    // 2 = System
+    // 3 = WiFi
 
     uint8_t page = 0;
 
 
+    const uint8_t totalPages = 4;
+
+
+
+
     bool lastTouchState = false;
-
-
-    unsigned long lastPressTime = 0;
 
 
     int touchStartX = 0;
@@ -48,20 +63,44 @@ private:
 
 
 
+
+
     void drawPage(
         GyroController& gyro,
-        WiFiManager& wifi
+        WiFiManager& wifi,
+        Settings& settings
     );
+
 
 
     void drawMainPage(
-        GyroController& gyro
+        GyroController& gyro,
+        Settings& settings
     );
+
+
+
+    void drawControlPage(
+        GyroController& gyro,
+        Settings& settings
+    );
+
+
+
+    void drawSystemPage(
+        Settings& settings
+    );
+
 
 
     void drawWifiPage(
-        WiFiManager& wifi
+        WiFiManager& wifi,
+        Settings& settings
     );
+
+
+
+    void drawPageDots();
 
 
 

@@ -5,7 +5,8 @@
 
 void WiFiManager::begin(
     const char* ssid,
-    const char* password
+    const char* password,
+    bool startEnabled
 )
 {
 
@@ -14,7 +15,10 @@ void WiFiManager::begin(
     wifiPassword = password;
 
 
-    enable();
+    if(startEnabled)
+    {
+        enable();
+    }
 
 }
 
@@ -27,6 +31,18 @@ void WiFiManager::enable()
 
     if(enabled)
         return;
+
+    if(
+        wifiSSID == nullptr ||
+        wifiPassword == nullptr
+    )
+    {
+        Serial.println(
+            "WiFi credentials not set"
+        );
+
+        return;
+    }
 
 
 

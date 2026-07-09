@@ -98,10 +98,19 @@ float GyroController::getGain()
 
 
 
+
 void GyroController::setDeadband(float value)
 {
     deadband = value;
 }
+
+
+
+float GyroController::getDeadband()
+{
+    return deadband;
+}
+
 
 
 

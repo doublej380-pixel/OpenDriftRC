@@ -16,10 +16,22 @@ public:
 
     int getPosition();
 
+    void configure(
+        int centerPulse,
+        bool reversed,
+        int travelPercent
+    );
+
 
 private:
 
     Servo servo;
 
     int currentPulse = 1500;
+
+    int centerPulse = 1500;
+
+    bool reversed = false;
+
+    int travelPercent = 100;
 };
