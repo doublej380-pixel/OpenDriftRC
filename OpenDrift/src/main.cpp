@@ -487,27 +487,25 @@ void loop()
     gyroCorrection =
         (int)(gyroCorrection * gyroAuthority);
 
-    int servoCommand = 1500;
-
     if(steeringRadio.hasSignal())
     {
-        servoCommand =
+        int servoCommand =
             constrain(
                 steeringCommand + gyroCorrection,
                 1000,
                 2000
             );
+
+        steeringServo.configure(
+            settings.getServoCenter(),
+            settings.getServoReverse(),
+            settings.getServoTravel()
+        );
+
+        steeringServo.writeMicroseconds(
+            servoCommand
+        );
     }
-
-    steeringServo.configure(
-        settings.getServoCenter(),
-        settings.getServoReverse(),
-        settings.getServoTravel()
-    );
-
-    steeringServo.writeMicroseconds(
-        servoCommand
-    );
 
     //-------------------
     // DEBUG
@@ -523,7 +521,7 @@ void loop()
     Serial.print(gyroCorrection);
 
     Serial.print(" Servo: ");
-    Serial.print(servoCommand);
+    Serial.print(steeringServo.getPosition());
 
     Serial.print(" Steering: ");
     Serial.print(steeringRadio.getPulseWidth());
