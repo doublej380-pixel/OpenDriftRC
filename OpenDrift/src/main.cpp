@@ -10,6 +10,7 @@
 #include "WiFiManager.h"
 #include "Settings.h"
 #include "RadioInput.h"
+#include "WebConfigurator.h"
 
 LGFX lcd;
 
@@ -27,6 +28,8 @@ WiFiManager wifi;
 
 Settings settings;
 
+WebConfigurator webConfig;
+
 RadioInput steeringRadio;
 
 RadioInput gainRadio;
@@ -40,6 +43,103 @@ const float radioGainMax = 3.0f;
 
 const char* ssid = "OpenDrift";
 const char* password = "opendrift";
+
+int mapSteeringPulse(
+    int pulse,
+    Settings& settings
+)
+{
+    int steeringMin =
+        settings.getSteeringMin();
+
+    int steeringCenter =
+        settings.getSteeringCenter();
+
+    int steeringMax =
+        settings.getSteeringMax();
+
+    if(abs(pulse - steeringCenter) <= 4)
+    {
+        return 1500;
+    }
+
+    if(
+        steeringCenter <= steeringMin ||
+        steeringCenter >= steeringMax
+    )
+    {
+        return constrain(
+            pulse,
+            1000,
+            2000
+        );
+    }
+
+    if(pulse < steeringCenter)
+    {
+        return map(
+            constrain(
+                pulse,
+                steeringMin,
+                steeringCenter
+            ),
+            steeringMin,
+            steeringCenter,
+            1000,
+            1500
+        );
+    }
+
+    return map(
+        constrain(
+            pulse,
+            steeringCenter,
+            steeringMax
+        ),
+        steeringCenter,
+        steeringMax,
+        1500,
+        2000
+    );
+}
+
+
+
+float mapGainPulse(
+    int pulse,
+    Settings& settings
+)
+{
+    int gainMin =
+        settings.getGainMin();
+
+    int gainMax =
+        settings.getGainMax();
+
+    if(gainMax <= gainMin)
+    {
+        gainMin = 1000;
+        gainMax = 2000;
+    }
+
+    pulse =
+        constrain(
+            pulse,
+            gainMin,
+            gainMax
+        );
+
+    float normalized =
+        (pulse - gainMin)
+        /
+        (float)(gainMax - gainMin);
+
+    return
+        radioGainMin +
+        ((radioGainMax - radioGainMin) * normalized);
+}
+
+
 
 void setup()
 {
@@ -186,6 +286,10 @@ void setup()
         settings.getWifiEnabled()
     );
 
+    wifi.setTimeout(
+        settings.getWifiTimeout()
+    );
+
     if(wifi.isEnabled())
     {
         IPAddress IP =
@@ -203,6 +307,13 @@ void setup()
         lcd.drawCenterString(IP.toString(),120,70);
 
         delay(1000);
+
+        webConfig.begin(
+            settings,
+            gyro,
+            steeringRadio,
+            gainRadio
+        );
     }
 
     //-------------------
@@ -213,7 +324,9 @@ void setup()
         &lcd,
         gyro,
         wifi,
-        settings
+        settings,
+        steeringRadio,
+        gainRadio
     );
 
     touch.update();
@@ -238,6 +351,28 @@ void loop()
 
     wifi.update();
 
+    wifi.setTimeout(
+        settings.getWifiTimeout()
+    );
+
+    if(
+        wifi.isEnabled() &&
+        !webConfig.isRunning()
+    )
+    {
+        webConfig.begin(
+            settings,
+            gyro,
+            steeringRadio,
+            gainRadio
+        );
+    }
+
+    if(wifi.isEnabled())
+    {
+        webConfig.update();
+    }
+
     //-------------------
     // RADIO
     //-------------------
@@ -245,12 +380,22 @@ void loop()
     if(gainRadio.hasSignal())
     {
         gyro.setGain(
-            gainRadio.getMappedValue(
-                radioGainMin,
-                radioGainMax
+            mapGainPulse(
+                gainRadio.getPulseWidth(),
+                settings
             )
         );
     }
+    else
+    {
+        gyro.setGain(
+            settings.getGain()
+        );
+    }
+
+    gyro.setDeadband(
+        settings.getDeadband()
+    );
 
     //-------------------
     // UI
@@ -261,7 +406,9 @@ void loop()
         gyro,
         imu,
         wifi,
-        settings
+        settings,
+        steeringRadio,
+        gainRadio
     );
 
     //-------------------
@@ -279,18 +426,38 @@ void loop()
     if(steeringRadio.hasSignal())
     {
         steeringCommand =
-            steeringRadio.getPulseWidth();
+            mapSteeringPulse(
+                steeringRadio.getPulseWidth(),
+                settings
+            );
     }
 
     int gyroCorrection =
         gyroCommand - 1500;
 
-    int servoCommand =
-        constrain(
-            steeringCommand + gyroCorrection,
-            1000,
-            2000
-        );
+    if(settings.getGyroReverse())
+    {
+        gyroCorrection =
+            -gyroCorrection;
+    }
+
+    int servoCommand = 1500;
+
+    if(steeringRadio.hasSignal())
+    {
+        servoCommand =
+            constrain(
+                steeringCommand + gyroCorrection,
+                1000,
+                2000
+            );
+    }
+
+    steeringServo.configure(
+        settings.getServoCenter(),
+        settings.getServoReverse(),
+        settings.getServoTravel()
+    );
 
     steeringServo.writeMicroseconds(
         servoCommand
@@ -326,3 +493,4 @@ void loop()
 
     delay(20);
 }
+ 

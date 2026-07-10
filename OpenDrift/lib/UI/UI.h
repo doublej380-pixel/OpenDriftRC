@@ -8,6 +8,7 @@
 #include "IMU.h"
 #include "WiFiManager.h"
 #include "Settings.h"
+#include "RadioInput.h"
 
 
 class UI
@@ -19,7 +20,9 @@ public:
         LGFX* display,
         GyroController& gyro,
         WiFiManager& wifi,
-        Settings& settings
+        Settings& settings,
+        RadioInput& steeringRadio,
+        RadioInput& gainRadio
     );
 
 
@@ -28,7 +31,9 @@ public:
         GyroController& gyro,
         IMU& imu,
         WiFiManager& wifi,
-        Settings& settings
+        Settings& settings,
+        RadioInput& steeringRadio,
+        RadioInput& gainRadio
     );
 
 
@@ -43,12 +48,14 @@ private:
     // 0 = Main
     // 1 = Control
     // 2 = System
-    // 3 = WiFi
+    // 3 = Radio
+    // 4 = Steering
+    // 5 = WiFi
 
     uint8_t page = 0;
 
 
-    const uint8_t totalPages = 4;
+    const uint8_t totalPages = 6;
 
 
 
@@ -58,8 +65,13 @@ private:
 
     int touchStartX = 0;
 
+    int touchStartY = 0;
 
     bool trackingSwipe = false;
+
+    unsigned long lastRadioRefresh = 0;
+
+    uint8_t radioSection = 0;
 
 
 
@@ -68,7 +80,9 @@ private:
     void drawPage(
         GyroController& gyro,
         WiFiManager& wifi,
-        Settings& settings
+        Settings& settings,
+        RadioInput& steeringRadio,
+        RadioInput& gainRadio
     );
 
 
@@ -96,6 +110,20 @@ private:
     void drawWifiPage(
         WiFiManager& wifi,
         Settings& settings
+    );
+
+    void drawRadioPage(
+        RadioInput& steeringRadio,
+        RadioInput& gainRadio,
+        Settings& settings,
+        GyroController& gyro
+    );
+
+    void updateRadioPage(
+        RadioInput& steeringRadio,
+        RadioInput& gainRadio,
+        Settings& settings,
+        GyroController& gyro
     );
 
 

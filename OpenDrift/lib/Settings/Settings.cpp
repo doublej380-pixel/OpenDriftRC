@@ -14,6 +14,11 @@ bool Settings::begin()
         2.0f
     );
 
+    gyroReverse = prefs.getBool(
+        "gyroRev",
+        false
+    );
+
     servoCenter = prefs.getInt(
         "center",
         1500
@@ -37,6 +42,31 @@ bool Settings::begin()
     wifiTimeout = prefs.getULong(
         "timeout",
         40000
+    );
+
+    steeringMin = prefs.getInt(
+        "strMin",
+        1000
+    );
+
+    steeringCenter = prefs.getInt(
+        "strCenter",
+        1500
+    );
+
+    steeringMax = prefs.getInt(
+        "strMax",
+        2000
+    );
+
+    gainMin = prefs.getInt(
+        "gainMin",
+        1000
+    );
+
+    gainMax = prefs.getInt(
+        "gainMax",
+        2000
     );
 
     return true;
@@ -65,6 +95,11 @@ void Settings::save()
         deadband
     );
 
+    prefs.putBool(
+        "gyroRev",
+        gyroReverse
+    );
+
     prefs.putInt(
         "center",
         servoCenter
@@ -88,6 +123,31 @@ void Settings::save()
     prefs.putULong(
         "timeout",
         wifiTimeout
+    );
+
+    prefs.putInt(
+        "strMin",
+        steeringMin
+    );
+
+    prefs.putInt(
+        "strCenter",
+        steeringCenter
+    );
+
+    prefs.putInt(
+        "strMax",
+        steeringMax
+    );
+
+    prefs.putInt(
+        "gainMin",
+        gainMin
+    );
+
+    prefs.putInt(
+        "gainMax",
+        gainMax
     );
 
     dirty = false;
@@ -118,6 +178,17 @@ float Settings::getDeadband()
 void Settings::setDeadband(float value)
 {
     deadband = value;
+    dirty = true;
+}
+
+bool Settings::getGyroReverse()
+{
+    return gyroReverse;
+}
+
+void Settings::setGyroReverse(bool value)
+{
+    gyroReverse = value;
     dirty = true;
 }
 
@@ -181,5 +252,64 @@ uint32_t Settings::getWifiTimeout()
 void Settings::setWifiTimeout(uint32_t value)
 {
     wifiTimeout = value;
+    dirty = true;
+}
+
+// --------------------
+// Radio
+// --------------------
+
+int Settings::getSteeringMin()
+{
+    return steeringMin;
+}
+
+void Settings::setSteeringMin(int value)
+{
+    steeringMin = value;
+    dirty = true;
+}
+
+int Settings::getSteeringCenter()
+{
+    return steeringCenter;
+}
+
+void Settings::setSteeringCenter(int value)
+{
+    steeringCenter = value;
+    dirty = true;
+}
+
+int Settings::getSteeringMax()
+{
+    return steeringMax;
+}
+
+void Settings::setSteeringMax(int value)
+{
+    steeringMax = value;
+    dirty = true;
+}
+
+int Settings::getGainMin()
+{
+    return gainMin;
+}
+
+void Settings::setGainMin(int value)
+{
+    gainMin = value;
+    dirty = true;
+}
+
+int Settings::getGainMax()
+{
+    return gainMax;
+}
+
+void Settings::setGainMax(int value)
+{
+    gainMax = value;
     dirty = true;
 }

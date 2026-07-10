@@ -18,6 +18,9 @@ public:
     float getDeadband();
     void setDeadband(float value);
 
+    bool getGyroReverse();
+    void setGyroReverse(bool value);
+
     // Servo
     int getServoCenter();
     void setServoCenter(int value);
@@ -35,6 +38,22 @@ public:
     uint32_t getWifiTimeout();
     void setWifiTimeout(uint32_t value);
 
+    // Radio
+    int getSteeringMin();
+    void setSteeringMin(int value);
+
+    int getSteeringCenter();
+    void setSteeringCenter(int value);
+
+    int getSteeringMax();
+    void setSteeringMax(int value);
+
+    int getGainMin();
+    void setGainMin(int value);
+
+    int getGainMax();
+    void setGainMax(int value);
+
 private:
 
     Preferences prefs;
@@ -49,6 +68,8 @@ private:
 
     float deadband = 2.0f;
 
+    bool gyroReverse = false;
+
     int servoCenter = 1500;
 
     bool servoReverse = false;
@@ -58,6 +79,16 @@ private:
     bool wifiEnabled = true;
 
     uint32_t wifiTimeout = 40000;
+
+    int steeringMin = 1000;
+
+    int steeringCenter = 1500;
+
+    int steeringMax = 2000;
+
+    int gainMin = 1000;
+
+    int gainMax = 2000;
 
     void save();
 };

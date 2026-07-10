@@ -32,6 +32,10 @@ public:
 
     bool hasClient();
 
+    void setTimeout(
+        unsigned long timeoutMs
+    );
+
 
 
 private:
@@ -47,7 +51,7 @@ private:
     unsigned long startTime = 0;
 
 
-    const unsigned long timeout =
+    unsigned long timeout =
         40000;
 
 

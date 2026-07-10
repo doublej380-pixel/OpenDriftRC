@@ -123,6 +123,7 @@ void WiFiManager::update()
 
 
     if(
+        timeout > 0 &&
         millis() - startTime
         > timeout
     )
@@ -157,4 +158,14 @@ bool WiFiManager::isEnabled()
 
     return enabled;
 
+}
+
+
+
+void WiFiManager::setTimeout(
+    unsigned long timeoutMs
+)
+{
+    timeout =
+        timeoutMs;
 }
