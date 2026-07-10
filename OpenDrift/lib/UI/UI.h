@@ -46,16 +46,17 @@ private:
 
     // Pages
     // 0 = Main
-    // 1 = Control
-    // 2 = System
+    // 1 = Gyro
+    // 2 = Tune
     // 3 = Radio
     // 4 = Steering
     // 5 = WiFi
+    // 6 = System
 
     uint8_t page = 0;
 
 
-    const uint8_t totalPages = 6;
+    const uint8_t totalPages = 7;
 
 
 
@@ -96,6 +97,10 @@ private:
 
     void drawControlPage(
         GyroController& gyro,
+        Settings& settings
+    );
+
+    void drawTunePage(
         Settings& settings
     );
 

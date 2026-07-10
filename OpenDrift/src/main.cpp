@@ -238,6 +238,14 @@ void setup()
         settings.getDeadband()
     );
 
+    gyro.setSmoothing(
+        settings.getGyroSmoothing()
+    );
+
+    gyro.setMaxCorrection(
+        settings.getGyroMaxCorrection()
+    );
+
     //-------------------
     // TOUCH
     //-------------------
@@ -397,6 +405,14 @@ void loop()
         settings.getDeadband()
     );
 
+    gyro.setSmoothing(
+        settings.getGyroSmoothing()
+    );
+
+    gyro.setMaxCorrection(
+        settings.getGyroMaxCorrection()
+    );
+
     //-------------------
     // UI
     //-------------------
@@ -441,6 +457,36 @@ void loop()
             -gyroCorrection;
     }
 
+    float steeringAmount =
+        abs(steeringCommand - 1500)
+        /
+        500.0f;
+
+    steeringAmount =
+        constrain(
+            steeringAmount,
+            0.0f,
+            1.0f
+        );
+
+    float gyroAuthority =
+        1.0f -
+        (
+            settings.getGyroSteeringCut()
+            *
+            steeringAmount
+        );
+
+    gyroAuthority =
+        constrain(
+            gyroAuthority,
+            0.0f,
+            1.0f
+        );
+
+    gyroCorrection =
+        (int)(gyroCorrection * gyroAuthority);
+
     int servoCommand = 1500;
 
     if(steeringRadio.hasSignal())
@@ -472,6 +518,9 @@ void loop()
 
     Serial.print(" Filtered: ");
     Serial.print(gyro.getFilteredYaw());
+
+    Serial.print(" GyroCorrection: ");
+    Serial.print(gyroCorrection);
 
     Serial.print(" Servo: ");
     Serial.print(servoCommand);

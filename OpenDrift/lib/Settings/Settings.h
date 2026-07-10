@@ -21,6 +21,15 @@ public:
     bool getGyroReverse();
     void setGyroReverse(bool value);
 
+    int getGyroMaxCorrection();
+    void setGyroMaxCorrection(int value);
+
+    float getGyroSmoothing();
+    void setGyroSmoothing(float value);
+
+    float getGyroSteeringCut();
+    void setGyroSteeringCut(float value);
+
     // Servo
     int getServoCenter();
     void setServoCenter(int value);
@@ -69,6 +78,12 @@ private:
     float deadband = 2.0f;
 
     bool gyroReverse = false;
+
+    int gyroMaxCorrection = 250;
+
+    float gyroSmoothing = 0.10f;
+
+    float gyroSteeringCut = 0.50f;
 
     int servoCenter = 1500;
 

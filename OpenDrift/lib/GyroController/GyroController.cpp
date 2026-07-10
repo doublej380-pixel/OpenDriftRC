@@ -10,6 +10,8 @@ bool GyroController::begin()
 
     filteredYaw = 0;
 
+    correctionOutput = 0;
+
     calibrated = false;
 
 
@@ -56,18 +58,32 @@ int GyroController::update(float yawRate)
 
     // Low pass filter
 
+    float filterAmount =
+        constrain(
+            smoothing,
+            0.01f,
+            1.0f
+        );
+
     filteredYaw =
-        (filteredYaw * 0.90f)
+        (filteredYaw * (1.0f - filterAmount))
         +
-        (correctedYaw * 0.10f);
+        (correctedYaw * filterAmount);
 
 
 
     // Servo correction
 
+    correctionOutput =
+        constrain(
+            (int)(filteredYaw * gyroGain),
+            -maxCorrection,
+            maxCorrection
+        );
+
     servoOutput =
         1500 -
-        (filteredYaw * gyroGain);
+        correctionOutput;
 
 
 
@@ -109,6 +125,52 @@ void GyroController::setDeadband(float value)
 float GyroController::getDeadband()
 {
     return deadband;
+}
+
+
+
+
+void GyroController::setSmoothing(float value)
+{
+    smoothing =
+        constrain(
+            value,
+            0.01f,
+            1.0f
+        );
+}
+
+
+
+float GyroController::getSmoothing()
+{
+    return smoothing;
+}
+
+
+
+void GyroController::setMaxCorrection(int value)
+{
+    maxCorrection =
+        constrain(
+            value,
+            0,
+            500
+        );
+}
+
+
+
+int GyroController::getMaxCorrection()
+{
+    return maxCorrection;
+}
+
+
+
+int GyroController::getCorrection()
+{
+    return correctionOutput;
 }
 
 

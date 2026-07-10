@@ -115,7 +115,7 @@ void UI::drawPage(
 
 
         case 2:
-            drawSystemPage(
+            drawTunePage(
                 settings
             );
             break;
@@ -148,6 +148,13 @@ void UI::drawPage(
         case 5:
             drawWifiPage(
                 wifi,
+                settings
+            );
+            break;
+
+
+        case 6:
+            drawSystemPage(
                 settings
             );
             break;
@@ -295,7 +302,7 @@ void UI::drawControlPage(
 
 
     lcd->drawCenterString(
-        "Control",
+        "Gyro",
         120,
         20
     );
@@ -446,6 +453,159 @@ void UI::drawSystemPage(
 
 
 
+
+
+
+void UI::drawTunePage(
+    Settings& settings
+)
+{
+
+    lcd->fillScreen(
+        TFT_BLACK
+    );
+
+    lcd->setTextColor(
+        TFT_WHITE
+    );
+
+    lcd->setTextSize(3);
+
+    lcd->drawCenterString(
+        "Tune",
+        120,
+        20
+    );
+
+    lcd->setTextSize(1);
+
+    lcd->drawString(
+        "MAX CORR",
+        70,
+        62
+    );
+
+    lcd->drawString(
+        "SMOOTH",
+        78,
+        112
+    );
+
+    lcd->drawString(
+        "STEER CUT",
+        68,
+        162
+    );
+
+    lcd->setTextSize(2);
+
+    lcd->drawRect(
+        20,
+        75,
+        38,
+        28,
+        TFT_WHITE
+    );
+
+    lcd->drawCenterString(
+        "-",
+        39,
+        80
+    );
+
+    lcd->drawNumber(
+        settings.getGyroMaxCorrection(),
+        92,
+        80
+    );
+
+    lcd->drawRect(
+        182,
+        75,
+        38,
+        28,
+        TFT_WHITE
+    );
+
+    lcd->drawCenterString(
+        "+",
+        201,
+        80
+    );
+
+    lcd->drawRect(
+        20,
+        125,
+        38,
+        28,
+        TFT_WHITE
+    );
+
+    lcd->drawCenterString(
+        "-",
+        39,
+        130
+    );
+
+    lcd->drawFloat(
+        settings.getGyroSmoothing(),
+        2,
+        92,
+        130
+    );
+
+    lcd->drawRect(
+        182,
+        125,
+        38,
+        28,
+        TFT_WHITE
+    );
+
+    lcd->drawCenterString(
+        "+",
+        201,
+        130
+    );
+
+    lcd->drawRect(
+        20,
+        175,
+        38,
+        28,
+        TFT_WHITE
+    );
+
+    lcd->drawCenterString(
+        "-",
+        39,
+        180
+    );
+
+    lcd->drawFloat(
+        settings.getGyroSteeringCut(),
+        2,
+        92,
+        180
+    );
+
+    lcd->drawRect(
+        182,
+        175,
+        38,
+        28,
+        TFT_WHITE
+    );
+
+    lcd->drawCenterString(
+        "+",
+        201,
+        180
+    );
+
+    drawPageDots();
+
+}
 
 
 
@@ -1288,6 +1448,17 @@ void UI::updateRadioPage(
 
 void UI::drawPageDots()
 {
+    int spacing = 20;
+
+    int startX =
+        120 -
+        (
+            (totalPages - 1)
+            *
+            spacing
+            /
+            2
+        );
 
     for(
         int i = 0;
@@ -1299,7 +1470,7 @@ void UI::drawPageDots()
         if(i == page)
         {
             lcd->fillCircle(
-                80 + (i*25),
+                startX + (i*spacing),
                 215,
                 5,
                 TFT_WHITE
@@ -1308,7 +1479,7 @@ void UI::drawPageDots()
         else
         {
             lcd->drawCircle(
-                80 + (i*25),
+                startX + (i*spacing),
                 215,
                 5,
                 TFT_WHITE
@@ -1666,6 +1837,107 @@ void UI::update(
 
             drawControlPage(
                 gyro,
+                settings
+            );
+
+        }
+
+
+
+
+
+
+
+        // TUNE PAGE BUTTONS
+
+        if(page == 2)
+        {
+
+            if(buttonPressed(
+                x,y,
+                20,75,
+                38,28
+            ))
+            {
+
+                settings.setGyroMaxCorrection(
+                    settings.getGyroMaxCorrection() - 20
+                );
+
+            }
+
+
+            if(buttonPressed(
+                x,y,
+                182,75,
+                38,28
+            ))
+            {
+
+                settings.setGyroMaxCorrection(
+                    settings.getGyroMaxCorrection() + 20
+                );
+
+            }
+
+
+            if(buttonPressed(
+                x,y,
+                20,125,
+                38,28
+            ))
+            {
+
+                settings.setGyroSmoothing(
+                    settings.getGyroSmoothing() - 0.01f
+                );
+
+            }
+
+
+            if(buttonPressed(
+                x,y,
+                182,125,
+                38,28
+            ))
+            {
+
+                settings.setGyroSmoothing(
+                    settings.getGyroSmoothing() + 0.01f
+                );
+
+            }
+
+
+            if(buttonPressed(
+                x,y,
+                20,175,
+                38,28
+            ))
+            {
+
+                settings.setGyroSteeringCut(
+                    settings.getGyroSteeringCut() - 0.05f
+                );
+
+            }
+
+
+            if(buttonPressed(
+                x,y,
+                182,175,
+                38,28
+            ))
+            {
+
+                settings.setGyroSteeringCut(
+                    settings.getGyroSteeringCut() + 0.05f
+                );
+
+            }
+
+
+            drawTunePage(
                 settings
             );
 

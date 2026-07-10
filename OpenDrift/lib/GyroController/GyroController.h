@@ -38,6 +38,20 @@ public:
 
     float getDeadband();   // NEW
 
+    void setSmoothing(
+        float smoothing
+    );
+
+    float getSmoothing();
+
+    void setMaxCorrection(
+        int correction
+    );
+
+    int getMaxCorrection();
+
+    int getCorrection();
+
 
 
 
@@ -58,11 +72,17 @@ private:
 
     float deadband = 2.0f;
 
+    float smoothing = 0.10f;
+
+    int maxCorrection = 250;
+
 
     float filteredYaw = 0;
 
 
     int servoOutput = 1500;
+
+    int correctionOutput = 0;
 
 
     bool calibrated = false;

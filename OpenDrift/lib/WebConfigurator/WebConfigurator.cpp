@@ -129,6 +129,9 @@ void WebConfigurator::handleRoot()
     html += F("<div class='card'><h2>Gyro</h2><div class='row'>");
     html += input("Gain", "gain", String(settings->getGain(), 2), "number", "0.01");
     html += input("Deadband", "deadband", String(settings->getDeadband(), 2), "number", "0.1");
+    html += input("Max correction us", "gyroMax", String(settings->getGyroMaxCorrection()));
+    html += input("Smoothing", "gyroSmoothing", String(settings->getGyroSmoothing(), 2), "number", "0.01");
+    html += input("Steering cut", "gyroSteeringCut", String(settings->getGyroSteeringCut(), 2), "number", "0.01");
     html += F("</div>");
     html += checkbox("Reverse gyro correction", "gyroReverse", settings->getGyroReverse());
     html += F("</div>");
@@ -197,6 +200,27 @@ void WebConfigurator::handleSave()
 
     settings->setGyroReverse(
         server.hasArg("gyroReverse")
+    );
+
+    settings->setGyroMaxCorrection(
+        getIntArg(
+            "gyroMax",
+            settings->getGyroMaxCorrection()
+        )
+    );
+
+    settings->setGyroSmoothing(
+        getFloatArg(
+            "gyroSmoothing",
+            settings->getGyroSmoothing()
+        )
+    );
+
+    settings->setGyroSteeringCut(
+        getFloatArg(
+            "gyroSteeringCut",
+            settings->getGyroSteeringCut()
+        )
     );
 
     settings->setServoReverse(
@@ -271,6 +295,14 @@ void WebConfigurator::handleSave()
 
         gyro->setDeadband(
             settings->getDeadband()
+        );
+
+        gyro->setSmoothing(
+            settings->getGyroSmoothing()
+        );
+
+        gyro->setMaxCorrection(
+            settings->getGyroMaxCorrection()
         );
     }
 
