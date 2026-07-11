@@ -11,6 +11,7 @@
 #include "Settings.h"
 #include "RadioInput.h"
 #include "WebConfigurator.h"
+#include "BlackboxLogger.h"
 
 LGFX lcd;
 
@@ -34,6 +35,16 @@ RadioInput steeringRadio;
 
 RadioInput gainRadio;
 
+BlackboxLogger blackbox;
+
+float slewedGyroCorrection = 0;
+
+uint32_t lastCorrectionMicros = 0;
+
+unsigned long lastBlackboxLog = 0;
+
+unsigned long blackboxIdleSince = 0;
+
 #define SERVO_OUTPUT_PIN 16
 #define RADIO_STEERING_PIN 17
 #define RADIO_GAIN_PIN 18
@@ -43,6 +54,14 @@ const float radioGainMax = 3.0f;
 
 const char* ssid = "OpenDrift";
 const char* password = "opendrift";
+
+const bool onboardBlackboxEnabled = true;
+
+const float blackboxIdleYawThreshold = 5.0f;
+
+const int blackboxIdleSteeringThreshold = 25;
+
+const unsigned long blackboxIdleFlushDelay = 2000;
 
 int mapSteeringPulse(
     int pulse,
@@ -285,6 +304,26 @@ void setup()
     delay(500);
 
     //-------------------
+    // BLACKBOX
+    //-------------------
+
+    if(onboardBlackboxEnabled)
+    {
+        if(blackbox.begin())
+        {
+            Serial.println("Blackbox logging OK");
+        }
+        else
+        {
+            Serial.println("Blackbox logging unavailable");
+        }
+    }
+    else
+    {
+        Serial.println("Blackbox logging disabled");
+    }
+
+    //-------------------
     // WIFI
     //-------------------
 
@@ -320,7 +359,8 @@ void setup()
             settings,
             gyro,
             steeringRadio,
-            gainRadio
+            gainRadio,
+            blackbox
         );
     }
 
@@ -372,7 +412,8 @@ void loop()
             settings,
             gyro,
             steeringRadio,
-            gainRadio
+            gainRadio,
+            blackbox
         );
     }
 
@@ -451,45 +492,78 @@ void loop()
     int gyroCorrection =
         gyroCommand - 1500;
 
+    int rawGyroCorrection =
+        gyroCorrection;
+
     if(settings.getGyroReverse())
     {
         gyroCorrection =
             -gyroCorrection;
+
+        rawGyroCorrection =
+            -rawGyroCorrection;
     }
 
-    float steeringAmount =
-        abs(steeringCommand - 1500)
-        /
-        500.0f;
+    uint32_t correctionNow =
+        micros();
 
-    steeringAmount =
+    float correctionDt =
+        0.02f;
+
+    if(lastCorrectionMicros != 0)
+    {
+        correctionDt =
+            (correctionNow - lastCorrectionMicros)
+            /
+            1000000.0f;
+
+        correctionDt =
+            constrain(
+                correctionDt,
+                0.001f,
+                0.05f
+            );
+    }
+
+    lastCorrectionMicros =
+        correctionNow;
+
+    float correctionDelta =
+        gyroCorrection - slewedGyroCorrection;
+
+    int rateSetting =
+        abs(gyroCorrection) > abs(slewedGyroCorrection)
+        ?
+        settings.getGyroAttackSpeed()
+        :
+        settings.getGyroReturnSpeed();
+
+    float rateLimit =
+        rateSetting
+        *
+        (correctionDt / 0.02f);
+
+    correctionDelta =
         constrain(
-            steeringAmount,
-            0.0f,
-            1.0f
+            correctionDelta,
+            -rateLimit,
+            rateLimit
         );
 
-    float gyroAuthority =
-        1.0f -
-        (
-            settings.getGyroSteeringCut()
-            *
-            steeringAmount
-        );
-
-    gyroAuthority =
-        constrain(
-            gyroAuthority,
-            0.0f,
-            1.0f
-        );
+    slewedGyroCorrection +=
+        correctionDelta;
 
     gyroCorrection =
-        (int)(gyroCorrection * gyroAuthority);
+        (int)roundf(
+            slewedGyroCorrection
+        );
+
+    int servoCommand =
+        steeringServo.getPosition();
 
     if(steeringRadio.hasSignal())
     {
-        int servoCommand =
+        servoCommand =
             constrain(
                 steeringCommand + gyroCorrection,
                 1000,
@@ -508,36 +582,68 @@ void loop()
     }
 
     //-------------------
-    // DEBUG
+    // BLACKBOX LOG
     //-------------------
 
-    Serial.print("Yaw: ");
-    Serial.print(yaw);
+    if(
+        onboardBlackboxEnabled &&
+        steeringRadio.hasSignal() &&
+        millis() - lastBlackboxLog >= 50
+    )
+    {
+        lastBlackboxLog =
+            millis();
 
-    Serial.print(" Filtered: ");
-    Serial.print(gyro.getFilteredYaw());
+        blackbox.log(
+            lastBlackboxLog,
+            yaw,
+            gyro.getFilteredYaw(),
+            rawGyroCorrection,
+            gyroCorrection,
+            steeringRadio.getPulseWidth(),
+            steeringCommand,
+            servoCommand,
+            gainRadio.getPulseWidth(),
+            gyro.getGain(),
+            settings.getDeadband(),
+            settings.getGyroMaxCorrection(),
+            settings.getGyroSmoothing(),
+            settings.getGyroAttackSpeed(),
+            settings.getGyroReturnSpeed(),
+            steeringRadio.hasSignal(),
+            gainRadio.hasSignal()
+        );
+    }
 
-    Serial.print(" GyroCorrection: ");
-    Serial.print(gyroCorrection);
+    if(onboardBlackboxEnabled)
+    {
+        bool blackboxIdle =
+            !steeringRadio.hasSignal()
+            ||
+            (
+                abs(yaw) < blackboxIdleYawThreshold &&
+                abs(steeringCommand - 1500) < blackboxIdleSteeringThreshold
+            );
 
-    Serial.print(" Servo: ");
-    Serial.print(steeringServo.getPosition());
+        if(blackboxIdle)
+        {
+            if(blackboxIdleSince == 0)
+            {
+                blackboxIdleSince =
+                    millis();
+            }
+        }
+        else
+        {
+            blackboxIdleSince = 0;
+        }
 
-    Serial.print(" Steering: ");
-    Serial.print(steeringRadio.getPulseWidth());
+        blackbox.update(
+            blackboxIdleSince != 0 &&
+            millis() - blackboxIdleSince >= blackboxIdleFlushDelay
+        );
+    }
 
-    Serial.print(" SteeringAge: ");
-    Serial.print(steeringRadio.getSignalAgeMs());
-
-    Serial.print(" RadioGain: ");
-    Serial.print(gainRadio.getPulseWidth());
-
-    Serial.print(" GainAge: ");
-    Serial.print(gainRadio.getSignalAgeMs());
-
-    Serial.print(" Gain: ");
-    Serial.println(gyro.getGain());
-
-    delay(20);
+    delay(1);
 }
  

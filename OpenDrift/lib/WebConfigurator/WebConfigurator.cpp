@@ -1,5 +1,7 @@
 #include "WebConfigurator.h"
 
+#include <FFat.h>
+
 
 WebConfigurator::WebConfigurator()
 :
@@ -14,7 +16,8 @@ void WebConfigurator::begin(
     Settings& settingsRef,
     GyroController& gyroRef,
     RadioInput& steeringRadioRef,
-    RadioInput& gainRadioRef
+    RadioInput& gainRadioRef,
+    BlackboxLogger& blackboxRef
 )
 {
     settings =
@@ -28,6 +31,9 @@ void WebConfigurator::begin(
 
     gainRadio =
         &gainRadioRef;
+
+    blackbox =
+        &blackboxRef;
 
     server.on(
         "/",
@@ -44,6 +50,33 @@ void WebConfigurator::begin(
         [this]()
         {
             handleSave();
+        }
+    );
+
+    server.on(
+        "/blackbox.csv",
+        HTTP_GET,
+        [this]()
+        {
+            handleLogDownload();
+        }
+    );
+
+    server.on(
+        "/clear-log",
+        HTTP_POST,
+        [this]()
+        {
+            handleLogClear();
+        }
+    );
+
+    server.on(
+        "/flush-log",
+        HTTP_POST,
+        [this]()
+        {
+            handleLogFlush();
         }
     );
 
@@ -128,10 +161,11 @@ void WebConfigurator::handleRoot()
 
     html += F("<div class='card'><h2>Gyro</h2><div class='row'>");
     html += input("Gain", "gain", String(settings->getGain(), 2), "number", "0.01");
-    html += input("Deadband", "deadband", String(settings->getDeadband(), 2), "number", "0.1");
-    html += input("Max correction us", "gyroMax", String(settings->getGyroMaxCorrection()));
+    html += input("Deadband", "deadband", String(settings->getDeadband(), 2), "number", "1");
+    html += input("Max correction us", "gyroMax", String(settings->getGyroMaxCorrection()), "number", "1");
     html += input("Smoothing", "gyroSmoothing", String(settings->getGyroSmoothing(), 2), "number", "0.01");
-    html += input("Steering cut", "gyroSteeringCut", String(settings->getGyroSteeringCut(), 2), "number", "0.01");
+    html += input("Attack speed", "gyroAttack", String(settings->getGyroAttackSpeed()), "number", "1");
+    html += input("Return speed", "gyroReturn", String(settings->getGyroReturnSpeed()), "number", "1");
     html += F("</div>");
     html += checkbox("Reverse gyro correction", "gyroReverse", settings->getGyroReverse());
     html += F("</div>");
@@ -160,6 +194,31 @@ void WebConfigurator::handleRoot()
     html += F("</div>");
 
     html += F("<button type='submit'>Save Settings</button></form>");
+
+    html += F("<div class='card'><h2>Blackbox Log</h2>");
+
+    if(blackbox != nullptr && blackbox->isReady())
+    {
+        html += F("<p class='sub'>Size: ");
+        html += String(blackbox->getSize() / 1024);
+        html += F(" KB");
+
+        if(blackbox->isFull())
+        {
+            html += F(" - full");
+        }
+
+        html += F("</p><a href='/blackbox.csv'>Download CSV</a>");
+        html += F("<form method='post' action='/flush-log'><button type='submit'>Flush Log</button></form>");
+        html += F("<form method='post' action='/clear-log'><button type='submit'>Clear Log</button></form>");
+    }
+    else
+    {
+        html += F("<p class='sub'>Log storage unavailable.</p>");
+    }
+
+    html += F("</div>");
+
     html += F("</main></body></html>");
 
     server.send(
@@ -216,10 +275,17 @@ void WebConfigurator::handleSave()
         )
     );
 
-    settings->setGyroSteeringCut(
-        getFloatArg(
-            "gyroSteeringCut",
-            settings->getGyroSteeringCut()
+    settings->setGyroAttackSpeed(
+        getIntArg(
+            "gyroAttack",
+            settings->getGyroAttackSpeed()
+        )
+    );
+
+    settings->setGyroReturnSpeed(
+        getIntArg(
+            "gyroReturn",
+            settings->getGyroReturnSpeed()
         )
     );
 
@@ -304,6 +370,112 @@ void WebConfigurator::handleSave()
         gyro->setMaxCorrection(
             settings->getGyroMaxCorrection()
         );
+    }
+
+    server.sendHeader(
+        "Location",
+        "/"
+    );
+
+    server.send(
+        303
+    );
+}
+
+
+
+void WebConfigurator::handleLogDownload()
+{
+    if(
+        blackbox == nullptr ||
+        !blackbox->isReady()
+    )
+    {
+        server.send(
+            503,
+            "text/plain",
+            "Blackbox log unavailable"
+        );
+
+        return;
+    }
+
+    blackbox->flush();
+
+    File file =
+        FFat.open(
+            blackbox->getPath(),
+            FILE_READ
+        );
+
+    if(!file)
+    {
+        server.send(
+            404,
+            "text/plain",
+            "Log file not found"
+        );
+
+        return;
+    }
+
+    server.sendHeader(
+        "Content-Disposition",
+        "attachment; filename=opendrift-blackbox.csv"
+    );
+
+    server.streamFile(
+        file,
+        "text/csv"
+    );
+
+    file.close();
+}
+
+
+
+void WebConfigurator::handleLogFlush()
+{
+    if(
+        blackbox == nullptr ||
+        !blackbox->flush()
+    )
+    {
+        server.send(
+            503,
+            "text/plain",
+            "Could not flush blackbox log"
+        );
+
+        return;
+    }
+
+    server.sendHeader(
+        "Location",
+        "/"
+    );
+
+    server.send(
+        303
+    );
+}
+
+
+
+void WebConfigurator::handleLogClear()
+{
+    if(
+        blackbox == nullptr ||
+        !blackbox->clear()
+    )
+    {
+        server.send(
+            503,
+            "text/plain",
+            "Could not clear blackbox log"
+        );
+
+        return;
     }
 
     server.sendHeader(

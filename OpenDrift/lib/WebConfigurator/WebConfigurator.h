@@ -6,6 +6,7 @@
 #include "Settings.h"
 #include "GyroController.h"
 #include "RadioInput.h"
+#include "BlackboxLogger.h"
 
 
 class WebConfigurator
@@ -18,7 +19,8 @@ public:
         Settings& settings,
         GyroController& gyro,
         RadioInput& steeringRadio,
-        RadioInput& gainRadio
+        RadioInput& gainRadio,
+        BlackboxLogger& blackbox
     );
 
     void update();
@@ -38,11 +40,19 @@ private:
 
     RadioInput* gainRadio = nullptr;
 
+    BlackboxLogger* blackbox = nullptr;
+
     bool running = false;
 
     void handleRoot();
 
     void handleSave();
+
+    void handleLogDownload();
+
+    void handleLogFlush();
+
+    void handleLogClear();
 
     void handleNotFound();
 

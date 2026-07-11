@@ -29,11 +29,15 @@ bool Touch::begin()
 
 void Touch::update()
 {
+    gesture = NONE;
+
     if(touch.available())
     {
         x = touch.data.x;
 
         y = touch.data.y;
+
+        gesture = touch.data.gestureID;
 
         pressed = true;
     }
@@ -65,4 +69,12 @@ uint16_t Touch::getX()
 uint16_t Touch::getY()
 {
     return y;
+}
+
+
+
+
+uint8_t Touch::getGesture()
+{
+    return gesture;
 }

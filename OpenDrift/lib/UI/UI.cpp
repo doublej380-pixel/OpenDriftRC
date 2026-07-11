@@ -165,6 +165,44 @@ void UI::drawPage(
 
 
 
+void UI::changePage(
+    int8_t direction,
+    GyroController& gyro,
+    WiFiManager& wifi,
+    Settings& settings,
+    RadioInput& steeringRadio,
+    RadioInput& gainRadio
+)
+{
+    if(direction > 0)
+    {
+        page++;
+
+        if(page >= totalPages)
+            page = 0;
+    }
+    else
+    {
+        if(page == 0)
+            page = totalPages-1;
+        else
+            page--;
+    }
+
+    if(page != 3)
+        radioSection = 0;
+
+    drawPage(
+        gyro,
+        wifi,
+        settings,
+        steeringRadio,
+        gainRadio
+    );
+}
+
+
+
 
 
 void UI::drawMainPage(
@@ -482,125 +520,164 @@ void UI::drawTunePage(
     lcd->drawString(
         "MAX CORR",
         70,
-        62
+        52
     );
 
     lcd->drawString(
         "SMOOTH",
         78,
-        112
+        92
     );
 
     lcd->drawString(
-        "STEER CUT",
-        68,
-        162
+        "ATTACK",
+        78,
+        132
+    );
+
+    lcd->drawString(
+        "RETURN",
+        76,
+        172
     );
 
     lcd->setTextSize(2);
 
     lcd->drawRect(
         20,
-        75,
+        63,
         38,
-        28,
+        24,
         TFT_WHITE
     );
 
     lcd->drawCenterString(
         "-",
         39,
-        80
+        66
     );
 
     lcd->drawNumber(
         settings.getGyroMaxCorrection(),
         92,
-        80
+        66
     );
 
     lcd->drawRect(
         182,
-        75,
+        63,
         38,
-        28,
+        24,
         TFT_WHITE
     );
 
     lcd->drawCenterString(
         "+",
         201,
-        80
+        66
     );
 
     lcd->drawRect(
         20,
-        125,
+        103,
         38,
-        28,
+        24,
         TFT_WHITE
     );
 
     lcd->drawCenterString(
         "-",
         39,
-        130
+        106
     );
 
     lcd->drawFloat(
         settings.getGyroSmoothing(),
         2,
         92,
-        130
+        106
     );
 
     lcd->drawRect(
         182,
-        125,
+        103,
         38,
-        28,
+        24,
         TFT_WHITE
     );
 
     lcd->drawCenterString(
         "+",
         201,
-        130
+        106
     );
 
     lcd->drawRect(
         20,
-        175,
+        143,
         38,
-        28,
+        24,
         TFT_WHITE
     );
 
     lcd->drawCenterString(
         "-",
         39,
-        180
+        146
     );
 
-    lcd->drawFloat(
-        settings.getGyroSteeringCut(),
-        2,
+    lcd->drawNumber(
+        settings.getGyroAttackSpeed(),
         92,
-        180
+        146
     );
 
     lcd->drawRect(
         182,
-        175,
+        143,
         38,
-        28,
+        24,
         TFT_WHITE
     );
 
     lcd->drawCenterString(
         "+",
         201,
-        180
+        146
+    );
+
+    lcd->drawRect(
+        20,
+        183,
+        38,
+        24,
+        TFT_WHITE
+    );
+
+    lcd->drawCenterString(
+        "-",
+        39,
+        186
+    );
+
+    lcd->drawNumber(
+        settings.getGyroReturnSpeed(),
+        92,
+        186
+    );
+
+    lcd->drawRect(
+        182,
+        183,
+        38,
+        24,
+        TFT_WHITE
+    );
+
+    lcd->drawCenterString(
+        "+",
+        201,
+        186
     );
 
     drawPageDots();
@@ -1130,18 +1207,18 @@ void UI::updateRadioPage(
 
         lcd->setTextSize(1);
 
-        lcd->drawNumber(
-            steeringRadio.getPulseWidth(),
-            58,
-            85
-        );
-
         lcd->fillRect(
             20,
             84,
             200,
             10,
             TFT_BLACK
+        );
+
+        lcd->drawNumber(
+            steeringRadio.getPulseWidth(),
+            58,
+            85
         );
 
         lcd->drawString(
@@ -1519,6 +1596,200 @@ bool UI::buttonPressed(
 }
 
 
+int8_t UI::repeatButtonAt(
+    uint16_t x,
+    uint16_t y
+)
+{
+    if(page == 0)
+    {
+        if(buttonPressed(x, y, 20, 120, 60, 40))
+            return 1;
+
+        if(buttonPressed(x, y, 160, 120, 60, 40))
+            return 2;
+    }
+
+    if(page == 1)
+    {
+        if(buttonPressed(x, y, 20, 120, 60, 40))
+            return 3;
+
+        if(buttonPressed(x, y, 160, 120, 60, 40))
+            return 4;
+    }
+
+    if(page == 2)
+    {
+        if(buttonPressed(x, y, 20, 63, 38, 24))
+            return 5;
+
+        if(buttonPressed(x, y, 182, 63, 38, 24))
+            return 6;
+
+        if(buttonPressed(x, y, 20, 103, 38, 24))
+            return 7;
+
+        if(buttonPressed(x, y, 182, 103, 38, 24))
+            return 8;
+
+        if(buttonPressed(x, y, 20, 143, 38, 24))
+            return 9;
+
+        if(buttonPressed(x, y, 182, 143, 38, 24))
+            return 10;
+
+        if(buttonPressed(x, y, 20, 183, 38, 24))
+            return 11;
+
+        if(buttonPressed(x, y, 182, 183, 38, 24))
+            return 12;
+    }
+
+    return 0;
+}
+
+
+
+bool UI::applyRepeatButton(
+    int8_t button,
+    GyroController& gyro,
+    Settings& settings
+)
+{
+    switch(button)
+    {
+        case 1:
+        {
+            float gain =
+                gyro.getGain() - 0.01f;
+
+            gyro.setGain(gain);
+
+            settings.setGain(gain);
+
+            drawMainPage(
+                gyro,
+                settings
+            );
+
+            return true;
+        }
+
+        case 2:
+        {
+            float gain =
+                gyro.getGain() + 0.01f;
+
+            gyro.setGain(gain);
+
+            settings.setGain(gain);
+
+            drawMainPage(
+                gyro,
+                settings
+            );
+
+            return true;
+        }
+
+        case 3:
+        {
+            float deadband =
+                gyro.getDeadband() - 1.0f;
+
+            if(deadband < 0)
+                deadband = 0;
+
+            gyro.setDeadband(deadband);
+
+            settings.setDeadband(deadband);
+
+            drawControlPage(
+                gyro,
+                settings
+            );
+
+            return true;
+        }
+
+        case 4:
+        {
+            float deadband =
+                gyro.getDeadband() + 1.0f;
+
+            gyro.setDeadband(deadband);
+
+            settings.setDeadband(deadband);
+
+            drawControlPage(
+                gyro,
+                settings
+            );
+
+            return true;
+        }
+
+        case 5:
+            settings.setGyroMaxCorrection(
+                settings.getGyroMaxCorrection() - 1
+            );
+            break;
+
+        case 6:
+            settings.setGyroMaxCorrection(
+                settings.getGyroMaxCorrection() + 1
+            );
+            break;
+
+        case 7:
+            settings.setGyroSmoothing(
+                settings.getGyroSmoothing() - 0.01f
+            );
+            break;
+
+        case 8:
+            settings.setGyroSmoothing(
+                settings.getGyroSmoothing() + 0.01f
+            );
+            break;
+
+        case 9:
+            settings.setGyroAttackSpeed(
+                settings.getGyroAttackSpeed() - 1
+            );
+            break;
+
+        case 10:
+            settings.setGyroAttackSpeed(
+                settings.getGyroAttackSpeed() + 1
+            );
+            break;
+
+        case 11:
+            settings.setGyroReturnSpeed(
+                settings.getGyroReturnSpeed() - 1
+            );
+            break;
+
+        case 12:
+            settings.setGyroReturnSpeed(
+                settings.getGyroReturnSpeed() + 1
+            );
+            break;
+
+        default:
+            return false;
+    }
+
+    drawTunePage(
+        settings
+    );
+
+    return true;
+}
+
+
 
 
 
@@ -1540,12 +1811,70 @@ void UI::update(
     bool touched =
         touch.isTouched();
 
+    uint8_t gesture =
+        touch.getGesture();
+
+    if(
+        gesture == SWIPE_LEFT &&
+        millis() - lastPageSwipe > 350
+    )
+    {
+        lastPageSwipe =
+            millis();
+
+        changePage(
+            1,
+            gyro,
+            wifi,
+            settings,
+            steeringRadio,
+            gainRadio
+        );
+
+        trackingSwipe = false;
+
+        heldRepeatButton = 0;
+
+        lastTouchState =
+            touched;
+
+        return;
+    }
+
+    if(
+        gesture == SWIPE_RIGHT &&
+        millis() - lastPageSwipe > 350
+    )
+    {
+        lastPageSwipe =
+            millis();
+
+        changePage(
+            -1,
+            gyro,
+            wifi,
+            settings,
+            steeringRadio,
+            gainRadio
+        );
+
+        trackingSwipe = false;
+
+        heldRepeatButton = 0;
+
+        lastTouchState =
+            touched;
+
+        return;
+    }
+
     if(
         (
             page == 3 ||
             page == 4
         ) &&
-        millis() - lastRadioRefresh > 100
+        !touched &&
+        millis() - lastRadioRefresh > 250
     )
     {
         updateRadioPage(
@@ -1574,6 +1903,8 @@ void UI::update(
             touch.getY();
 
         trackingSwipe = true;
+
+        heldRepeatButton = 0;
 
     }
 
@@ -1630,16 +1961,8 @@ void UI::update(
             else if(delta < -50)
             {
 
-                page++;
-
-                if(page >= totalPages)
-                    page = 0;
-
-                if(page != 3)
-                    radioSection = 0;
-
-
-                drawPage(
+                changePage(
+                    1,
                     gyro,
                     wifi,
                     settings,
@@ -1653,16 +1976,8 @@ void UI::update(
             else if(delta > 50)
             {
 
-                if(page == 0)
-                    page = totalPages-1;
-                else
-                    page--;
-
-                if(page != 3)
-                    radioSection = 0;
-
-
-                drawPage(
+                changePage(
+                    -1,
                     gyro,
                     wifi,
                     settings,
@@ -1676,6 +1991,8 @@ void UI::update(
 
 
         trackingSwipe=false;
+
+        heldRepeatButton = 0;
 
     }
 
@@ -1714,7 +2031,7 @@ void UI::update(
             {
 
                 float g =
-                    gyro.getGain()-0.1f;
+                    gyro.getGain()-0.01f;
 
 
                 gyro.setGain(g);
@@ -1734,7 +2051,7 @@ void UI::update(
             {
 
                 float g =
-                    gyro.getGain()+0.1f;
+                    gyro.getGain()+0.01f;
 
 
                 gyro.setGain(g);
@@ -1788,7 +2105,7 @@ void UI::update(
             {
 
                 float deadband =
-                    gyro.getDeadband()-0.5f;
+                    gyro.getDeadband()-1.0f;
 
 
                 if(deadband < 0)
@@ -1812,7 +2129,7 @@ void UI::update(
             {
 
                 float deadband =
-                    gyro.getDeadband()+0.5f;
+                    gyro.getDeadband()+1.0f;
 
 
                 gyro.setDeadband(deadband);
@@ -1855,13 +2172,13 @@ void UI::update(
 
             if(buttonPressed(
                 x,y,
-                20,75,
-                38,28
+                20,63,
+                38,24
             ))
             {
 
                 settings.setGyroMaxCorrection(
-                    settings.getGyroMaxCorrection() - 20
+                    settings.getGyroMaxCorrection() - 1
                 );
 
             }
@@ -1869,13 +2186,13 @@ void UI::update(
 
             if(buttonPressed(
                 x,y,
-                182,75,
-                38,28
+                182,63,
+                38,24
             ))
             {
 
                 settings.setGyroMaxCorrection(
-                    settings.getGyroMaxCorrection() + 20
+                    settings.getGyroMaxCorrection() + 1
                 );
 
             }
@@ -1883,8 +2200,8 @@ void UI::update(
 
             if(buttonPressed(
                 x,y,
-                20,125,
-                38,28
+                20,103,
+                38,24
             ))
             {
 
@@ -1897,8 +2214,8 @@ void UI::update(
 
             if(buttonPressed(
                 x,y,
-                182,125,
-                38,28
+                182,103,
+                38,24
             ))
             {
 
@@ -1911,13 +2228,13 @@ void UI::update(
 
             if(buttonPressed(
                 x,y,
-                20,175,
-                38,28
+                20,143,
+                38,24
             ))
             {
 
-                settings.setGyroSteeringCut(
-                    settings.getGyroSteeringCut() - 0.05f
+                settings.setGyroAttackSpeed(
+                    settings.getGyroAttackSpeed() - 1
                 );
 
             }
@@ -1925,13 +2242,41 @@ void UI::update(
 
             if(buttonPressed(
                 x,y,
-                182,175,
-                38,28
+                182,143,
+                38,24
             ))
             {
 
-                settings.setGyroSteeringCut(
-                    settings.getGyroSteeringCut() + 0.05f
+                settings.setGyroAttackSpeed(
+                    settings.getGyroAttackSpeed() + 1
+                );
+
+            }
+
+
+            if(buttonPressed(
+                x,y,
+                20,183,
+                38,24
+            ))
+            {
+
+                settings.setGyroReturnSpeed(
+                    settings.getGyroReturnSpeed() - 1
+                );
+
+            }
+
+
+            if(buttonPressed(
+                x,y,
+                182,183,
+                38,24
+            ))
+            {
+
+                settings.setGyroReturnSpeed(
+                    settings.getGyroReturnSpeed() + 1
                 );
 
             }
@@ -2077,9 +2422,6 @@ void UI::update(
         }
 
     }
-
-
-
 
     lastTouchState =
         touched;

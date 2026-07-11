@@ -30,6 +30,8 @@ public:
 
     uint16_t getY();
 
+    uint8_t getGesture();
+
 
 
 private:
@@ -43,4 +45,6 @@ private:
 
 
     bool pressed = false;
+
+    uint8_t gesture = 0;
 };

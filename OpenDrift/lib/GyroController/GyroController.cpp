@@ -1,5 +1,7 @@
 #include "GyroController.h"
 
+#include <math.h>
+
 
 
 bool GyroController::begin()
@@ -14,6 +16,8 @@ bool GyroController::begin()
 
     calibrated = false;
 
+    lastUpdateMicros = 0;
+
 
     return true;
 }
@@ -26,6 +30,10 @@ void GyroController::calibrate(float yawRate)
     gyroOffset = yawRate;
 
     calibrated = true;
+
+    filteredYaw = 0;
+
+    lastUpdateMicros = micros();
 }
 
 
@@ -33,6 +41,30 @@ void GyroController::calibrate(float yawRate)
 
 int GyroController::update(float yawRate)
 {
+    uint32_t now =
+        micros();
+
+    float dt =
+        0.02f;
+
+    if(lastUpdateMicros != 0)
+    {
+        dt =
+            (now - lastUpdateMicros)
+            /
+            1000000.0f;
+
+        dt =
+            constrain(
+                dt,
+                0.001f,
+                0.05f
+            );
+    }
+
+    lastUpdateMicros =
+        now;
+
     if(!calibrated)
     {
         calibrate(yawRate);
@@ -47,21 +79,53 @@ int GyroController::update(float yawRate)
 
 
 
-    // Deadband
+    // Soft deadband removes center noise without a correction jump.
 
-    if(abs(correctedYaw) < deadband)
+    float yawMagnitude =
+        fabsf(correctedYaw);
+
+    if(yawMagnitude <= deadband)
     {
         correctedYaw = 0;
+    }
+    else
+    {
+        correctedYaw =
+            (
+                correctedYaw > 0
+                ?
+                1.0f
+                :
+                -1.0f
+            )
+            *
+            (yawMagnitude - deadband);
     }
 
 
 
-    // Low pass filter
+    // Time-based low pass filter. The setting is referenced to 20 ms so
+    // existing tune numbers stay close while loop timing becomes stable.
 
-    float filterAmount =
+    float baseFilterAmount =
+        1.0f -
         constrain(
             smoothing,
             0.01f,
+            0.99f
+        );
+
+    float filterAmount =
+        1.0f -
+        powf(
+            1.0f - baseFilterAmount,
+            dt / 0.02f
+        );
+
+    filterAmount =
+        constrain(
+            filterAmount,
+            0.001f,
             1.0f
         );
 
@@ -155,7 +219,7 @@ void GyroController::setMaxCorrection(int value)
         constrain(
             value,
             0,
-            500
+            1000
         );
 }
 

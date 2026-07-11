@@ -27,8 +27,11 @@ public:
     float getGyroSmoothing();
     void setGyroSmoothing(float value);
 
-    float getGyroSteeringCut();
-    void setGyroSteeringCut(float value);
+    int getGyroAttackSpeed();
+    void setGyroAttackSpeed(int value);
+
+    int getGyroReturnSpeed();
+    void setGyroReturnSpeed(int value);
 
     // Servo
     int getServoCenter();
@@ -83,7 +86,9 @@ private:
 
     float gyroSmoothing = 0.10f;
 
-    float gyroSteeringCut = 0.50f;
+    int gyroAttackSpeed = 80;
+
+    int gyroReturnSpeed = 30;
 
     int servoCenter = 1500;
 

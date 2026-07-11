@@ -29,9 +29,14 @@ bool Settings::begin()
         0.10f
     );
 
-    gyroSteeringCut = prefs.getFloat(
-        "gyroCut",
-        0.50f
+    gyroAttackSpeed = prefs.getInt(
+        "gyroAttack",
+        80
+    );
+
+    gyroReturnSpeed = prefs.getInt(
+        "gyroReturn",
+        30
     );
 
     servoCenter = prefs.getInt(
@@ -125,9 +130,14 @@ void Settings::save()
         gyroSmoothing
     );
 
-    prefs.putFloat(
-        "gyroCut",
-        gyroSteeringCut
+    prefs.putInt(
+        "gyroAttack",
+        gyroAttackSpeed
+    );
+
+    prefs.putInt(
+        "gyroReturn",
+        gyroReturnSpeed
     );
 
     prefs.putInt(
@@ -233,7 +243,7 @@ void Settings::setGyroMaxCorrection(int value)
         constrain(
             value,
             0,
-            500
+            1000
         );
 
     dirty = true;
@@ -256,18 +266,35 @@ void Settings::setGyroSmoothing(float value)
     dirty = true;
 }
 
-float Settings::getGyroSteeringCut()
+int Settings::getGyroAttackSpeed()
 {
-    return gyroSteeringCut;
+    return gyroAttackSpeed;
 }
 
-void Settings::setGyroSteeringCut(float value)
+void Settings::setGyroAttackSpeed(int value)
 {
-    gyroSteeringCut =
+    gyroAttackSpeed =
         constrain(
             value,
-            0.0f,
-            1.0f
+            1,
+            500
+        );
+
+    dirty = true;
+}
+
+int Settings::getGyroReturnSpeed()
+{
+    return gyroReturnSpeed;
+}
+
+void Settings::setGyroReturnSpeed(int value)
+{
+    gyroReturnSpeed =
+        constrain(
+            value,
+            1,
+            500
         );
 
     dirty = true;

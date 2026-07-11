@@ -87,4 +87,6 @@ private:
 
     bool calibrated = false;
 
+    uint32_t lastUpdateMicros = 0;
+
 };

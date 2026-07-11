@@ -72,13 +72,28 @@ private:
 
     unsigned long lastRadioRefresh = 0;
 
+    unsigned long lastPageSwipe = 0;
+
     uint8_t radioSection = 0;
+
+    int8_t heldRepeatButton = 0;
+
+    unsigned long nextRepeatAt = 0;
 
 
 
 
 
     void drawPage(
+        GyroController& gyro,
+        WiFiManager& wifi,
+        Settings& settings,
+        RadioInput& steeringRadio,
+        RadioInput& gainRadio
+    );
+
+    void changePage(
+        int8_t direction,
         GyroController& gyro,
         WiFiManager& wifi,
         Settings& settings,
@@ -144,6 +159,17 @@ private:
         uint16_t by,
         uint16_t bw,
         uint16_t bh
+    );
+
+    int8_t repeatButtonAt(
+        uint16_t x,
+        uint16_t y
+    );
+
+    bool applyRepeatButton(
+        int8_t button,
+        GyroController& gyro,
+        Settings& settings
     );
 
 };
