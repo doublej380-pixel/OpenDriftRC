@@ -47,4 +47,6 @@ private:
     bool pressed = false;
 
     uint8_t gesture = 0;
+
+    unsigned long lastEventMs = 0;
 };

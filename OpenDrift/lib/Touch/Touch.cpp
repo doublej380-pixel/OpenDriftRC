@@ -21,6 +21,8 @@ bool Touch::begin()
 {
     touch.begin();
 
+    touch.disable_auto_sleep();
+
     return true;
 }
 
@@ -39,11 +41,19 @@ void Touch::update()
 
         gesture = touch.data.gestureID;
 
-        pressed = true;
+        lastEventMs =
+            millis();
+
+        pressed =
+            touch.data.points > 0 &&
+            touch.data.event != 1;
     }
     else
     {
-        pressed = false;
+        if(millis() - lastEventMs > 80)
+        {
+            pressed = false;
+        }
     }
 }
 

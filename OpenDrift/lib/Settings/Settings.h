@@ -33,6 +33,21 @@ public:
     int getGyroReturnSpeed();
     void setGyroReturnSpeed(int value);
 
+    float getGyroIntegralGain();
+    void setGyroIntegralGain(float value);
+
+    int getGyroIntegralLimit();
+    void setGyroIntegralLimit(int value);
+
+    int getGyroHoldBoost();
+    void setGyroHoldBoost(int value);
+
+    int getGyroAntiWobble();
+    void setGyroAntiWobble(int value);
+
+    int getSteeringDamper();
+    void setSteeringDamper(int value);
+
     // Servo
     int getServoCenter();
     void setServoCenter(int value);
@@ -50,6 +65,10 @@ public:
     uint32_t getWifiTimeout();
     void setWifiTimeout(uint32_t value);
 
+    // Blackbox
+    bool getBlackboxEnabled();
+    void setBlackboxEnabled(bool value);
+
     // Radio
     int getSteeringMin();
     void setSteeringMin(int value);
@@ -59,6 +78,9 @@ public:
 
     int getSteeringMax();
     void setSteeringMax(int value);
+
+    int getRadioSteeringTravel();
+    void setRadioSteeringTravel(int value);
 
     int getGainMin();
     void setGainMin(int value);
@@ -90,6 +112,16 @@ private:
 
     int gyroReturnSpeed = 30;
 
+    float gyroIntegralGain = 0.0f;
+
+    int gyroIntegralLimit = 120;
+
+    int gyroHoldBoost = 0;
+
+    int gyroAntiWobble = 50;
+
+    int steeringDamper = 0;
+
     int servoCenter = 1500;
 
     bool servoReverse = false;
@@ -100,11 +132,15 @@ private:
 
     uint32_t wifiTimeout = 40000;
 
+    bool blackboxEnabled = false;
+
     int steeringMin = 1000;
 
     int steeringCenter = 1500;
 
     int steeringMax = 2000;
+
+    int radioSteeringTravel = 100;
 
     int gainMin = 1000;
 

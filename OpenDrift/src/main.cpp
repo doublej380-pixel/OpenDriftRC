@@ -39,11 +39,21 @@ BlackboxLogger blackbox;
 
 float slewedGyroCorrection = 0;
 
+float dampedSteeringCommand = 1500;
+
 uint32_t lastCorrectionMicros = 0;
+
+uint32_t lastSteeringDampMicros = 0;
+
+bool steeringDamperReady = false;
 
 unsigned long lastBlackboxLog = 0;
 
-unsigned long blackboxIdleSince = 0;
+bool blackboxStarted = false;
+
+bool lastBlackboxEnabled = false;
+
+bool blackboxStartAttempted = false;
 
 #define SERVO_OUTPUT_PIN 16
 #define RADIO_STEERING_PIN 17
@@ -54,14 +64,6 @@ const float radioGainMax = 3.0f;
 
 const char* ssid = "OpenDrift";
 const char* password = "opendrift";
-
-const bool onboardBlackboxEnabled = true;
-
-const float blackboxIdleYawThreshold = 5.0f;
-
-const int blackboxIdleSteeringThreshold = 25;
-
-const unsigned long blackboxIdleFlushDelay = 2000;
 
 int mapSteeringPulse(
     int pulse,
@@ -124,6 +126,53 @@ int mapSteeringPulse(
 
 
 
+int applyRadioSteeringTravel(
+    int steeringCommand,
+    Settings& settings
+)
+{
+    int travel =
+        settings.getRadioSteeringTravel();
+
+    int offset =
+        steeringCommand - 1500;
+
+    offset =
+        (offset * travel)
+        /
+        100;
+
+    return constrain(
+        1500 + offset,
+        1000,
+        2000
+    );
+}
+
+
+
+int constrainToRadioSteeringTravel(
+    int steeringCommand,
+    Settings& settings
+)
+{
+    int travel =
+        settings.getRadioSteeringTravel();
+
+    int maxOffset =
+        (500 * travel)
+        /
+        100;
+
+    return constrain(
+        steeringCommand,
+        1500 - maxOffset,
+        1500 + maxOffset
+    );
+}
+
+
+
 float mapGainPulse(
     int pulse,
     Settings& settings
@@ -156,6 +205,132 @@ float mapGainPulse(
     return
         radioGainMin +
         ((radioGainMax - radioGainMin) * normalized);
+}
+
+
+
+int dampSteeringInput(
+    int target,
+    Settings& settings
+)
+{
+    int damperMs =
+        settings.getSteeringDamper();
+
+    uint32_t now =
+        micros();
+
+    float dt =
+        0.02f;
+
+    if(lastSteeringDampMicros != 0)
+    {
+        dt =
+            (now - lastSteeringDampMicros)
+            /
+            1000000.0f;
+
+        dt =
+            constrain(
+                dt,
+                0.001f,
+                0.05f
+            );
+    }
+
+    lastSteeringDampMicros =
+        now;
+
+    if(
+        damperMs <= 0 ||
+        !steeringDamperReady
+    )
+    {
+        dampedSteeringCommand =
+            target;
+
+        steeringDamperReady =
+            true;
+
+        return target;
+    }
+
+    float tau =
+        damperMs
+        /
+        1000.0f;
+
+    float alpha =
+        dt
+        /
+        (tau + dt);
+
+    dampedSteeringCommand +=
+        (target - dampedSteeringCommand)
+        *
+        alpha;
+
+    return constrain(
+        (int)roundf(dampedSteeringCommand),
+        1000,
+        2000
+    );
+}
+
+
+
+void updateBlackboxAvailability()
+{
+    bool enabled =
+        settings.getBlackboxEnabled();
+
+    if(!enabled)
+    {
+        lastBlackboxEnabled =
+            false;
+
+        blackboxStartAttempted =
+            false;
+
+        return;
+    }
+
+    if(
+        lastBlackboxEnabled &&
+        blackboxStartAttempted
+    )
+    {
+        return;
+    }
+
+    lastBlackboxEnabled =
+        true;
+
+    blackboxStartAttempted =
+        true;
+
+    if(blackbox.isReady())
+    {
+        blackboxStarted =
+            true;
+
+        return;
+    }
+
+    if(blackbox.begin())
+    {
+        blackboxStarted =
+            true;
+
+        Serial.println("Blackbox logging OK");
+    }
+    else
+    {
+        blackboxStarted =
+            false;
+
+        Serial.println("Blackbox logging unavailable");
+    }
 }
 
 
@@ -265,6 +440,22 @@ void setup()
         settings.getGyroMaxCorrection()
     );
 
+    gyro.setIntegralGain(
+        settings.getGyroIntegralGain()
+    );
+
+    gyro.setIntegralLimit(
+        settings.getGyroIntegralLimit()
+    );
+
+    gyro.setHoldBoost(
+        settings.getGyroHoldBoost()
+    );
+
+    gyro.setAntiWobble(
+        settings.getGyroAntiWobble()
+    );
+
     //-------------------
     // TOUCH
     //-------------------
@@ -307,16 +498,9 @@ void setup()
     // BLACKBOX
     //-------------------
 
-    if(onboardBlackboxEnabled)
+    if(settings.getBlackboxEnabled())
     {
-        if(blackbox.begin())
-        {
-            Serial.println("Blackbox logging OK");
-        }
-        else
-        {
-            Serial.println("Blackbox logging unavailable");
-        }
+        updateBlackboxAvailability();
     }
     else
     {
@@ -393,6 +577,8 @@ void loop()
 
     settings.update();
 
+    updateBlackboxAvailability();
+
     //-------------------
     // WIFI
     //-------------------
@@ -454,6 +640,22 @@ void loop()
         settings.getGyroMaxCorrection()
     );
 
+    gyro.setIntegralGain(
+        settings.getGyroIntegralGain()
+    );
+
+    gyro.setIntegralLimit(
+        settings.getGyroIntegralLimit()
+    );
+
+    gyro.setHoldBoost(
+        settings.getGyroHoldBoost()
+    );
+
+    gyro.setAntiWobble(
+        settings.getGyroAntiWobble()
+    );
+
     //-------------------
     // UI
     //-------------------
@@ -487,6 +689,26 @@ void loop()
                 steeringRadio.getPulseWidth(),
                 settings
             );
+
+        steeringCommand =
+            applyRadioSteeringTravel(
+                steeringCommand,
+                settings
+            );
+
+        steeringCommand =
+            dampSteeringInput(
+                steeringCommand,
+                settings
+            );
+    }
+    else
+    {
+        steeringDamperReady =
+            false;
+
+        lastSteeringDampMicros =
+            0;
     }
 
     int gyroCorrection =
@@ -564,10 +786,9 @@ void loop()
     if(steeringRadio.hasSignal())
     {
         servoCommand =
-            constrain(
+            constrainToRadioSteeringTravel(
                 steeringCommand + gyroCorrection,
-                1000,
-                2000
+                settings
             );
 
         steeringServo.configure(
@@ -586,7 +807,8 @@ void loop()
     //-------------------
 
     if(
-        onboardBlackboxEnabled &&
+        settings.getBlackboxEnabled() &&
+        blackbox.isReady() &&
         steeringRadio.hasSignal() &&
         millis() - lastBlackboxLog >= 50
     )
@@ -608,6 +830,11 @@ void loop()
             settings.getDeadband(),
             settings.getGyroMaxCorrection(),
             settings.getGyroSmoothing(),
+            settings.getGyroIntegralGain(),
+            settings.getGyroIntegralLimit(),
+            gyro.getIntegralCorrection(),
+            settings.getGyroHoldBoost(),
+            settings.getGyroAntiWobble(),
             settings.getGyroAttackSpeed(),
             settings.getGyroReturnSpeed(),
             steeringRadio.hasSignal(),
@@ -615,33 +842,12 @@ void loop()
         );
     }
 
-    if(onboardBlackboxEnabled)
+    if(
+        settings.getBlackboxEnabled() &&
+        blackbox.isReady()
+    )
     {
-        bool blackboxIdle =
-            !steeringRadio.hasSignal()
-            ||
-            (
-                abs(yaw) < blackboxIdleYawThreshold &&
-                abs(steeringCommand - 1500) < blackboxIdleSteeringThreshold
-            );
-
-        if(blackboxIdle)
-        {
-            if(blackboxIdleSince == 0)
-            {
-                blackboxIdleSince =
-                    millis();
-            }
-        }
-        else
-        {
-            blackboxIdleSince = 0;
-        }
-
-        blackbox.update(
-            blackboxIdleSince != 0 &&
-            millis() - blackboxIdleSince >= blackboxIdleFlushDelay
-        );
+        blackbox.update(false);
     }
 
     delay(1);

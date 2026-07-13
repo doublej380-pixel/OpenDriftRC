@@ -13,6 +13,7 @@ The goal is to make gyro setup less of a black box: you can see receiver signals
 - Receiver gyro gain input.
 - Servo output with center, reverse, and travel settings.
 - Steering calibration for max left, center, and max right.
+- Separate radio steering travel limit.
 - Separate servo reverse and gyro reverse.
 - Gyro tuning:
   - gain
@@ -24,6 +25,7 @@ The goal is to make gyro setup less of a black box: you can see receiver signals
 - Do-nothing signal-loss behavior when steering input is lost.
 - WiFi access point.
 - Browser-based web configurator.
+- Optional onboard blackbox logging to flash.
 - Persistent settings stored in ESP32 preferences.
 
 ## Hardware Routing
@@ -97,14 +99,28 @@ Basic gyro behavior settings:
 
 Use `GYRO REV` when normal steering direction is correct, but the gyro counter-steers the wrong way.
 
-### Tune
+### Gyro Tune
 
-Trackside tuning page for the current algorithm:
+Trackside tuning page for correction strength and filtering:
 
 - `MAX CORR`: maximum gyro correction in servo microseconds.
 - `SMOOTH`: time-based low-pass filter amount. Higher values are smoother/slower.
+- `I GAIN`: integral correction strength. `0.00` is off.
+- `I LIM`: maximum integral correction in servo microseconds.
+- `HOLD`: extra high-yaw correction boost. `0` is off; higher values add more authority once the car is already rotating and settled.
+
+`SMOOTH` is intentionally inverted from raw filter math: higher numbers mean more smoothing and slower gyro response.
+
+Deadband is applied as a soft deadband. Small yaw noise is still ignored, but correction fades in from zero instead of jumping as soon as yaw crosses the deadband value.
+
+### Response
+
+Trackside tuning page for how quickly steering and gyro correction move:
+
 - `ATTACK`: how quickly gyro correction can build, in fine 1-step adjustments.
 - `RETURN`: how quickly gyro correction can return toward center, in fine 1-step adjustments.
+- `DAMPER`: steering input damping in milliseconds. `0` is off; higher values calm faster driver steering changes.
+- `WOBBLE`: gyro correction anti-wobble strength. `0` is off, `50` is the current baseline, `100` is strongest.
 
 Good starting values:
 
@@ -113,12 +129,13 @@ Good starting values:
 | Deadband | 3.0 |
 | Max correction | 480 |
 | Smoothing | 0.90 |
+| I gain | 0.00 |
+| I limit | 120 |
+| Hold | 0 |
 | Attack | 80 |
 | Return | 30 |
-
-`SMOOTH` is intentionally inverted from raw filter math: higher numbers mean more smoothing and slower gyro response.
-
-Deadband is applied as a soft deadband. Small yaw noise is still ignored, but correction fades in from zero instead of jumping as soon as yaw crosses the deadband value.
+| Damper | 0 |
+| Wobble | 50 |
 
 Tune symptoms:
 
@@ -127,7 +144,10 @@ Tune symptoms:
 | Weaves left/right driving straight | Increase deadband, lower gain, or raise smoothing |
 | Spins out easily | Lower max correction or return speed first |
 | Won't hold drift | Raise max correction slowly |
+| Holds long drifts but entry/exit feels vague | Add a small amount of I gain |
+| Exits feel like correction hangs on too long | Lower I gain or I limit |
 | Transitions snap back too hard | Lower return speed |
+| Steering input feels too abrupt | Increase damper |
 | Countersteer arrives too slowly | Increase attack speed |
 | Feels slow or lazy | Lower smoothing slightly or raise gain |
 | Feels twitchy | Raise smoothing or lower gain |
@@ -151,6 +171,7 @@ Steering calibration and servo direction:
 - `MAX LEFT`: capture current steering pulse as full left.
 - `CENTER`: capture current steering pulse as neutral.
 - `MAX RIGHT`: capture current steering pulse as full right.
+- `TRV`: limits the final steering command range for driver input and gyro correction.
 - `REV`: reverse physical servo direction.
 
 Suggested calibration flow:
@@ -165,6 +186,12 @@ Servo reverse and gyro reverse are separate on purpose:
 
 - Use `REV` on the Steering page when driver steering moves the wheels backward.
 - Use `GYRO REV` on the Gyro page when driver steering is correct but gyro correction is backward.
+
+Steering calibration and steering travel are separate on purpose:
+
+- Use `MAX LEFT`, `CENTER`, and `MAX RIGHT` to teach OpenDrift what the receiver outputs.
+- Use `TRV` to limit how far the mixed steering command is allowed to move.
+- Use servo travel when you need to scale the final physical servo output, including gyro correction.
 
 ### WiFi
 
@@ -193,15 +220,22 @@ Current web settings:
 - Reverse gyro correction
 - Max correction
 - Smoothing
+- I gain
+- I limit
+- Hold boost
 - Attack speed
 - Return speed
+- Steering input damper
+- Anti-wobble strength
 - Servo reverse
 - Servo center
 - Servo travel
 - Steering max left / center / max right
+- Radio steering travel
 - Gain channel low / high
 - WiFi enabled on boot
 - WiFi auto-off timeout
+- Blackbox logging enabled
 
 The web page also shows live receiver pulse values for steering and gain.
 
@@ -209,9 +243,11 @@ Use the web configurator when you want to make several changes quickly. Use the 
 
 ## Onboard Blackbox Log
 
-OpenDrift stores CSV-style blackbox logs in onboard FFat flash storage at about 20 Hz while steering receiver signal is present.
+OpenDrift can store CSV-style blackbox logs in onboard FFat flash storage at about 20 Hz while steering receiver signal is present.
 
-To avoid disturbing gyro timing, log rows are buffered in RAM while driving. The buffer is flushed to flash only when steering signal is no longer present or when the web configurator downloads/clears the log.
+Blackbox logging is disabled by default. Enable `Onboard logging` in the web configurator only when you want to collect data, then save settings.
+
+To avoid disturbing gyro timing, log rows are buffered in RAM while driving. The control loop never auto-flushes the log to flash. Use the web configurator to flush, download, or clear the log after the run.
 
 The current firmware uses a 16 MB flash partition layout based on the Chronos Navio Waveshare S3 1.28 configuration. After changing to this layout, do a full flash erase once before uploading if the board bootloops or the log storage acts strange.
 
@@ -231,17 +267,19 @@ Log rows include:
 - Steering input and calibrated steering command
 - Servo output
 - Gain input and active gain
-- Active deadband, max correction, smoothing, attack, and return
+- Active deadband, max correction, smoothing, hold boost, anti-wobble, attack, and return
+- Active I gain, I limit, and I correction
 - Steering/gain signal state
 
 Suggested test workflow:
 
 1. Connect to the `OpenDrift` WiFi network.
 2. Open `http://192.168.4.1/`.
-3. Tap `Clear Log`.
-4. Drive the car.
-5. Stop the car with steering centered for a few seconds, or reconnect to WiFi and tap `Flush Log`.
-6. Download `opendrift-blackbox.csv`.
+3. Enable onboard logging if it is off, then save settings.
+4. Tap `Clear Log`.
+5. Drive the car.
+6. Reconnect to WiFi and tap `Flush Log`, or use `Download CSV` which flushes first.
+7. Download `opendrift-blackbox.csv`.
 
 The CSV can be pasted into a spreadsheet or plotted to see whether the car spun because of delayed correction, overcorrection, max correction saturation, noisy yaw, or steering/radio behavior.
 
@@ -253,12 +291,14 @@ The current control loop works like this:
 2. Subtract calibrated gyro offset.
 3. Apply soft deadband.
 4. Smooth yaw rate using a time-based tunable low-pass filter.
-5. Convert yaw rate into correction using gyro gain.
-6. Limit correction with max correction.
-7. Optionally reverse gyro correction.
-8. Slew-limit correction using time-based attack and return speed.
-9. Add gyro correction to calibrated steering command.
-10. Apply servo center/reverse/travel and output to the servo.
+5. Convert yaw rate into correction using gyro gain, with optional high-yaw hold boost.
+6. Add a leaky, clamped integral correction when I gain is enabled.
+7. Limit correction with max correction.
+8. Stabilize tiny correction changes so servo-scale jitter does not become steering twitch.
+9. Optionally reverse gyro correction.
+10. Slew-limit correction using time-based attack and return speed.
+11. Add gyro correction to calibrated steering command.
+12. Apply servo center/reverse/travel and output to the servo.
 
 This keeps driver steering as the base command and lets the gyro assist rather than fully take over.
 
@@ -278,14 +318,20 @@ Start with low correction and work upward:
 4. Set gain low.
 5. Set max correction around `480`.
 6. Set smoothing around `0.90`.
-7. Set attack around `80`.
-8. Set return around `30`.
-9. Drive straight and remove weave first.
-10. Then tune drift hold.
+7. Leave I gain at `0.00` until the car is stable.
+8. Set attack around `80`.
+9. Set return around `30`.
+10. Leave steering damper at `0` until the car is stable.
+11. Drive straight and remove weave first.
+12. Then tune drift hold.
 
 For straight-line weave, do not start by increasing max correction. Weave usually means too much sensitivity near center.
 
 For spin-outs, lower max correction or return speed before changing everything else.
+
+For twitchy entries or driver-input snap, add steering damper in small steps. It smooths the radio steering command before gyro correction is added, so it should be used lightly.
+
+For the new I term, start tiny. Try `I GAIN` around `0.05` to `0.20` with `I LIM` around `80` to `120`. If the car feels like it keeps steering after the rotation has settled, reduce I first.
 
 For poor drift hold, increase max correction in small steps after straight-line behavior is calm.
 

@@ -52,7 +52,31 @@ public:
 
     int getCorrection();
 
+    void setIntegralGain(
+        float value
+    );
 
+    float getIntegralGain();
+
+    void setIntegralLimit(
+        int value
+    );
+
+    int getIntegralLimit();
+
+    int getIntegralCorrection();
+
+    void setHoldBoost(
+        int value
+    );
+
+    int getHoldBoost();
+
+    void setAntiWobble(
+        int value
+    );
+
+    int getAntiWobble();
 
 
     float getFilteredYaw();
@@ -76,13 +100,29 @@ private:
 
     int maxCorrection = 250;
 
+    float integralGain = 0;
+
+    int integralLimit = 120;
+
+    int holdBoost = 0;
+
+    int antiWobble = 50;
+
 
     float filteredYaw = 0;
+
+    float integralAccumulator = 0;
+
+    int integralCorrection = 0;
+
+    float holdBoostFiltered = 0;
 
 
     int servoOutput = 1500;
 
     int correctionOutput = 0;
+
+    int lastCorrectionMove = 0;
 
 
     bool calibrated = false;

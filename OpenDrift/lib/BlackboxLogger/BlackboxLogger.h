@@ -27,6 +27,11 @@ public:
         float deadband,
         int maxCorrection,
         float smoothing,
+        float integralGain,
+        int integralLimit,
+        int integralCorrection,
+        int holdBoost,
+        int antiWobble,
         int attack,
         int returnSpeed,
         bool steeringSignal,
@@ -49,7 +54,7 @@ private:
 
     static const size_t maxLogSize = 3UL * 1024UL * 1024UL;
 
-    static const size_t maxBufferSize = 512UL * 1024UL;
+    static const size_t maxBufferSize = 128UL * 1024UL;
 
     static const unsigned long flushIntervalMs = 1000;
 

@@ -20,42 +20,62 @@ static int mapSteeringForDisplay(
         return 1500;
     }
 
+    int mappedPulse = 1500;
+
     if(
         steeringCenter <= steeringMin ||
         steeringCenter >= steeringMax
     )
     {
-        return constrain(
+        mappedPulse =
+            constrain(
             pulse,
             1000,
             2000
         );
     }
-
-    if(pulse < steeringCenter)
+    else if(pulse < steeringCenter)
     {
-        return map(
-            constrain(
-                pulse,
+        mappedPulse =
+            map(
+                constrain(
+                    pulse,
+                    steeringMin,
+                    steeringCenter
+                ),
                 steeringMin,
-                steeringCenter
-            ),
-            steeringMin,
-            steeringCenter,
-            1000,
-            1500
-        );
+                steeringCenter,
+                1000,
+                1500
+            );
+    }
+    else
+    {
+        mappedPulse =
+            map(
+                constrain(
+                    pulse,
+                    steeringCenter,
+                    steeringMax
+                ),
+                steeringCenter,
+                steeringMax,
+                1500,
+                2000
+            );
     }
 
-    return map(
-        constrain(
-            pulse,
-            steeringCenter,
-            steeringMax
-        ),
-        steeringCenter,
-        steeringMax,
-        1500,
+    int offset =
+        mappedPulse - 1500;
+
+    offset =
+        (offset * settings.getRadioSteeringTravel())
+        /
+        100;
+
+    return constrain(
+        1500 + offset,
+        1000,
         2000
     );
 }
@@ -122,6 +142,13 @@ void UI::drawPage(
 
 
         case 3:
+            drawResponsePage(
+                settings
+            );
+            break;
+
+
+        case 4:
             radioSection = 0;
 
             drawRadioPage(
@@ -133,7 +160,7 @@ void UI::drawPage(
             break;
 
 
-        case 4:
+        case 5:
             radioSection = 1;
 
             drawRadioPage(
@@ -145,7 +172,7 @@ void UI::drawPage(
             break;
 
 
-        case 5:
+        case 6:
             drawWifiPage(
                 wifi,
                 settings
@@ -153,7 +180,7 @@ void UI::drawPage(
             break;
 
 
-        case 6:
+        case 7:
             drawSystemPage(
                 settings
             );
@@ -510,7 +537,7 @@ void UI::drawTunePage(
     lcd->setTextSize(3);
 
     lcd->drawCenterString(
-        "Tune",
+        "Gyro Tune",
         120,
         20
     );
@@ -520,164 +547,395 @@ void UI::drawTunePage(
     lcd->drawString(
         "MAX CORR",
         70,
-        52
+        36
     );
 
     lcd->drawString(
         "SMOOTH",
         78,
-        92
+        67
     );
 
     lcd->drawString(
-        "ATTACK",
+        "I GAIN",
         78,
-        132
+        98
     );
 
     lcd->drawString(
-        "RETURN",
-        76,
-        172
+        "I LIM",
+        84,
+        129
+    );
+
+    lcd->drawString(
+        "HOLD",
+        86,
+        160
     );
 
     lcd->setTextSize(2);
 
     lcd->drawRect(
         20,
-        63,
-        38,
-        24,
+        47,
+        44,
+        28,
         TFT_WHITE
     );
 
     lcd->drawCenterString(
         "-",
-        39,
-        66
+        42,
+        52
     );
 
     lcd->drawNumber(
         settings.getGyroMaxCorrection(),
-        92,
-        66
+        90,
+        52
     );
 
     lcd->drawRect(
-        182,
-        63,
-        38,
-        24,
+        176,
+        47,
+        44,
+        28,
         TFT_WHITE
     );
 
     lcd->drawCenterString(
         "+",
-        201,
-        66
+        198,
+        52
     );
 
     lcd->drawRect(
         20,
-        103,
-        38,
-        24,
+        78,
+        44,
+        28,
         TFT_WHITE
     );
 
     lcd->drawCenterString(
         "-",
-        39,
-        106
+        42,
+        83
     );
 
     lcd->drawFloat(
         settings.getGyroSmoothing(),
         2,
-        92,
-        106
+        90,
+        83
     );
 
     lcd->drawRect(
-        182,
-        103,
-        38,
-        24,
+        176,
+        78,
+        44,
+        28,
         TFT_WHITE
     );
 
     lcd->drawCenterString(
         "+",
-        201,
-        106
+        198,
+        83
     );
 
     lcd->drawRect(
         20,
-        143,
-        38,
-        24,
+        109,
+        44,
+        28,
         TFT_WHITE
     );
 
     lcd->drawCenterString(
         "-",
-        39,
-        146
+        42,
+        114
+    );
+
+    lcd->drawFloat(
+        settings.getGyroIntegralGain(),
+        2,
+        90,
+        114
+    );
+
+    lcd->drawRect(
+        176,
+        109,
+        44,
+        28,
+        TFT_WHITE
+    );
+
+    lcd->drawCenterString(
+        "+",
+        198,
+        114
+    );
+
+    lcd->drawRect(
+        20,
+        140,
+        44,
+        28,
+        TFT_WHITE
+    );
+
+    lcd->drawCenterString(
+        "-",
+        42,
+        145
+    );
+
+    lcd->drawNumber(
+        settings.getGyroIntegralLimit(),
+        90,
+        145
+    );
+
+    lcd->drawRect(
+        176,
+        140,
+        44,
+        28,
+        TFT_WHITE
+    );
+
+    lcd->drawCenterString(
+        "+",
+        198,
+        145
+    );
+
+    lcd->drawRect(
+        20,
+        171,
+        44,
+        28,
+        TFT_WHITE
+    );
+
+    lcd->drawCenterString(
+        "-",
+        42,
+        176
+    );
+
+    lcd->drawNumber(
+        settings.getGyroHoldBoost(),
+        90,
+        176
+    );
+
+    lcd->drawRect(
+        176,
+        171,
+        44,
+        28,
+        TFT_WHITE
+    );
+
+    lcd->drawCenterString(
+        "+",
+        198,
+        176
+    );
+
+    drawPageDots();
+
+}
+
+
+void UI::drawResponsePage(
+    Settings& settings
+)
+{
+
+    lcd->fillScreen(
+        TFT_BLACK
+    );
+
+    lcd->setTextColor(
+        TFT_WHITE
+    );
+
+    lcd->setTextSize(3);
+
+    lcd->drawCenterString(
+        "Response",
+        120,
+        20
+    );
+
+    lcd->setTextSize(1);
+
+    lcd->drawString(
+        "ATTACK",
+        78,
+        43
+    );
+
+    lcd->drawString(
+        "RETURN",
+        76,
+        77
+    );
+
+    lcd->drawString(
+        "DAMP",
+        86,
+        111
+    );
+
+    lcd->drawString(
+        "WOBBLE",
+        78,
+        145
+    );
+
+    lcd->setTextSize(2);
+
+    lcd->drawRect(
+        20,
+        54,
+        44,
+        28,
+        TFT_WHITE
+    );
+
+    lcd->drawCenterString(
+        "-",
+        42,
+        59
     );
 
     lcd->drawNumber(
         settings.getGyroAttackSpeed(),
-        92,
-        146
+        90,
+        59
     );
 
     lcd->drawRect(
-        182,
-        143,
-        38,
-        24,
+        176,
+        54,
+        44,
+        28,
         TFT_WHITE
     );
 
     lcd->drawCenterString(
         "+",
-        201,
-        146
+        198,
+        59
     );
 
     lcd->drawRect(
         20,
-        183,
-        38,
-        24,
+        88,
+        44,
+        28,
         TFT_WHITE
     );
 
     lcd->drawCenterString(
         "-",
-        39,
-        186
+        42,
+        93
     );
 
     lcd->drawNumber(
         settings.getGyroReturnSpeed(),
-        92,
-        186
+        90,
+        93
     );
 
     lcd->drawRect(
-        182,
-        183,
-        38,
-        24,
+        176,
+        88,
+        44,
+        28,
         TFT_WHITE
     );
 
     lcd->drawCenterString(
         "+",
-        201,
-        186
+        198,
+        93
+    );
+
+    lcd->drawRect(
+        20,
+        122,
+        44,
+        28,
+        TFT_WHITE
+    );
+
+    lcd->drawCenterString(
+        "-",
+        42,
+        127
+    );
+
+    lcd->drawNumber(
+        settings.getSteeringDamper(),
+        90,
+        127
+    );
+
+    lcd->drawRect(
+        176,
+        122,
+        44,
+        28,
+        TFT_WHITE
+    );
+
+    lcd->drawCenterString(
+        "+",
+        198,
+        127
+    );
+
+    lcd->drawRect(
+        20,
+        156,
+        44,
+        28,
+        TFT_WHITE
+    );
+
+    lcd->drawCenterString(
+        "-",
+        42,
+        161
+    );
+
+    lcd->drawNumber(
+        settings.getGyroAntiWobble(),
+        90,
+        161
+    );
+
+    lcd->drawRect(
+        176,
+        156,
+        44,
+        28,
+        TFT_WHITE
+    );
+
+    lcd->drawCenterString(
+        "+",
+        198,
+        161
     );
 
     drawPageDots();
@@ -909,22 +1167,62 @@ void UI::drawRadioPage(
         );
 
         lcd->drawRect(
-            35,
+            18,
             210,
-            80,
+            50,
             24,
             TFT_WHITE
         );
 
         lcd->drawCenterString(
             "REV",
-            75,
+            43,
+            216
+        );
+
+        lcd->drawRect(
+            82,
+            210,
+            28,
+            24,
+            TFT_WHITE
+        );
+
+        lcd->drawCenterString(
+            "-",
+            96,
+            216
+        );
+
+        lcd->drawString(
+            "TRV",
+            118,
+            216
+        );
+
+        lcd->drawNumber(
+            settings.getRadioSteeringTravel(),
+            148,
+            216
+        );
+
+        lcd->drawRect(
+            192,
+            210,
+            28,
+            24,
+            TFT_WHITE
+        );
+
+        lcd->drawCenterString(
+            "+",
+            206,
             216
         );
 
         lcd->drawString(
             settings.getServoReverse() ? "ON" : "OFF",
-            140,
+            70,
             216
         );
 
@@ -1258,16 +1556,28 @@ void UI::updateRadioPage(
         );
 
         lcd->fillRect(
-            140,
+            68,
             216,
-            50,
+            120,
             10,
             TFT_BLACK
         );
 
         lcd->drawString(
             settings.getServoReverse() ? "ON" : "OFF",
-            140,
+            70,
+            216
+        );
+
+        lcd->drawString(
+            "TRV",
+            118,
+            216
+        );
+
+        lcd->drawNumber(
+            settings.getRadioSteeringTravel(),
+            148,
             216
         );
 
@@ -1621,29 +1931,62 @@ int8_t UI::repeatButtonAt(
 
     if(page == 2)
     {
-        if(buttonPressed(x, y, 20, 63, 38, 24))
+        if(buttonPressed(x, y, 20, 47, 44, 28))
             return 5;
 
-        if(buttonPressed(x, y, 182, 63, 38, 24))
+        if(buttonPressed(x, y, 176, 47, 44, 28))
             return 6;
 
-        if(buttonPressed(x, y, 20, 103, 38, 24))
+        if(buttonPressed(x, y, 20, 78, 44, 28))
             return 7;
 
-        if(buttonPressed(x, y, 182, 103, 38, 24))
+        if(buttonPressed(x, y, 176, 78, 44, 28))
             return 8;
 
-        if(buttonPressed(x, y, 20, 143, 38, 24))
+        if(buttonPressed(x, y, 20, 109, 44, 28))
+            return 15;
+
+        if(buttonPressed(x, y, 176, 109, 44, 28))
+            return 16;
+
+        if(buttonPressed(x, y, 20, 140, 44, 28))
+            return 17;
+
+        if(buttonPressed(x, y, 176, 140, 44, 28))
+            return 18;
+
+        if(buttonPressed(x, y, 20, 171, 44, 28))
+            return 19;
+
+        if(buttonPressed(x, y, 176, 171, 44, 28))
+            return 20;
+    }
+
+    if(page == 3)
+    {
+        if(buttonPressed(x, y, 20, 54, 44, 28))
             return 9;
 
-        if(buttonPressed(x, y, 182, 143, 38, 24))
+        if(buttonPressed(x, y, 176, 54, 44, 28))
             return 10;
 
-        if(buttonPressed(x, y, 20, 183, 38, 24))
+        if(buttonPressed(x, y, 20, 88, 44, 28))
             return 11;
 
-        if(buttonPressed(x, y, 182, 183, 38, 24))
+        if(buttonPressed(x, y, 176, 88, 44, 28))
             return 12;
+
+        if(buttonPressed(x, y, 20, 122, 44, 28))
+            return 13;
+
+        if(buttonPressed(x, y, 176, 122, 44, 28))
+            return 14;
+
+        if(buttonPressed(x, y, 20, 156, 44, 28))
+            return 21;
+
+        if(buttonPressed(x, y, 176, 156, 44, 28))
+            return 22;
     }
 
     return 0;
@@ -1778,13 +2121,100 @@ bool UI::applyRepeatButton(
             );
             break;
 
+        case 13:
+            settings.setSteeringDamper(
+                settings.getSteeringDamper() - 1
+            );
+            break;
+
+        case 14:
+            settings.setSteeringDamper(
+                settings.getSteeringDamper() + 1
+            );
+            break;
+
+        case 15:
+            settings.setGyroIntegralGain(
+                settings.getGyroIntegralGain() - 0.01f
+            );
+            break;
+
+        case 16:
+            settings.setGyroIntegralGain(
+                settings.getGyroIntegralGain() + 0.01f
+            );
+            break;
+
+        case 17:
+            settings.setGyroIntegralLimit(
+                settings.getGyroIntegralLimit() - 1
+            );
+            break;
+
+        case 18:
+            settings.setGyroIntegralLimit(
+                settings.getGyroIntegralLimit() + 1
+            );
+            break;
+
+        case 19:
+            settings.setGyroHoldBoost(
+                settings.getGyroHoldBoost() - 1
+            );
+            break;
+
+        case 20:
+            settings.setGyroHoldBoost(
+                settings.getGyroHoldBoost() + 1
+            );
+            break;
+
+        case 21:
+            settings.setGyroAntiWobble(
+                settings.getGyroAntiWobble() - 1
+            );
+
+            gyro.setAntiWobble(
+                settings.getGyroAntiWobble()
+            );
+            break;
+
+        case 22:
+            settings.setGyroAntiWobble(
+                settings.getGyroAntiWobble() + 1
+            );
+
+            gyro.setAntiWobble(
+                settings.getGyroAntiWobble()
+            );
+            break;
+
         default:
             return false;
     }
 
-    drawTunePage(
-        settings
-    );
+    if(
+        (
+            button >= 9 &&
+            button <= 14
+        )
+        ||
+        (
+            button >= 21 &&
+            button <= 22
+        )
+    )
+    {
+        drawResponsePage(
+            settings
+        );
+    }
+    else
+    {
+        drawTunePage(
+            settings
+        );
+    }
 
     return true;
 }
@@ -1835,8 +2265,10 @@ void UI::update(
 
         heldRepeatButton = 0;
 
+        nextRepeatAt = 0;
+
         lastTouchState =
-            touched;
+            false;
 
         return;
     }
@@ -1862,16 +2294,18 @@ void UI::update(
 
         heldRepeatButton = 0;
 
+        nextRepeatAt = 0;
+
         lastTouchState =
-            touched;
+            false;
 
         return;
     }
 
     if(
         (
-            page == 3 ||
-            page == 4
+            page == 4 ||
+            page == 5
         ) &&
         !touched &&
         millis() - lastRadioRefresh > 250
@@ -1935,7 +2369,7 @@ void UI::update(
 
             if(
                 false &&
-                page == 3 &&
+                page == 4 &&
                 abs(deltaY) > 50 &&
                 abs(deltaY) > abs(delta)
             )
@@ -1993,6 +2427,8 @@ void UI::update(
         trackingSwipe=false;
 
         heldRepeatButton = 0;
+
+        nextRepeatAt = 0;
 
     }
 
@@ -2172,8 +2608,8 @@ void UI::update(
 
             if(buttonPressed(
                 x,y,
-                20,63,
-                38,24
+                20,54,
+                44,28
             ))
             {
 
@@ -2186,8 +2622,8 @@ void UI::update(
 
             if(buttonPressed(
                 x,y,
-                182,63,
-                38,24
+                176,54,
+                44,28
             ))
             {
 
@@ -2200,8 +2636,8 @@ void UI::update(
 
             if(buttonPressed(
                 x,y,
-                20,103,
-                38,24
+                20,88,
+                44,28
             ))
             {
 
@@ -2214,8 +2650,8 @@ void UI::update(
 
             if(buttonPressed(
                 x,y,
-                182,103,
-                38,24
+                176,88,
+                44,28
             ))
             {
 
@@ -2225,11 +2661,82 @@ void UI::update(
 
             }
 
+            if(buttonPressed(
+                x,y,
+                20,122,
+                44,28
+            ))
+            {
+
+                settings.setGyroIntegralGain(
+                    settings.getGyroIntegralGain() - 0.01f
+                );
+
+            }
+
 
             if(buttonPressed(
                 x,y,
-                20,143,
-                38,24
+                176,122,
+                44,28
+            ))
+            {
+
+                settings.setGyroIntegralGain(
+                    settings.getGyroIntegralGain() + 0.01f
+                );
+
+            }
+
+
+            if(buttonPressed(
+                x,y,
+                20,156,
+                44,28
+            ))
+            {
+
+                settings.setGyroIntegralLimit(
+                    settings.getGyroIntegralLimit() - 1
+                );
+
+            }
+
+
+            if(buttonPressed(
+                x,y,
+                176,156,
+                44,28
+            ))
+            {
+
+                settings.setGyroIntegralLimit(
+                    settings.getGyroIntegralLimit() + 1
+                );
+
+            }
+
+            drawTunePage(
+                settings
+            );
+
+        }
+
+
+
+
+
+
+
+        // RESPONSE PAGE BUTTONS
+
+        if(page == 3)
+        {
+
+            if(buttonPressed(
+                x,y,
+                20,68,
+                44,32
             ))
             {
 
@@ -2242,8 +2749,8 @@ void UI::update(
 
             if(buttonPressed(
                 x,y,
-                182,143,
-                38,24
+                176,68,
+                44,32
             ))
             {
 
@@ -2256,8 +2763,8 @@ void UI::update(
 
             if(buttonPressed(
                 x,y,
-                20,183,
-                38,24
+                20,118,
+                44,32
             ))
             {
 
@@ -2270,8 +2777,8 @@ void UI::update(
 
             if(buttonPressed(
                 x,y,
-                182,183,
-                38,24
+                176,118,
+                44,32
             ))
             {
 
@@ -2281,8 +2788,35 @@ void UI::update(
 
             }
 
+            if(buttonPressed(
+                x,y,
+                20,168,
+                44,32
+            ))
+            {
 
-            drawTunePage(
+                settings.setSteeringDamper(
+                    settings.getSteeringDamper() - 1
+                );
+
+            }
+
+
+            if(buttonPressed(
+                x,y,
+                176,168,
+                44,32
+            ))
+            {
+
+                settings.setSteeringDamper(
+                    settings.getSteeringDamper() + 1
+                );
+
+            }
+
+
+            drawResponsePage(
                 settings
             );
 
@@ -2297,7 +2831,7 @@ void UI::update(
         // RADIO PAGE BUTTONS
 
         if(
-            page == 4
+            page == 5
         )
         {
 
@@ -2353,13 +2887,40 @@ void UI::update(
 
             if(buttonPressed(
                 x,y,
-                35,210,
-                80,24
+                18,210,
+                50,24
             ))
             {
 
                 settings.setServoReverse(
                     !settings.getServoReverse()
+                );
+
+            }
+
+            if(buttonPressed(
+                x,y,
+                82,210,
+                28,24
+            ))
+            {
+
+                settings.setRadioSteeringTravel(
+                    settings.getRadioSteeringTravel() - 1
+                );
+
+            }
+
+
+            if(buttonPressed(
+                x,y,
+                192,210,
+                28,24
+            ))
+            {
+
+                settings.setRadioSteeringTravel(
+                    settings.getRadioSteeringTravel() + 1
                 );
 
             }
@@ -2382,7 +2943,7 @@ void UI::update(
 
         // WIFI PAGE BUTTON
 
-        if(page == 5)
+        if(page == 6)
         {
 
             if(buttonPressed(

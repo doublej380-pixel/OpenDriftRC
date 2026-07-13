@@ -39,6 +39,31 @@ bool Settings::begin()
         30
     );
 
+    gyroIntegralGain = prefs.getFloat(
+        "gyroIGain",
+        0.0f
+    );
+
+    gyroIntegralLimit = prefs.getInt(
+        "gyroILim",
+        120
+    );
+
+    gyroHoldBoost = prefs.getInt(
+        "gyroHold",
+        0
+    );
+
+    gyroAntiWobble = prefs.getInt(
+        "gyroWob",
+        50
+    );
+
+    steeringDamper = prefs.getInt(
+        "strDamp",
+        0
+    );
+
     servoCenter = prefs.getInt(
         "center",
         1500
@@ -64,6 +89,11 @@ bool Settings::begin()
         40000
     );
 
+    blackboxEnabled = prefs.getBool(
+        "blackbox",
+        false
+    );
+
     steeringMin = prefs.getInt(
         "strMin",
         1000
@@ -77,6 +107,11 @@ bool Settings::begin()
     steeringMax = prefs.getInt(
         "strMax",
         2000
+    );
+
+    radioSteeringTravel = prefs.getInt(
+        "strTravel",
+        100
     );
 
     gainMin = prefs.getInt(
@@ -140,6 +175,31 @@ void Settings::save()
         gyroReturnSpeed
     );
 
+    prefs.putFloat(
+        "gyroIGain",
+        gyroIntegralGain
+    );
+
+    prefs.putInt(
+        "gyroILim",
+        gyroIntegralLimit
+    );
+
+    prefs.putInt(
+        "gyroHold",
+        gyroHoldBoost
+    );
+
+    prefs.putInt(
+        "gyroWob",
+        gyroAntiWobble
+    );
+
+    prefs.putInt(
+        "strDamp",
+        steeringDamper
+    );
+
     prefs.putInt(
         "center",
         servoCenter
@@ -165,6 +225,11 @@ void Settings::save()
         wifiTimeout
     );
 
+    prefs.putBool(
+        "blackbox",
+        blackboxEnabled
+    );
+
     prefs.putInt(
         "strMin",
         steeringMin
@@ -178,6 +243,11 @@ void Settings::save()
     prefs.putInt(
         "strMax",
         steeringMax
+    );
+
+    prefs.putInt(
+        "strTravel",
+        radioSteeringTravel
     );
 
     prefs.putInt(
@@ -300,6 +370,91 @@ void Settings::setGyroReturnSpeed(int value)
     dirty = true;
 }
 
+float Settings::getGyroIntegralGain()
+{
+    return gyroIntegralGain;
+}
+
+void Settings::setGyroIntegralGain(float value)
+{
+    gyroIntegralGain =
+        constrain(
+            value,
+            0.0f,
+            20.0f
+        );
+
+    dirty = true;
+}
+
+int Settings::getGyroIntegralLimit()
+{
+    return gyroIntegralLimit;
+}
+
+void Settings::setGyroIntegralLimit(int value)
+{
+    gyroIntegralLimit =
+        constrain(
+            value,
+            0,
+            500
+        );
+
+    dirty = true;
+}
+
+int Settings::getGyroHoldBoost()
+{
+    return gyroHoldBoost;
+}
+
+void Settings::setGyroHoldBoost(int value)
+{
+    gyroHoldBoost =
+        constrain(
+            value,
+            0,
+            100
+        );
+
+    dirty = true;
+}
+
+int Settings::getGyroAntiWobble()
+{
+    return gyroAntiWobble;
+}
+
+void Settings::setGyroAntiWobble(int value)
+{
+    gyroAntiWobble =
+        constrain(
+            value,
+            0,
+            100
+        );
+
+    dirty = true;
+}
+
+int Settings::getSteeringDamper()
+{
+    return steeringDamper;
+}
+
+void Settings::setSteeringDamper(int value)
+{
+    steeringDamper =
+        constrain(
+            value,
+            0,
+            1000
+        );
+
+    dirty = true;
+}
+
 // --------------------
 // Servo
 // --------------------
@@ -364,6 +519,21 @@ void Settings::setWifiTimeout(uint32_t value)
 }
 
 // --------------------
+// Blackbox
+// --------------------
+
+bool Settings::getBlackboxEnabled()
+{
+    return blackboxEnabled;
+}
+
+void Settings::setBlackboxEnabled(bool value)
+{
+    blackboxEnabled = value;
+    dirty = true;
+}
+
+// --------------------
 // Radio
 // --------------------
 
@@ -397,6 +567,23 @@ int Settings::getSteeringMax()
 void Settings::setSteeringMax(int value)
 {
     steeringMax = value;
+    dirty = true;
+}
+
+int Settings::getRadioSteeringTravel()
+{
+    return radioSteeringTravel;
+}
+
+void Settings::setRadioSteeringTravel(int value)
+{
+    radioSteeringTravel =
+        constrain(
+            value,
+            0,
+            100
+        );
+
     dirty = true;
 }
 

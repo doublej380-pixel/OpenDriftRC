@@ -164,8 +164,13 @@ void WebConfigurator::handleRoot()
     html += input("Deadband", "deadband", String(settings->getDeadband(), 2), "number", "1");
     html += input("Max correction us", "gyroMax", String(settings->getGyroMaxCorrection()), "number", "1");
     html += input("Smoothing", "gyroSmoothing", String(settings->getGyroSmoothing(), 2), "number", "0.01");
+    html += input("I gain", "gyroIGain", String(settings->getGyroIntegralGain(), 2), "number", "0.01");
+    html += input("I limit us", "gyroILimit", String(settings->getGyroIntegralLimit()), "number", "1");
+    html += input("Hold boost percent", "gyroHoldBoost", String(settings->getGyroHoldBoost()), "number", "1");
     html += input("Attack speed", "gyroAttack", String(settings->getGyroAttackSpeed()), "number", "1");
     html += input("Return speed", "gyroReturn", String(settings->getGyroReturnSpeed()), "number", "1");
+    html += input("Anti-wobble", "gyroAntiWobble", String(settings->getGyroAntiWobble()), "number", "1");
+    html += input("Steer damper ms", "steeringDamper", String(settings->getSteeringDamper()), "number", "1");
     html += F("</div>");
     html += checkbox("Reverse gyro correction", "gyroReverse", settings->getGyroReverse());
     html += F("</div>");
@@ -181,6 +186,7 @@ void WebConfigurator::handleRoot()
     html += input("Max left", "steeringMin", String(settings->getSteeringMin()));
     html += input("Center", "steeringCenter", String(settings->getSteeringCenter()));
     html += input("Max right", "steeringMax", String(settings->getSteeringMax()));
+    html += input("Steering travel percent", "radioSteeringTravel", String(settings->getRadioSteeringTravel()), "number", "1");
     html += F("</div></div>");
 
     html += F("<div class='card'><h2>Gain Channel Calibration</h2><div class='row'>");
@@ -193,11 +199,19 @@ void WebConfigurator::handleRoot()
     html += input("Auto-off timeout ms", "wifiTimeout", String(settings->getWifiTimeout()));
     html += F("</div>");
 
+    html += F("<div class='card'><h2>Blackbox</h2>");
+    html += checkbox("Enable onboard logging", "blackboxEnabled", settings->getBlackboxEnabled());
+    html += F("</div>");
+
     html += F("<button type='submit'>Save Settings</button></form>");
 
     html += F("<div class='card'><h2>Blackbox Log</h2>");
 
-    if(blackbox != nullptr && blackbox->isReady())
+    if(!settings->getBlackboxEnabled())
+    {
+        html += F("<p class='sub'>Logging disabled. Enable onboard logging and save settings to record logs.</p>");
+    }
+    else if(blackbox != nullptr && blackbox->isReady())
     {
         html += F("<p class='sub'>Size: ");
         html += String(blackbox->getSize() / 1024);
@@ -289,6 +303,41 @@ void WebConfigurator::handleSave()
         )
     );
 
+    settings->setGyroIntegralGain(
+        getFloatArg(
+            "gyroIGain",
+            settings->getGyroIntegralGain()
+        )
+    );
+
+    settings->setGyroIntegralLimit(
+        getIntArg(
+            "gyroILimit",
+            settings->getGyroIntegralLimit()
+        )
+    );
+
+    settings->setGyroHoldBoost(
+        getIntArg(
+            "gyroHoldBoost",
+            settings->getGyroHoldBoost()
+        )
+    );
+
+    settings->setGyroAntiWobble(
+        getIntArg(
+            "gyroAntiWobble",
+            settings->getGyroAntiWobble()
+        )
+    );
+
+    settings->setSteeringDamper(
+        getIntArg(
+            "steeringDamper",
+            settings->getSteeringDamper()
+        )
+    );
+
     settings->setServoReverse(
         server.hasArg("servoReverse")
     );
@@ -328,6 +377,13 @@ void WebConfigurator::handleSave()
         )
     );
 
+    settings->setRadioSteeringTravel(
+        getIntArg(
+            "radioSteeringTravel",
+            settings->getRadioSteeringTravel()
+        )
+    );
+
     settings->setGainMin(
         getIntArg(
             "gainMin",
@@ -353,6 +409,10 @@ void WebConfigurator::handleSave()
         )
     );
 
+    settings->setBlackboxEnabled(
+        server.hasArg("blackboxEnabled")
+    );
+
     if(gyro != nullptr)
     {
         gyro->setGain(
@@ -370,6 +430,22 @@ void WebConfigurator::handleSave()
         gyro->setMaxCorrection(
             settings->getGyroMaxCorrection()
         );
+
+        gyro->setIntegralGain(
+            settings->getGyroIntegralGain()
+        );
+
+        gyro->setIntegralLimit(
+            settings->getGyroIntegralLimit()
+        );
+
+        gyro->setHoldBoost(
+            settings->getGyroHoldBoost()
+        );
+
+        gyro->setAntiWobble(
+            settings->getGyroAntiWobble()
+        );
     }
 
     server.sendHeader(
@@ -386,6 +462,20 @@ void WebConfigurator::handleSave()
 
 void WebConfigurator::handleLogDownload()
 {
+    if(
+        settings != nullptr &&
+        !settings->getBlackboxEnabled()
+    )
+    {
+        server.send(
+            503,
+            "text/plain",
+            "Blackbox logging disabled"
+        );
+
+        return;
+    }
+
     if(
         blackbox == nullptr ||
         !blackbox->isReady()
@@ -437,6 +527,20 @@ void WebConfigurator::handleLogDownload()
 void WebConfigurator::handleLogFlush()
 {
     if(
+        settings != nullptr &&
+        !settings->getBlackboxEnabled()
+    )
+    {
+        server.send(
+            503,
+            "text/plain",
+            "Blackbox logging disabled"
+        );
+
+        return;
+    }
+
+    if(
         blackbox == nullptr ||
         !blackbox->flush()
     )
@@ -464,6 +568,20 @@ void WebConfigurator::handleLogFlush()
 
 void WebConfigurator::handleLogClear()
 {
+    if(
+        settings != nullptr &&
+        !settings->getBlackboxEnabled()
+    )
+    {
+        server.send(
+            503,
+            "text/plain",
+            "Blackbox logging disabled"
+        );
+
+        return;
+    }
+
     if(
         blackbox == nullptr ||
         !blackbox->clear()
