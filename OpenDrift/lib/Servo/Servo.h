@@ -19,7 +19,8 @@ public:
     void configure(
         int centerPulse,
         bool reversed,
-        int travelPercent
+        int travelPercent,
+        int quietBand
     );
 
 
@@ -34,4 +35,6 @@ private:
     bool reversed = false;
 
     int travelPercent = 100;
+
+    int quietBand = 0;
 };

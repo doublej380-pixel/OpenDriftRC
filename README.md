@@ -1,17 +1,18 @@
 # OpenDrift
 
-OpenDrift is an open source drift gyro for RC drift cars, built around the Waveshare ESP32-S3 round touch display board. It reads steering and gain channels from a receiver, mixes driver steering with gyro correction, outputs a servo signal, and exposes tuning through both the onboard touch UI and a WiFi web configurator.
+OpenDrift is an open source drift gyro for RC drift cars, built around the Waveshare ESP32-S3 Touch AMOLED 1.64 board. It reads steering and gain channels from a receiver, mixes driver steering with gyro correction, outputs a servo signal, and exposes tuning through both the onboard touch UI and a WiFi web configurator.
 
 The goal is to make gyro setup less of a black box: you can see receiver signals, calibrate steering, reverse servo or gyro direction independently, and tune the drift behavior at the car.
 
 ## Current Features
 
 - ESP32-S3 firmware using PlatformIO and Arduino.
-- Round touch display UI.
+- 280 x 456 AMOLED touch UI with a static RGB565 background and swipeable pages.
 - IMU yaw-rate based gyro correction.
 - Receiver steering input.
 - Receiver gyro gain input.
 - Servo output with center, reverse, and travel settings.
+- Servo quiet band for direct-drive steering buzz.
 - Steering calibration for max left, center, and max right.
 - Separate radio steering travel limit.
 - Separate servo reverse and gyro reverse.
@@ -29,6 +30,12 @@ The goal is to make gyro setup less of a black box: you can see receiver signals
 - Persistent settings stored in ESP32 preferences.
 
 ## Hardware Routing
+
+### Supported Boards
+
+The **Waveshare ESP32-S3 Touch AMOLED 1.64** is the final and primary OpenDrift hardware target. New development, UI work, and release testing target this board.
+
+The older Waveshare 1.28-inch round display build is deprecated. Its PlatformIO environment and implementation remain in the repository for experimentation, but it may not receive new UI features or the same level of testing.
 
 Current default pinout:
 
@@ -54,14 +61,29 @@ Build with PlatformIO:
 pio run
 ```
 
-Upload with your normal PlatformIO upload workflow for the `waveshare_128` environment.
+The default environment is `waveshare_amoled_164`. Build or upload it explicitly with:
+
+```sh
+pio run -e waveshare_amoled_164
+pio run -e waveshare_amoled_164 -t upload
+```
+
+The custom PlatformIO board definition is included at `OpenDrift/boards/waveshare_amoled_164.json`.
+
+The deprecated round-board environment remains available for experimentation:
+
+```sh
+pio run -e waveshare_128
+```
+
+The `waveshare_amoled_164_rescue` environment is a fallback recovery build using the generic ESP32-S3 DevKit definition. It is not the normal release target.
 
 Main dependencies are managed in `OpenDrift/platformio.ini`:
 
 - SensorLib
 - LovyanGFX
 - ESP32Servo
-- CST816S
+- CST816S (deprecated round-board build only)
 
 ## First Power-On
 
@@ -230,6 +252,7 @@ Current web settings:
 - Servo reverse
 - Servo center
 - Servo travel
+- Servo quiet band
 - Steering max left / center / max right
 - Radio steering travel
 - Gain channel low / high
@@ -249,7 +272,7 @@ Blackbox logging is disabled by default. Enable `Onboard logging` in the web con
 
 To avoid disturbing gyro timing, log rows are buffered in RAM while driving. The control loop never auto-flushes the log to flash. Use the web configurator to flush, download, or clear the log after the run.
 
-The current firmware uses a 16 MB flash partition layout based on the Chronos Navio Waveshare S3 1.28 configuration. After changing to this layout, do a full flash erase once before uploading if the board bootloops or the log storage acts strange.
+The primary AMOLED build uses a custom 16 MB partition layout with a 6 MB application slot and FFat storage for logging. After changing to this layout, do a full flash erase once before uploading if the board bootloops or the log storage acts strange.
 
 The web configurator shows the current log size and provides:
 
@@ -266,6 +289,7 @@ Log rows include:
 - Slewed gyro correction
 - Steering input and calibrated steering command
 - Servo output
+- Servo quiet band
 - Gain input and active gain
 - Active deadband, max correction, smoothing, hold boost, anti-wobble, attack, and return
 - Active I gain, I limit, and I correction
@@ -347,6 +371,8 @@ Important folders:
 - `OpenDrift/lib/UI`: onboard touch UI.
 - `OpenDrift/lib/WebConfigurator`: web settings page.
 - `OpenDrift/lib/WIFIManager`: WiFi access point control.
+- `OpenDrift/assets/backgrounds`: flash-resident AMOLED UI background data.
+- `OpenDrift/boards`: custom PlatformIO board definitions.
 
 ## License
 

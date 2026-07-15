@@ -58,6 +58,9 @@ public:
     int getServoTravel();
     void setServoTravel(int value);
 
+    int getServoQuiet();
+    void setServoQuiet(int value);
+
     // WiFi
     bool getWifiEnabled();
     void setWifiEnabled(bool value);
@@ -127,6 +130,8 @@ private:
     bool servoReverse = false;
 
     int servoTravel = 100;
+
+    int servoQuiet = 0;
 
     bool wifiEnabled = true;
 

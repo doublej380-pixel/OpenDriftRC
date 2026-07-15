@@ -343,17 +343,33 @@ void setup()
 
     Serial.println("OpenDrift Starting");
 
+    #if !defined(OPENDRIFT_BOARD_AMOLED_164)
     pinMode(2, OUTPUT);
     digitalWrite(2, HIGH);
+    #endif
 
-    lcd.init();
+    bool displayOk =
+        lcd.init();
+
+    Serial.print("Display init: ");
+    Serial.println(displayOk ? "OK" : "FAIL");
+
+    lcd.setColorDepth(16);
+    lcd.setSwapBytes(false);
     lcd.setRotation(0);
     lcd.fillScreen(TFT_BLACK);
     lcd.setTextColor(TFT_WHITE);
 
+    int screenCenterX =
+        lcd.width()
+        /
+        2;
+
+    #if !defined(OPENDRIFT_BOARD_AMOLED_164)
     lcd.setTextSize(3);
-    lcd.drawCenterString("OpenDrift",120,20);
+    lcd.drawCenterString("OpenDrift", screenCenterX, 20);
     lcd.setTextSize(2);
+    #endif
 
     //-------------------
     // SETTINGS
@@ -367,14 +383,18 @@ void setup()
 
     if(!imu.begin())
     {
+        #if !defined(OPENDRIFT_BOARD_AMOLED_164)
         lcd.setTextSize(2);
-        lcd.drawCenterString("IMU ERROR",120,90);
+        lcd.drawCenterString("IMU ERROR", screenCenterX, 90);
+        #endif
 
         while(true)
             delay(1000);
     }
 
-    lcd.drawCenterString("IMU OK",120,60);
+    #if !defined(OPENDRIFT_BOARD_AMOLED_164)
+    lcd.drawCenterString("IMU OK", screenCenterX, 60);
+    #endif
 
     Serial.println("IMU OK");
 
@@ -384,7 +404,9 @@ void setup()
 
     if(!steeringServo.begin(SERVO_OUTPUT_PIN))
     {
-        lcd.drawCenterString("SERVO ERROR",120,100);
+        #if !defined(OPENDRIFT_BOARD_AMOLED_164)
+        lcd.drawCenterString("SERVO ERROR", screenCenterX, 100);
+        #endif
 
         while(true)
             delay(1000);
@@ -393,12 +415,15 @@ void setup()
     steeringServo.configure(
         settings.getServoCenter(),
         settings.getServoReverse(),
-        settings.getServoTravel()
+        settings.getServoTravel(),
+        settings.getServoQuiet()
     );
 
     steeringServo.center();
 
-    lcd.drawCenterString("SERVO OK",120,85);
+    #if !defined(OPENDRIFT_BOARD_AMOLED_164)
+    lcd.drawCenterString("SERVO OK", screenCenterX, 85);
+    #endif
 
     Serial.println("SERVO OK");
 
@@ -414,7 +439,9 @@ void setup()
         RADIO_GAIN_PIN
     );
 
-    lcd.drawCenterString("RADIO OK",120,110);
+    #if !defined(OPENDRIFT_BOARD_AMOLED_164)
+    lcd.drawCenterString("RADIO OK", screenCenterX, 110);
+    #endif
 
     Serial.println("Radio gain input OK");
 
@@ -464,13 +491,17 @@ void setup()
 
     if(!touch.begin())
     {
-        lcd.drawCenterString("TOUCH ERROR",120,135);
+        #if !defined(OPENDRIFT_BOARD_AMOLED_164)
+        lcd.drawCenterString("TOUCH ERROR", screenCenterX, 135);
+        #endif
 
         while(true)
             delay(1000);
     }
 
-    lcd.drawCenterString("TOUCH OK",120,135);
+    #if !defined(OPENDRIFT_BOARD_AMOLED_164)
+    lcd.drawCenterString("TOUCH OK", screenCenterX, 135);
+    #endif
 
     Serial.println("TOUCH OK");
 
@@ -480,7 +511,9 @@ void setup()
     // CALIBRATION
     //-------------------
 
-    lcd.drawCenterString("Calibrating",120,170);
+    #if !defined(OPENDRIFT_BOARD_AMOLED_164)
+    lcd.drawCenterString("Calibrating", screenCenterX, 170);
+    #endif
 
     delay(2000);
 
@@ -529,15 +562,17 @@ void setup()
         Serial.print("WiFi IP: ");
         Serial.println(IP);
 
+        #if !defined(OPENDRIFT_BOARD_AMOLED_164)
         lcd.fillScreen(TFT_BLACK);
 
         lcd.setTextSize(2);
-        lcd.drawCenterString("WiFi OK",120,40);
+        lcd.drawCenterString("WiFi OK", screenCenterX, 40);
 
         lcd.setTextSize(1);
-        lcd.drawCenterString(IP.toString(),120,70);
+        lcd.drawCenterString(IP.toString(), screenCenterX, 70);
 
         delay(1000);
+        #endif
 
         webConfig.begin(
             settings,
@@ -567,6 +602,16 @@ void setup()
 
 void loop()
 {
+    static unsigned long lastHeartbeatMs = 0;
+
+    if(millis() - lastHeartbeatMs > 5000)
+    {
+        lastHeartbeatMs =
+            millis();
+
+        Serial.println("OpenDrift heartbeat");
+    }
+
     imu.update();
 
     touch.update();
@@ -794,7 +839,8 @@ void loop()
         steeringServo.configure(
             settings.getServoCenter(),
             settings.getServoReverse(),
-            settings.getServoTravel()
+            settings.getServoTravel(),
+            settings.getServoQuiet()
         );
 
         steeringServo.writeMicroseconds(
@@ -825,6 +871,7 @@ void loop()
             steeringRadio.getPulseWidth(),
             steeringCommand,
             servoCommand,
+            settings.getServoQuiet(),
             gainRadio.getPulseWidth(),
             gyro.getGain(),
             settings.getDeadband(),

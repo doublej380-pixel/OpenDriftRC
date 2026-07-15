@@ -40,12 +40,23 @@ void ServoOutput::writeMicroseconds(int us)
         /
         100;
 
-    currentPulse =
+    int targetPulse =
         constrain(
             centerPulse + correction,
             1000,
             2000
         );
+
+    if(
+        quietBand > 0 &&
+        abs(targetPulse - currentPulse) <= quietBand
+    )
+    {
+        return;
+    }
+
+    currentPulse =
+        targetPulse;
 
     servo.writeMicroseconds(
         currentPulse
@@ -80,7 +91,8 @@ int ServoOutput::getPosition()
 void ServoOutput::configure(
     int centerPulseValue,
     bool reversedValue,
-    int travelPercentValue
+    int travelPercentValue,
+    int quietBandValue
 )
 {
     centerPulse =
@@ -104,4 +116,11 @@ void ServoOutput::configure(
     {
         travelPercent = 100;
     }
+
+    quietBand =
+        constrain(
+            quietBandValue,
+            0,
+            50
+        );
 }

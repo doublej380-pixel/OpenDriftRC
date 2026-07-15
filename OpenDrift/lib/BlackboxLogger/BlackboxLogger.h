@@ -22,6 +22,7 @@ public:
         int steeringRaw,
         int steeringCommand,
         int servoCommand,
+        int servoQuiet,
         int gainRaw,
         float gain,
         float deadband,

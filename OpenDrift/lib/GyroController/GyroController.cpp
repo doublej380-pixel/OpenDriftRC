@@ -316,6 +316,23 @@ int GyroController::update(float yawRate)
             maxCorrection
         );
 
+    bool idleSnap =
+        false;
+
+    if(
+        correctedYaw == 0.0f &&
+        yawAbs < 1.0f
+    )
+    {
+        integralAccumulator = 0;
+
+        integralCorrection = 0;
+
+        targetCorrection = 0;
+
+        idleSnap = true;
+    }
+
     int previousCorrectionOutput =
         correctionOutput;
 
@@ -331,6 +348,7 @@ int GyroController::update(float yawRate)
         50.0f;
 
     if(
+        !idleSnap &&
         antiWobbleStrength > 0.0f
     )
     {

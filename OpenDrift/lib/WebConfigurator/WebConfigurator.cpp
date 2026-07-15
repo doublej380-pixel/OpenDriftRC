@@ -180,6 +180,7 @@ void WebConfigurator::handleRoot()
     html += F("<div class='row'>");
     html += input("Center pulse", "servoCenter", String(settings->getServoCenter()));
     html += input("Travel percent", "servoTravel", String(settings->getServoTravel()));
+    html += input("Quiet band us", "servoQuiet", String(settings->getServoQuiet()), "number", "1");
     html += F("</div></div>");
 
     html += F("<div class='card'><h2>Steering Calibration</h2><div class='row'>");
@@ -353,6 +354,13 @@ void WebConfigurator::handleSave()
         getIntArg(
             "servoTravel",
             settings->getServoTravel()
+        )
+    );
+
+    settings->setServoQuiet(
+        getIntArg(
+            "servoQuiet",
+            settings->getServoQuiet()
         )
     );
 

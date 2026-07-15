@@ -1,6 +1,160 @@
 #include "UI.h"
 
 
+#if defined(OPENDRIFT_BOARD_AMOLED_164)
+#include "../../assets/backgrounds/background.c"
+
+static constexpr int OD_BACKGROUND_WIDTH = 456;
+static constexpr int OD_BACKGROUND_HEIGHT = 280;
+static constexpr float OD_TEXT_SCALE = 1.15f;
+
+// LovyanGFX supports fractional text scaling. This enlarges all AMOLED
+// typography without adding another rendering pass.
+#define setTextSize(size) setTextSize(static_cast<float>(size) * OD_TEXT_SCALE)
+
+static_assert(
+    sizeof(background_map) ==
+        OD_BACKGROUND_WIDTH * OD_BACKGROUND_HEIGHT * 2,
+    "AMOLED background must be a 456x280 RGB565 image"
+);
+
+static constexpr uint16_t OD_BG = TFT_BLACK;
+static constexpr uint16_t OD_TEXT = 0xFFFF;
+static constexpr uint16_t OD_MUTED = 0x9CF3;
+static constexpr uint16_t OD_DIM = 0x3186;
+static constexpr uint16_t OD_CYAN = 0x07FF;
+static constexpr uint16_t OD_BLUE = 0x3D9F;
+static constexpr uint16_t OD_MAGENTA = 0xF81F;
+static constexpr uint16_t OD_AMBER = 0xFD20;
+static constexpr uint16_t OD_GREEN = 0x07E0;
+static constexpr uint16_t OD_RED = 0xF800;
+
+
+static void drawUiBackground(
+    LGFX_Sprite* lcd
+)
+{
+    // Page canvases use black as a transparent color. The fixed
+    // background is added later while composing the physical display.
+    lcd->fillScreen(
+        TFT_BLACK
+    );
+}
+
+
+static uint16_t readBackgroundPixel(
+    int x,
+    int y
+)
+{
+    const uint16_t* pixels =
+        reinterpret_cast<const uint16_t*>(background_map);
+
+    return pgm_read_word(
+        pixels + (y * OD_BACKGROUND_WIDTH) + x
+    );
+}
+
+
+static uint16_t readBackgroundPixelRaw(
+    int x,
+    int y
+)
+{
+    uint16_t color =
+        readBackgroundPixel(x, y);
+
+    // A 16-bit LovyanGFX sprite stores RGB565 in wire (big-endian)
+    // order, while the generated image array contains native RGB565.
+    return
+        static_cast<uint16_t>(
+            (color << 8) |
+            (color >> 8)
+        );
+}
+
+
+static void drawAmoledHeader(
+    LGFX_Sprite* lcd,
+    const char* title,
+    uint16_t accent
+)
+{
+    lcd->setTextSize(
+        2
+    );
+
+    lcd->setTextColor(
+        accent
+    );
+
+    lcd->drawString(
+        title,
+        18,
+        16
+    );
+
+    lcd->drawFastHLine(
+        18,
+        42,
+        128,
+        accent
+    );
+
+    lcd->drawFastHLine(
+        150,
+        42,
+        48,
+        OD_DIM
+    );
+}
+
+
+static void drawAmoledButton(
+    LGFX_Sprite* lcd,
+    int x,
+    int y,
+    int w,
+    int h,
+    const char* label,
+    uint16_t accent,
+    uint8_t textSize = 2
+)
+{
+    lcd->drawRect(
+        x,
+        y,
+        w,
+        h,
+        accent
+    );
+
+    lcd->setTextSize(
+        textSize
+    );
+
+    lcd->setTextColor(
+        OD_TEXT
+    );
+
+    lcd->drawCenterString(
+        label,
+        x + (w / 2),
+        y + ((h - (textSize * 8)) / 2)
+    );
+}
+#else
+static void drawUiBackground(
+    LGFX_Sprite* lcd
+)
+{
+    lcd->fillScreen(
+        TFT_BLACK
+    );
+}
+#endif
+
+
 static int mapSteeringForDisplay(
     int pulse,
     Settings& settings
@@ -91,7 +245,215 @@ void UI::begin(
     RadioInput& gainRadio
 )
 {
-    lcd = display;
+    this->display = display;
+
+    #if defined(OPENDRIFT_BOARD_AMOLED_164)
+    bool usePsram =
+        psramFound();
+
+    canvas.setPsram(
+        usePsram
+    );
+
+    transitionCanvas.setPsram(
+        usePsram
+    );
+
+    panelCanvas.setPsram(
+        usePsram
+    );
+
+    canvas.setColorDepth(
+        16
+    );
+
+    transitionCanvas.setColorDepth(
+        16
+    );
+
+    panelCanvas.setColorDepth(
+        16
+    );
+    #else
+    canvas.setColorDepth(
+        8
+    );
+    #endif
+
+    #if defined(OPENDRIFT_BOARD_AMOLED_164)
+    canvasReady =
+        canvas.createSprite(
+            UI_CANVAS_WIDTH,
+            UI_CANVAS_HEIGHT
+        )
+        !=
+        nullptr;
+
+    if(canvasReady)
+    {
+        canvas.setPivot(
+            UI_CANVAS_WIDTH / 2,
+            UI_CANVAS_HEIGHT / 2
+        );
+    }
+
+    panelCanvasReady =
+        panelCanvas.createSprite(
+            280,
+            456
+        )
+        !=
+        nullptr;
+
+    transitionCanvasReady =
+        transitionCanvas.createSprite(
+            UI_CANVAS_WIDTH,
+            UI_CANVAS_HEIGHT
+        )
+        !=
+        nullptr;
+    #else
+    canvasReady =
+        canvas.createSprite(
+            UI_CANVAS_WIDTH,
+            UI_CANVAS_HEIGHT
+        )
+        !=
+        nullptr;
+    #endif
+
+    Serial.print(
+        "UI canvas: "
+    );
+
+    Serial.println(
+        canvasReady ? "OK" : "FAIL"
+    );
+
+    Serial.print(
+        "UI display: "
+    );
+
+    Serial.print(
+        display->width()
+    );
+
+    Serial.print(
+        "x"
+    );
+
+    Serial.println(
+        display->height()
+    );
+
+    Serial.print(
+        "UI canvas size: "
+    );
+
+    Serial.print(
+        UI_CANVAS_WIDTH
+    );
+
+    Serial.print(
+        "x"
+    );
+
+    Serial.println(
+        UI_CANVAS_HEIGHT
+    );
+
+    #if defined(OPENDRIFT_BOARD_AMOLED_164)
+    Serial.print(
+        "UI panel canvas: "
+    );
+
+    Serial.println(
+        panelCanvasReady ? "OK" : "FAIL"
+    );
+
+    Serial.print(
+        "UI transition canvas: "
+    );
+
+    Serial.println(
+        transitionCanvasReady ? "OK" : "FAIL"
+    );
+
+    if(
+        canvasReady &&
+        panelCanvasReady &&
+        transitionCanvasReady
+    )
+    {
+        Serial.print(
+            "UI buffers: "
+        );
+
+        Serial.print(
+            canvas.bufferLength()
+        );
+
+        Serial.print(
+            " / "
+        );
+
+        Serial.print(
+            transitionCanvas.bufferLength()
+        );
+
+        Serial.print(
+            " / "
+        );
+
+        Serial.println(
+            panelCanvas.bufferLength()
+        );
+
+        Serial.print(
+            "UI raw animation: "
+        );
+
+        Serial.println(
+            canUseRawAmoledBuffers() ? "ON" : "OFF"
+        );
+    }
+
+    Serial.print(
+        "UI canvas mode: "
+    );
+
+    Serial.println(
+        usePsram ? "PSRAM 16-bit" : "internal 16-bit"
+    );
+    #endif
+
+    #if defined(OPENDRIFT_BOARD_AMOLED_164)
+    canvas.setTextWrap(
+        false
+    );
+
+    panelCanvas.setTextWrap(
+        false
+    );
+
+    transitionCanvas.setTextWrap(
+        false
+    );
+
+    lcd =
+        &canvas;
+    #else
+    canvas.setTextWrap(
+        false
+    );
+
+    lcd =
+        &canvas;
+    #endif
+
+    display->fillScreen(
+        TFT_BLACK
+    );
 
     page = 0;
 
@@ -201,6 +563,94 @@ void UI::changePage(
     RadioInput& gainRadio
 )
 {
+    #if defined(OPENDRIFT_BOARD_AMOLED_164)
+    if(canUseRawAmoledBuffers())
+    {
+        uint8_t targetPage =
+            page;
+
+        if(direction > 0)
+        {
+            targetPage++;
+
+            if(targetPage >= totalPages)
+                targetPage = 0;
+        }
+        else
+        {
+            if(targetPage == 0)
+                targetPage = totalPages - 1;
+            else
+                targetPage--;
+        }
+
+        page =
+            targetPage;
+
+        radioSection =
+            page == 5 ? 1 : 0;
+
+        LGFX_Sprite* previousLcd =
+            lcd;
+
+        suppressFlush =
+            true;
+
+        lcd =
+            &transitionCanvas;
+
+        drawPage(
+            gyro,
+            wifi,
+            settings,
+            steeringRadio,
+            gainRadio
+        );
+
+        lcd =
+            previousLcd;
+
+        suppressFlush =
+            false;
+
+        const int16_t startOffset = 0;
+        const int16_t endOffset =
+            direction > 0 ? -UI_CANVAS_WIDTH : UI_CANVAS_WIDTH;
+
+        for(uint8_t frame = 1; frame <= 12; frame++)
+        {
+            int32_t eased =
+                (int32_t)frame *
+                (int32_t)frame *
+                (3 * 12 - 2 * frame);
+
+            int16_t offset =
+                startOffset +
+                (
+                    (int32_t)(endOffset - startOffset) *
+                    eased
+                )
+                /
+                (12 * 12 * 12);
+
+            flushTransitionDisplay(
+                offset,
+                direction
+            );
+        }
+
+        memcpy(
+            canvas.getBuffer(),
+            transitionCanvas.getBuffer(),
+            canvas.bufferLength()
+        );
+
+        flushDisplay();
+
+        return;
+    }
+    #endif
+
     if(direction > 0)
     {
         page++;
@@ -216,8 +666,8 @@ void UI::changePage(
             page--;
     }
 
-    if(page != 3)
-        radioSection = 0;
+    radioSection =
+        page == 5 ? 1 : 0;
 
     drawPage(
         gyro,
@@ -226,6 +676,488 @@ void UI::changePage(
         steeringRadio,
         gainRadio
     );
+}
+
+
+bool UI::canUseRawAmoledBuffers()
+{
+    #if defined(OPENDRIFT_BOARD_AMOLED_164)
+    return
+        canvasReady &&
+        panelCanvasReady &&
+        transitionCanvasReady &&
+        canvas.getBuffer() != nullptr &&
+        panelCanvas.getBuffer() != nullptr &&
+        transitionCanvas.getBuffer() != nullptr &&
+        canvas.bufferLength() == (UI_CANVAS_WIDTH * UI_CANVAS_HEIGHT * 2) &&
+        transitionCanvas.bufferLength() == (UI_CANVAS_WIDTH * UI_CANVAS_HEIGHT * 2) &&
+        panelCanvas.bufferLength() == (UI_CANVAS_HEIGHT * UI_CANVAS_WIDTH * 2);
+    #else
+    return false;
+    #endif
+}
+
+
+bool UI::prepareSwipePreview(
+    int8_t direction,
+    GyroController& gyro,
+    WiFiManager& wifi,
+    Settings& settings,
+    RadioInput& steeringRadio,
+    RadioInput& gainRadio
+)
+{
+    #if defined(OPENDRIFT_BOARD_AMOLED_164)
+    if(!canUseRawAmoledBuffers())
+    {
+        return false;
+    }
+
+    if(
+        swipePreviewActive &&
+        swipePreviewDirection == direction
+    )
+    {
+        return true;
+    }
+
+    swipePreviewSourcePage =
+        page;
+
+    swipePreviewSourceRadioSection =
+        radioSection;
+
+    uint8_t targetPage =
+        page;
+
+    if(direction > 0)
+    {
+        targetPage++;
+
+        if(targetPage >= totalPages)
+            targetPage = 0;
+    }
+    else
+    {
+        if(targetPage == 0)
+            targetPage = totalPages - 1;
+        else
+            targetPage--;
+    }
+
+    LGFX_Sprite* previousLcd =
+        lcd;
+
+    uint8_t previousPage =
+        page;
+
+    uint8_t previousRadioSection =
+        radioSection;
+
+    suppressFlush =
+        true;
+
+    lcd =
+        &transitionCanvas;
+
+    page =
+        targetPage;
+
+    radioSection =
+        page == 5 ? 1 : 0;
+
+    drawPage(
+        gyro,
+        wifi,
+        settings,
+        steeringRadio,
+        gainRadio
+    );
+
+    page =
+        previousPage;
+
+    radioSection =
+        previousRadioSection;
+
+    lcd =
+        previousLcd;
+
+    suppressFlush =
+        false;
+
+    swipePreviewActive =
+        true;
+
+    swipePreviewDirection =
+        direction;
+
+    swipePreviewOffset =
+        0;
+
+    return true;
+    #else
+    return false;
+    #endif
+}
+
+
+void UI::finishSwipePreview(
+    bool commit
+)
+{
+    #if defined(OPENDRIFT_BOARD_AMOLED_164)
+    if(!swipePreviewActive)
+    {
+        return;
+    }
+
+    int16_t startOffset =
+        swipePreviewOffset;
+
+    int16_t endOffset =
+        commit
+        ?
+        (
+            swipePreviewDirection > 0
+            ?
+            -UI_CANVAS_WIDTH
+            :
+            UI_CANVAS_WIDTH
+        )
+        :
+        0;
+
+    for(uint8_t frame = 1; frame <= 6; frame++)
+    {
+        int32_t eased =
+            (int32_t)frame *
+            (int32_t)frame *
+            (3 * 6 - 2 * frame);
+
+        int16_t offset =
+            startOffset +
+            (
+                (int32_t)(endOffset - startOffset) *
+                eased
+            )
+            /
+            (6 * 6 * 6);
+
+        flushTransitionDisplay(
+            offset,
+            swipePreviewDirection
+        );
+    }
+
+    if(commit)
+    {
+        if(swipePreviewDirection > 0)
+        {
+            page =
+                swipePreviewSourcePage + 1;
+
+            if(page >= totalPages)
+                page = 0;
+        }
+        else
+        {
+            if(swipePreviewSourcePage == 0)
+                page = totalPages - 1;
+            else
+                page = swipePreviewSourcePage - 1;
+        }
+
+        radioSection =
+            page == 5 ? 1 : 0;
+
+        memcpy(
+            canvas.getBuffer(),
+            transitionCanvas.getBuffer(),
+            canvas.bufferLength()
+        );
+    }
+    else
+    {
+        page =
+            swipePreviewSourcePage;
+
+        radioSection =
+            swipePreviewSourceRadioSection;
+    }
+
+    swipePreviewActive =
+        false;
+
+    swipePreviewDirection =
+        0;
+
+    swipePreviewOffset =
+        0;
+
+    flushDisplay();
+    #endif
+}
+
+
+void UI::flushDisplay()
+{
+    flushDisplay(
+        0
+    );
+}
+
+
+void UI::flushDisplay(
+    int16_t xOffset
+)
+{
+    if(
+        display == nullptr ||
+        lcd == nullptr ||
+        !canvasReady ||
+        suppressFlush
+    )
+    {
+        return;
+    }
+
+    #if defined(OPENDRIFT_BOARD_AMOLED_164)
+    if(!panelCanvasReady)
+    {
+        return;
+    }
+
+    if(canUseRawAmoledBuffers())
+    {
+        uint16_t* source =
+            static_cast<uint16_t*>(
+                canvas.getBuffer()
+            );
+
+        uint16_t* target =
+            static_cast<uint16_t*>(
+                panelCanvas.getBuffer()
+            );
+
+        for(int y = 0; y < UI_CANVAS_HEIGHT; y++)
+        {
+            for(int x = 0; x < UI_CANVAS_WIDTH; x++)
+            {
+                int sourceX =
+                    x - xOffset;
+
+                uint16_t color =
+                    readBackgroundPixelRaw(
+                        x,
+                        y
+                    );
+
+                if(
+                    sourceX >= 0 &&
+                    sourceX < UI_CANVAS_WIDTH
+                )
+                {
+                    uint16_t pageColor =
+                        source[
+                            (y * UI_CANVAS_WIDTH) +
+                            sourceX
+                        ];
+
+                    if(pageColor != 0)
+                    {
+                        color =
+                            pageColor;
+                    }
+                }
+
+                target[
+                    ((UI_CANVAS_WIDTH - 1 - x) * UI_CANVAS_HEIGHT) +
+                    y
+                ] =
+                    color;
+            }
+        }
+
+        panelCanvas.pushSprite(
+            display,
+            0,
+            0
+        );
+
+        return;
+    }
+
+    for(
+        int y = 0;
+        y < UI_CANVAS_HEIGHT;
+        y++
+    )
+    {
+        for(
+            int x = 0;
+            x < UI_CANVAS_WIDTH;
+            x++
+        )
+        {
+            int sourceX =
+                x - xOffset;
+
+            uint32_t color =
+                readBackgroundPixel(
+                    x,
+                    y
+                );
+
+            if(
+                sourceX >= 0 &&
+                sourceX < UI_CANVAS_WIDTH
+            )
+            {
+                uint32_t pageColor =
+                    canvas.readPixel(
+                        sourceX,
+                        y
+                    );
+
+                if(pageColor != TFT_BLACK)
+                {
+                    color =
+                        pageColor;
+                }
+            }
+
+            panelCanvas.drawPixel(
+                y,
+                UI_CANVAS_WIDTH - 1 - x,
+                color
+            );
+        }
+    }
+
+    panelCanvas.pushSprite(
+        display,
+        0,
+        0
+    );
+
+    return;
+    #endif
+
+    canvas.pushSprite(
+        display,
+        0,
+        0
+    );
+}
+
+
+void UI::flushTransitionDisplay(
+    int16_t xOffset,
+    int8_t direction
+)
+{
+    #if defined(OPENDRIFT_BOARD_AMOLED_164)
+    if(
+        display == nullptr ||
+        lcd == nullptr ||
+        !canUseRawAmoledBuffers() ||
+        suppressFlush
+    )
+    {
+        return;
+    }
+
+    uint16_t* current =
+        static_cast<uint16_t*>(
+            canvas.getBuffer()
+        );
+
+    uint16_t* incoming =
+        static_cast<uint16_t*>(
+            transitionCanvas.getBuffer()
+        );
+
+    uint16_t* target =
+        static_cast<uint16_t*>(
+            panelCanvas.getBuffer()
+        );
+
+    int16_t incomingOffset =
+        xOffset +
+        (
+            direction > 0
+            ?
+            UI_CANVAS_WIDTH
+            :
+            -UI_CANVAS_WIDTH
+        );
+
+    for(int y = 0; y < UI_CANVAS_HEIGHT; y++)
+    {
+        for(int x = 0; x < UI_CANVAS_WIDTH; x++)
+        {
+            uint16_t color =
+                readBackgroundPixelRaw(
+                    x,
+                    y
+                );
+
+            uint16_t pageColor =
+                0;
+
+            int currentX =
+                x - xOffset;
+
+            if(
+                currentX >= 0 &&
+                currentX < UI_CANVAS_WIDTH
+            )
+            {
+                pageColor =
+                    current[
+                        (y * UI_CANVAS_WIDTH) +
+                        currentX
+                    ];
+            }
+            else
+            {
+                int incomingX =
+                    x - incomingOffset;
+
+                if(
+                    incomingX >= 0 &&
+                    incomingX < UI_CANVAS_WIDTH
+                )
+                {
+                    pageColor =
+                        incoming[
+                            (y * UI_CANVAS_WIDTH) +
+                            incomingX
+                        ];
+                }
+            }
+
+            if(pageColor != 0)
+            {
+                color =
+                    pageColor;
+            }
+
+            target[
+                ((UI_CANVAS_WIDTH - 1 - x) * UI_CANVAS_HEIGHT) +
+                y
+            ] =
+                color;
+        }
+    }
+
+    panelCanvas.pushSprite(
+        display,
+        0,
+        0
+    );
+    #endif
 }
 
 
@@ -238,9 +1170,91 @@ void UI::drawMainPage(
 )
 {
 
-    lcd->fillScreen(TFT_BLACK);
+    drawUiBackground(lcd);
 
     lcd->setTextColor(TFT_WHITE);
+
+    #if defined(OPENDRIFT_BOARD_AMOLED_164)
+    drawAmoledHeader(
+        lcd,
+        "Drive",
+        OD_CYAN
+    );
+
+    lcd->setTextSize(2);
+
+    lcd->setTextColor(
+        OD_MUTED
+    );
+
+    lcd->drawString(
+        "GAIN",
+        22,
+        62
+    );
+
+    lcd->setTextSize(4);
+
+    lcd->setTextColor(
+        OD_TEXT
+    );
+
+    lcd->drawFloat(
+        gyro.getGain(),
+        2,
+        22,
+        82
+    );
+
+    lcd->setTextSize(2);
+
+    lcd->setTextColor(
+        OD_MUTED
+    );
+
+    lcd->drawString(
+        "GYRO GAIN",
+        24,
+        136
+    );
+
+    drawAmoledButton(
+        lcd,
+        276,
+        36,
+        70,
+        82,
+        "-",
+        OD_CYAN,
+        4
+    );
+
+    drawAmoledButton(
+        lcd,
+        364,
+        36,
+        70,
+        82,
+        "+",
+        OD_CYAN,
+        4
+    );
+
+    drawAmoledButton(
+        lcd,
+        276,
+        148,
+        158,
+        54,
+        "CAL",
+        OD_AMBER,
+        2
+    );
+
+    drawPageDots();
+
+    return;
+    #endif
 
 
 
@@ -332,8 +1346,8 @@ void UI::drawMainPage(
 
     lcd->drawCenterString(
         "Swipe left",
-        120,
-        230
+        UI_CENTER_X,
+        UI_FOOTER_Y
     );
 
 
@@ -353,14 +1367,123 @@ void UI::drawControlPage(
 )
 {
 
-    lcd->fillScreen(
-        TFT_BLACK
-    );
+    drawUiBackground(lcd);
 
 
     lcd->setTextColor(
         TFT_WHITE
     );
+
+    #if defined(OPENDRIFT_BOARD_AMOLED_164)
+    drawAmoledHeader(
+        lcd,
+        "Gyro",
+        OD_MAGENTA
+    );
+
+    lcd->setTextSize(2);
+
+    lcd->setTextColor(
+        OD_MUTED
+    );
+
+    lcd->drawString(
+        "DEADBAND",
+        22,
+        58
+    );
+
+    lcd->drawString(
+        "REVERSE",
+        22,
+        120
+    );
+
+    lcd->drawString(
+        "WOBBLE",
+        22,
+        182
+    );
+
+    lcd->setTextSize(3);
+
+    lcd->setTextColor(
+        OD_TEXT
+    );
+
+    lcd->drawFloat(
+        gyro.getDeadband(),
+        1,
+        146,
+        48
+    );
+
+    lcd->drawString(
+        settings.getGyroReverse() ? "ON" : "OFF",
+        146,
+        110
+    );
+
+    lcd->drawNumber(
+        settings.getGyroAntiWobble(),
+        146,
+        172
+    );
+
+    drawAmoledButton(
+        lcd,
+        276,
+        48,
+        70,
+        48,
+        "-",
+        OD_MAGENTA
+    );
+
+    drawAmoledButton(
+        lcd,
+        364,
+        48,
+        70,
+        48,
+        "+",
+        OD_MAGENTA
+    );
+
+    drawAmoledButton(
+        lcd,
+        276,
+        110,
+        158,
+        48,
+        "GYRO REV",
+        settings.getGyroReverse() ? OD_GREEN : OD_DIM
+    );
+
+    drawAmoledButton(
+        lcd,
+        276,
+        172,
+        70,
+        48,
+        "-",
+        OD_MAGENTA
+    );
+
+    drawAmoledButton(
+        lcd,
+        364,
+        172,
+        70,
+        48,
+        "+",
+        OD_MAGENTA
+    );
+
+    drawPageDots();
+
+    return;
+    #endif
 
 
     lcd->setTextSize(3);
@@ -435,13 +1558,13 @@ void UI::drawControlPage(
 
 
 
-    lcd->setTextSize(1);
+    lcd->setTextSize(2);
 
 
     lcd->drawCenterString(
         "Swipe left",
-        120,
-        230
+        UI_CENTER_X,
+        UI_FOOTER_Y
     );
 
 
@@ -460,14 +1583,72 @@ void UI::drawSystemPage(
 )
 {
 
-    lcd->fillScreen(
-        TFT_BLACK
-    );
+    drawUiBackground(lcd);
 
 
     lcd->setTextColor(
         TFT_WHITE
     );
+
+    #if defined(OPENDRIFT_BOARD_AMOLED_164)
+    drawAmoledHeader(
+        lcd,
+        "System",
+        OD_BLUE
+    );
+
+    lcd->setTextSize(2);
+
+    lcd->setTextColor(
+        OD_MUTED
+    );
+
+    lcd->drawString(
+        "OPEN",
+        22,
+        64
+    );
+
+    lcd->drawString(
+        "BUILD",
+        22,
+        116
+    );
+
+    lcd->drawString(
+        "BLACKBOX",
+        22,
+        168
+    );
+
+    lcd->setTextSize(3);
+
+    lcd->setTextColor(
+        OD_TEXT
+    );
+
+    lcd->drawString(
+        "OpenDrift",
+        150,
+        56
+    );
+
+    lcd->drawString(
+        "AMOLED",
+        150,
+        108
+    );
+
+    lcd->drawString(
+        settings.getBlackboxEnabled() ? "ON" : "OFF",
+        150,
+        160
+    );
+
+    drawPageDots();
+
+    return;
+    #endif
 
 
     lcd->setTextSize(3);
@@ -504,8 +1685,8 @@ void UI::drawSystemPage(
 
     lcd->drawCenterString(
         "Swipe left: WiFi",
-        120,
-        230
+        UI_CENTER_X,
+        UI_FOOTER_Y
     );
 
 
@@ -526,13 +1707,103 @@ void UI::drawTunePage(
 )
 {
 
-    lcd->fillScreen(
-        TFT_BLACK
-    );
+    drawUiBackground(lcd);
 
     lcd->setTextColor(
         TFT_WHITE
     );
+
+    #if defined(OPENDRIFT_BOARD_AMOLED_164)
+    drawAmoledHeader(
+        lcd,
+        "Tune",
+        OD_AMBER
+    );
+
+    lcd->setTextSize(2);
+
+    lcd->setTextColor(
+        OD_MUTED
+    );
+
+    lcd->drawString(
+        "MAX CORR",
+        22,
+        58
+    );
+
+    lcd->drawString(
+        "SMOOTH",
+        22,
+        120
+    );
+
+    lcd->drawString(
+        "I GAIN",
+        22,
+        182
+    );
+
+    lcd->setTextSize(3);
+
+    lcd->setTextColor(
+        OD_TEXT
+    );
+
+    lcd->drawNumber(
+        settings.getGyroMaxCorrection(),
+        146,
+        48
+    );
+
+    lcd->drawFloat(
+        settings.getGyroSmoothing(),
+        2,
+        146,
+        110
+    );
+
+    lcd->drawFloat(
+        settings.getGyroIntegralGain(),
+        2,
+        146,
+        172
+    );
+
+    for(
+        int row = 0;
+        row < 3;
+        row++
+    )
+    {
+        int y =
+            48 + (row * 62);
+
+        drawAmoledButton(
+            lcd,
+            276,
+            y,
+            70,
+            48,
+            "-",
+            OD_AMBER
+        );
+
+        drawAmoledButton(
+            lcd,
+            364,
+            y,
+            70,
+            48,
+            "+",
+            OD_AMBER
+        );
+    }
+
+    drawPageDots();
+
+    return;
+    #endif
 
     lcd->setTextSize(3);
 
@@ -758,13 +2029,101 @@ void UI::drawResponsePage(
 )
 {
 
-    lcd->fillScreen(
-        TFT_BLACK
-    );
+    drawUiBackground(lcd);
 
     lcd->setTextColor(
         TFT_WHITE
     );
+
+    #if defined(OPENDRIFT_BOARD_AMOLED_164)
+    drawAmoledHeader(
+        lcd,
+        "Response",
+        OD_BLUE
+    );
+
+    lcd->setTextSize(2);
+
+    lcd->setTextColor(
+        OD_MUTED
+    );
+
+    lcd->drawString(
+        "ATTACK",
+        22,
+        58
+    );
+
+    lcd->drawString(
+        "RETURN",
+        22,
+        120
+    );
+
+    lcd->drawString(
+        "DAMPER",
+        22,
+        182
+    );
+
+    lcd->setTextSize(3);
+
+    lcd->setTextColor(
+        OD_TEXT
+    );
+
+    lcd->drawNumber(
+        settings.getGyroAttackSpeed(),
+        146,
+        48
+    );
+
+    lcd->drawNumber(
+        settings.getGyroReturnSpeed(),
+        146,
+        110
+    );
+
+    lcd->drawNumber(
+        settings.getSteeringDamper(),
+        146,
+        172
+    );
+
+    for(
+        int row = 0;
+        row < 3;
+        row++
+    )
+    {
+        int y =
+            48 + (row * 62);
+
+        drawAmoledButton(
+            lcd,
+            276,
+            y,
+            70,
+            48,
+            "-",
+            OD_BLUE
+        );
+
+        drawAmoledButton(
+            lcd,
+            364,
+            y,
+            70,
+            48,
+            "+",
+            OD_BLUE
+        );
+    }
+
+    drawPageDots();
+
+    return;
+    #endif
 
     lcd->setTextSize(3);
 
@@ -950,14 +2309,93 @@ void UI::drawWifiPage(
 )
 {
 
-    lcd->fillScreen(
-        TFT_BLACK
-    );
+    drawUiBackground(lcd);
 
 
     lcd->setTextColor(
         TFT_WHITE
     );
+
+    #if defined(OPENDRIFT_BOARD_AMOLED_164)
+    drawAmoledHeader(
+        lcd,
+        "WiFi",
+        wifi.isEnabled() ? OD_GREEN : OD_RED
+    );
+
+    lcd->setTextSize(2);
+
+    lcd->setTextColor(
+        OD_MUTED
+    );
+
+    lcd->drawString(
+        "STATUS",
+        22,
+        64
+    );
+
+    lcd->drawString(
+        "CLIENTS",
+        22,
+        116
+    );
+
+    lcd->drawString(
+        "IP",
+        22,
+        168
+    );
+
+    lcd->setTextSize(3);
+
+    lcd->setTextColor(
+        wifi.isEnabled() ? OD_GREEN : OD_RED
+    );
+
+    lcd->drawString(
+        wifi.isEnabled() ? "ON" : "OFF",
+        150,
+        56
+    );
+
+    lcd->setTextColor(
+        OD_TEXT
+    );
+
+    lcd->drawNumber(
+        wifi.isEnabled() ? WiFi.softAPgetStationNum() : 0,
+        150,
+        108
+    );
+
+    lcd->setTextSize(2);
+
+    lcd->setTextColor(
+        OD_TEXT
+    );
+
+    lcd->drawString(
+        wifi.isEnabled() ? WiFi.softAPIP().toString() : "--",
+        150,
+        170
+    );
+
+    drawAmoledButton(
+        lcd,
+        296,
+        70,
+        130,
+        92,
+        wifi.isEnabled() ? "WIFI OFF" : "WIFI ON",
+        wifi.isEnabled() ? OD_RED : OD_GREEN,
+        2
+    );
+
+    drawPageDots();
+
+    return;
+    #endif
 
 
 
@@ -1072,8 +2510,8 @@ void UI::drawWifiPage(
 
     lcd->drawCenterString(
         "Swipe right",
-        120,
-        230
+        UI_CENTER_X,
+        UI_FOOTER_Y
     );
 
 
@@ -1088,13 +2526,394 @@ void UI::drawRadioPage(
 )
 {
 
-    lcd->fillScreen(
-        TFT_BLACK
-    );
+    drawUiBackground(lcd);
 
     lcd->setTextColor(
         TFT_WHITE
     );
+
+    #if defined(OPENDRIFT_BOARD_AMOLED_164)
+    {
+    drawAmoledHeader(
+        lcd,
+        radioSection == 0 ? "Radio" : "Steering",
+        radioSection == 0 ? OD_CYAN : OD_AMBER
+    );
+
+    lcd->setTextSize(2);
+
+    if(radioSection == 1)
+    {
+        lcd->setTextColor(
+            OD_MUTED
+        );
+
+        lcd->drawString(
+            "OUT",
+            22,
+            62
+        );
+
+        lcd->drawString(
+            "RAW",
+            22,
+            116
+        );
+
+        lcd->drawString(
+            "TRAVEL",
+            22,
+            170
+        );
+
+        lcd->setTextSize(3);
+
+        lcd->setTextColor(
+            OD_TEXT
+        );
+
+        lcd->drawNumber(
+            mapSteeringForDisplay(
+                steeringRadio.getPulseWidth(),
+                settings
+            ),
+            120,
+            54
+        );
+
+        lcd->drawNumber(
+            steeringRadio.getPulseWidth(),
+            120,
+            108
+        );
+
+        lcd->drawNumber(
+            settings.getRadioSteeringTravel(),
+            120,
+            162
+        );
+
+        lcd->setTextSize(2);
+
+        drawAmoledButton(
+            lcd,
+            202,
+            158,
+            34,
+            40,
+            "-",
+            OD_AMBER
+        );
+
+        drawAmoledButton(
+            lcd,
+            242,
+            158,
+            34,
+            40,
+            "+",
+            OD_AMBER
+        );
+
+        drawAmoledButton(
+            lcd,
+            286,
+            34,
+            136,
+            44,
+            "MAX LEFT",
+            OD_AMBER
+        );
+
+        drawAmoledButton(
+            lcd,
+            286,
+            90,
+            136,
+            44,
+            "CENTER",
+            OD_AMBER
+        );
+
+        drawAmoledButton(
+            lcd,
+            286,
+            146,
+            136,
+            44,
+            "MAX RIGHT",
+            OD_AMBER
+        );
+
+        drawAmoledButton(
+            lcd,
+            286,
+            202,
+            62,
+            36,
+            "REV",
+            settings.getServoReverse() ? OD_GREEN : OD_DIM
+        );
+
+        lcd->setTextColor(
+            settings.getServoReverse() ? OD_GREEN : OD_MUTED
+        );
+
+        lcd->drawString(
+            settings.getServoReverse() ? "ON" : "OFF",
+            360,
+            210
+        );
+
+        drawPageDots();
+
+        return;
+    }
+
+    lcd->setTextColor(
+        OD_MUTED
+    );
+
+    lcd->drawString(
+        "STEER",
+        22,
+        58
+    );
+
+    lcd->drawString(
+        "GAIN IN",
+        22,
+        132
+    );
+
+    lcd->drawString(
+        "GYRO",
+        294,
+        58
+    );
+
+    lcd->setTextSize(3);
+
+    lcd->setTextColor(
+        OD_TEXT
+    );
+
+    lcd->drawNumber(
+        steeringRadio.getPulseWidth(),
+        120,
+        50
+    );
+
+    lcd->drawNumber(
+        gainRadio.getPulseWidth(),
+        120,
+        124
+    );
+
+    lcd->drawFloat(
+        gyro.getGain(),
+        2,
+        354,
+        50
+    );
+
+    lcd->setTextSize(2);
+
+    lcd->setTextColor(
+        steeringRadio.hasSignal() ? OD_GREEN : OD_RED
+    );
+
+    lcd->drawString(
+        steeringRadio.hasSignal() ? "OK" : "NO",
+        224,
+        58
+    );
+
+    lcd->setTextColor(
+        gainRadio.hasSignal() ? OD_GREEN : OD_RED
+    );
+
+    lcd->drawString(
+        gainRadio.hasSignal() ? "OK" : "NO",
+        224,
+        132
+    );
+
+    int steeringBarX = 28;
+    int steeringBarY = 96;
+    int steeringBarW = 224;
+    int steeringBarH = 12;
+
+    int steeringMin =
+        settings.getSteeringMin();
+
+    int steeringCenter =
+        settings.getSteeringCenter();
+
+    int steeringMax =
+        settings.getSteeringMax();
+
+    if(steeringMax <= steeringMin)
+    {
+        steeringMin = 1000;
+        steeringCenter = 1500;
+        steeringMax = 2000;
+    }
+
+    int steeringPulse =
+        constrain(
+            steeringRadio.getPulseWidth(),
+            steeringMin,
+            steeringMax
+        );
+
+    int steeringPos =
+        map(
+            steeringPulse,
+            steeringMin,
+            steeringMax,
+            steeringBarX,
+            steeringBarX + steeringBarW
+        );
+
+    int steeringCenterPos =
+        map(
+            constrain(
+                steeringCenter,
+                steeringMin,
+                steeringMax
+            ),
+            steeringMin,
+            steeringMax,
+            steeringBarX,
+            steeringBarX + steeringBarW
+        );
+
+    lcd->drawRect(
+        steeringBarX,
+        steeringBarY,
+        steeringBarW,
+        steeringBarH,
+        OD_DIM
+    );
+
+    lcd->drawFastVLine(
+        steeringCenterPos,
+        steeringBarY - 4,
+        steeringBarH + 8,
+        OD_CYAN
+    );
+
+    lcd->fillRect(
+        steeringPos - 3,
+        steeringBarY - 5,
+        7,
+        steeringBarH + 10,
+        steeringRadio.hasSignal() ? TFT_GREEN : TFT_RED
+    );
+
+    int gainBarX = 28;
+    int gainBarY = 170;
+    int gainBarW = 224;
+    int gainBarH = 12;
+
+    int gainMin =
+        settings.getGainMin();
+
+    int gainMax =
+        settings.getGainMax();
+
+    if(gainMax <= gainMin)
+    {
+        gainMin = 1000;
+        gainMax = 2000;
+    }
+
+    int gainPulse =
+        constrain(
+            gainRadio.getPulseWidth(),
+            gainMin,
+            gainMax
+        );
+
+    int gainPos =
+        map(
+            gainPulse,
+            gainMin,
+            gainMax,
+            gainBarX,
+            gainBarX + gainBarW
+        );
+
+    lcd->drawRect(
+        gainBarX,
+        gainBarY,
+        gainBarW,
+        gainBarH,
+        OD_DIM
+    );
+
+    lcd->fillRect(
+        gainPos - 3,
+        gainBarY - 5,
+        7,
+        gainBarH + 10,
+        gainRadio.hasSignal() ? TFT_GREEN : TFT_RED
+    );
+
+    lcd->setTextSize(1);
+
+    lcd->setTextColor(
+        OD_MUTED
+    );
+
+    lcd->drawString(
+        "STEER CAL",
+        294,
+        116
+    );
+
+    lcd->drawNumber(
+        settings.getSteeringMin(),
+        294,
+        136
+    );
+
+    lcd->drawNumber(
+        settings.getSteeringCenter(),
+        348,
+        136
+    );
+
+    lcd->drawNumber(
+        settings.getSteeringMax(),
+        402,
+        136
+    );
+
+    lcd->drawString(
+        "GAIN CAL",
+        294,
+        166
+    );
+
+    lcd->drawNumber(
+        settings.getGainMin(),
+        294,
+        186
+    );
+
+    lcd->drawNumber(
+        settings.getGainMax(),
+        360,
+        186
+    );
+
+    drawPageDots();
+
+    return;
+    }
+    #endif
 
     lcd->setTextSize(3);
 
@@ -1230,8 +3049,8 @@ void UI::drawRadioPage(
 
         lcd->drawCenterString(
             "Swipe left/right",
-            120,
-            236
+            UI_CENTER_X,
+            UI_FOOTER_Y
         );
 
         updateRadioPage(
@@ -1482,6 +3301,311 @@ void UI::updateRadioPage(
         TFT_BLACK
     );
 
+    #if defined(OPENDRIFT_BOARD_AMOLED_164)
+    {
+    if(radioSection == 1)
+    {
+        lcd->setTextSize(3);
+
+        lcd->fillRect(
+            120,
+            54,
+            130,
+            36,
+            TFT_BLACK
+        );
+
+        lcd->drawNumber(
+            mapSteeringForDisplay(
+                steeringRadio.getPulseWidth(),
+                settings
+            ),
+            120,
+            54
+        );
+
+        lcd->fillRect(
+            120,
+            108,
+            130,
+            36,
+            TFT_BLACK
+        );
+
+        lcd->drawNumber(
+            steeringRadio.getPulseWidth(),
+            120,
+            108
+        );
+
+        lcd->fillRect(
+            120,
+            162,
+            80,
+            36,
+            TFT_BLACK
+        );
+
+        lcd->drawNumber(
+            settings.getRadioSteeringTravel(),
+            120,
+            162
+        );
+
+        lcd->setTextSize(2);
+
+        lcd->fillRect(
+            358,
+            208,
+            58,
+            22,
+            TFT_BLACK
+        );
+
+        lcd->drawString(
+            settings.getServoReverse() ? "ON" : "OFF",
+            360,
+            210
+        );
+
+        lcd->setTextColor(
+            TFT_WHITE
+        );
+
+        flushDisplay();
+
+        return;
+    }
+
+    lcd->setTextSize(3);
+
+    lcd->fillRect(
+        120,
+        50,
+        128,
+        34,
+        TFT_BLACK
+    );
+
+    lcd->drawNumber(
+        steeringRadio.getPulseWidth(),
+        120,
+        50
+    );
+
+    lcd->setTextSize(2);
+
+    lcd->fillRect(
+        224,
+        58,
+        36,
+        20,
+        TFT_BLACK
+    );
+
+    lcd->drawString(
+        steeringRadio.hasSignal() ? "OK" : "NO",
+        224,
+        58
+    );
+
+    int steeringBarX = 28;
+    int steeringBarY = 96;
+    int steeringBarW = 224;
+    int steeringBarH = 12;
+
+    int steeringMin =
+        settings.getSteeringMin();
+
+    int steeringCenter =
+        settings.getSteeringCenter();
+
+    int steeringMax =
+        settings.getSteeringMax();
+
+    if(steeringMax <= steeringMin)
+    {
+        steeringMin = 1000;
+        steeringCenter = 1500;
+        steeringMax = 2000;
+    }
+
+    int steeringPulse =
+        constrain(
+            steeringRadio.getPulseWidth(),
+            steeringMin,
+            steeringMax
+        );
+
+    int steeringPos =
+        map(
+            steeringPulse,
+            steeringMin,
+            steeringMax,
+            steeringBarX,
+            steeringBarX + steeringBarW
+        );
+
+    int steeringCenterPos =
+        map(
+            constrain(
+                steeringCenter,
+                steeringMin,
+                steeringMax
+            ),
+            steeringMin,
+            steeringMax,
+            steeringBarX,
+            steeringBarX + steeringBarW
+        );
+
+    lcd->fillRect(
+        steeringBarX - 4,
+        steeringBarY - 6,
+        steeringBarW + 8,
+        steeringBarH + 12,
+        TFT_BLACK
+    );
+
+    lcd->drawRect(
+        steeringBarX,
+        steeringBarY,
+        steeringBarW,
+        steeringBarH,
+        TFT_WHITE
+    );
+
+    lcd->drawFastVLine(
+        steeringCenterPos,
+        steeringBarY - 4,
+        steeringBarH + 8,
+        TFT_WHITE
+    );
+
+    lcd->fillRect(
+        steeringPos - 3,
+        steeringBarY - 5,
+        7,
+        steeringBarH + 10,
+        steeringRadio.hasSignal() ? TFT_GREEN : TFT_RED
+    );
+
+    lcd->setTextSize(3);
+
+    lcd->fillRect(
+        120,
+        124,
+        128,
+        34,
+        TFT_BLACK
+    );
+
+    lcd->drawNumber(
+        gainRadio.getPulseWidth(),
+        120,
+        124
+    );
+
+    lcd->setTextSize(2);
+
+    lcd->fillRect(
+        224,
+        132,
+        36,
+        20,
+        TFT_BLACK
+    );
+
+    lcd->drawString(
+        gainRadio.hasSignal() ? "OK" : "NO",
+        224,
+        132
+    );
+
+    int gainBarX = 28;
+    int gainBarY = 170;
+    int gainBarW = 224;
+    int gainBarH = 12;
+
+    int gainMin =
+        settings.getGainMin();
+
+    int gainMax =
+        settings.getGainMax();
+
+    if(gainMax <= gainMin)
+    {
+        gainMin = 1000;
+        gainMax = 2000;
+    }
+
+    int gainPulse =
+        constrain(
+            gainRadio.getPulseWidth(),
+            gainMin,
+            gainMax
+        );
+
+    int gainPos =
+        map(
+            gainPulse,
+            gainMin,
+            gainMax,
+            gainBarX,
+            gainBarX + gainBarW
+        );
+
+    lcd->fillRect(
+        gainBarX - 4,
+        gainBarY - 6,
+        gainBarW + 8,
+        gainBarH + 12,
+        TFT_BLACK
+    );
+
+    lcd->drawRect(
+        gainBarX,
+        gainBarY,
+        gainBarW,
+        gainBarH,
+        TFT_WHITE
+    );
+
+    lcd->fillRect(
+        gainPos - 3,
+        gainBarY - 5,
+        7,
+        gainBarH + 10,
+        gainRadio.hasSignal() ? TFT_GREEN : TFT_RED
+    );
+
+    lcd->setTextSize(3);
+
+    lcd->fillRect(
+        354,
+        50,
+        86,
+        36,
+        TFT_BLACK
+    );
+
+    lcd->drawFloat(
+        gyro.getGain(),
+        2,
+        354,
+        50
+    );
+
+    lcd->setTextColor(
+        TFT_WHITE
+    );
+
+    flushDisplay();
+
+    return;
+    }
+    #endif
+
     if(radioSection == 1)
     {
         lcd->setTextSize(2);
@@ -1584,6 +3708,8 @@ void UI::updateRadioPage(
         lcd->setTextColor(
             TFT_WHITE
         );
+
+        flushDisplay();
 
         return;
     }
@@ -1827,6 +3953,8 @@ void UI::updateRadioPage(
         TFT_WHITE
     );
 
+    flushDisplay();
+
 }
 
 
@@ -1838,7 +3966,7 @@ void UI::drawPageDots()
     int spacing = 20;
 
     int startX =
-        120 -
+        (UI_CANVAS_WIDTH / 2) -
         (
             (totalPages - 1)
             *
@@ -1858,22 +3986,32 @@ void UI::drawPageDots()
         {
             lcd->fillCircle(
                 startX + (i*spacing),
-                215,
+                UI_DOTS_Y,
                 5,
+                #if defined(OPENDRIFT_BOARD_AMOLED_164)
+                OD_CYAN
+                #else
                 TFT_WHITE
+                #endif
             );
         }
         else
         {
             lcd->drawCircle(
                 startX + (i*spacing),
-                215,
+                UI_DOTS_Y,
                 5,
+                #if defined(OPENDRIFT_BOARD_AMOLED_164)
+                OD_DIM
+                #else
                 TFT_WHITE
+                #endif
             );
         }
 
     }
+
+    flushDisplay();
 
 }
 
@@ -1911,6 +4049,76 @@ int8_t UI::repeatButtonAt(
     uint16_t y
 )
 {
+    #if defined(OPENDRIFT_BOARD_AMOLED_164)
+    if(page == 0)
+    {
+        if(buttonPressed(x, y, 276, 36, 70, 82))
+            return 1;
+
+        if(buttonPressed(x, y, 364, 36, 70, 82))
+            return 2;
+    }
+
+    if(page == 1)
+    {
+        if(buttonPressed(x, y, 276, 48, 70, 48))
+            return 3;
+
+        if(buttonPressed(x, y, 364, 48, 70, 48))
+            return 4;
+
+        if(buttonPressed(x, y, 276, 172, 70, 48))
+            return 21;
+
+        if(buttonPressed(x, y, 364, 172, 70, 48))
+            return 22;
+    }
+
+    if(page == 2)
+    {
+        if(buttonPressed(x, y, 276, 48, 70, 48))
+            return 5;
+
+        if(buttonPressed(x, y, 364, 48, 70, 48))
+            return 6;
+
+        if(buttonPressed(x, y, 276, 110, 70, 48))
+            return 7;
+
+        if(buttonPressed(x, y, 364, 110, 70, 48))
+            return 8;
+
+        if(buttonPressed(x, y, 276, 172, 70, 48))
+            return 15;
+
+        if(buttonPressed(x, y, 364, 172, 70, 48))
+            return 16;
+    }
+
+    if(page == 3)
+    {
+        if(buttonPressed(x, y, 276, 48, 70, 48))
+            return 9;
+
+        if(buttonPressed(x, y, 364, 48, 70, 48))
+            return 10;
+
+        if(buttonPressed(x, y, 276, 110, 70, 48))
+            return 11;
+
+        if(buttonPressed(x, y, 364, 110, 70, 48))
+            return 12;
+
+        if(buttonPressed(x, y, 276, 172, 70, 48))
+            return 13;
+
+        if(buttonPressed(x, y, 364, 172, 70, 48))
+            return 14;
+    }
+
+    return 0;
+    #endif
+
     if(page == 0)
     {
         if(buttonPressed(x, y, 20, 120, 60, 40))
@@ -2194,6 +4402,19 @@ bool UI::applyRepeatButton(
     }
 
     if(
+        page == 1 &&
+        (
+            button == 21 ||
+            button == 22
+        )
+    )
+    {
+        drawControlPage(
+            gyro,
+            settings
+        );
+    }
+    else if(
         (
             button >= 9 &&
             button <= 14
@@ -2244,6 +4465,7 @@ void UI::update(
     uint8_t gesture =
         touch.getGesture();
 
+    #if !defined(OPENDRIFT_BOARD_AMOLED_164)
     if(
         gesture == SWIPE_LEFT &&
         millis() - lastPageSwipe > 350
@@ -2301,6 +4523,7 @@ void UI::update(
 
         return;
     }
+    #endif
 
     if(
         (
@@ -2340,7 +4563,89 @@ void UI::update(
 
         heldRepeatButton = 0;
 
+        #if defined(OPENDRIFT_BOARD_AMOLED_164)
+        swipePreviewActive = false;
+
+        swipePreviewDirection = 0;
+
+        swipePreviewOffset = 0;
+
+        lastSwipePreviewAt = 0;
+        #endif
+
     }
+
+
+
+    #if defined(OPENDRIFT_BOARD_AMOLED_164)
+    if(
+        touched &&
+        trackingSwipe
+    )
+    {
+        int delta =
+            touch.getX()
+            -
+            touchStartX;
+
+        int deltaY =
+            touch.getY()
+            -
+            touchStartY;
+
+        if(
+            abs(delta) > 12 &&
+            abs(delta) > abs(deltaY) + 6
+        )
+        {
+            int8_t direction =
+                delta < 0
+                ?
+                1
+                :
+                -1;
+
+            if(prepareSwipePreview(
+                direction,
+                gyro,
+                wifi,
+                settings,
+                steeringRadio,
+                gainRadio
+            ))
+            {
+                int16_t offset =
+                    constrain(
+                        delta,
+                        -UI_CANVAS_WIDTH,
+                        UI_CANVAS_WIDTH
+                    );
+
+                if(
+                    millis() - lastSwipePreviewAt > 12 ||
+                    abs(offset - swipePreviewOffset) > 10
+                )
+                {
+                    swipePreviewOffset =
+                        offset;
+
+                    flushTransitionDisplay(
+                        swipePreviewOffset,
+                        swipePreviewDirection
+                    );
+
+                    lastSwipePreviewAt =
+                        millis();
+                }
+
+                lastTouchState =
+                    touched;
+
+                return;
+            }
+        }
+    }
+    #endif
 
 
 
@@ -2366,6 +4671,20 @@ void UI::update(
 
         if(trackingSwipe)
         {
+            #if defined(OPENDRIFT_BOARD_AMOLED_164)
+            if(swipePreviewActive)
+            {
+                bool commit =
+                    abs(delta) > 72 &&
+                    abs(delta) > abs(deltaY);
+
+                finishSwipePreview(
+                    commit
+                );
+            }
+            else
+            #endif
+            {
 
             if(
                 false &&
@@ -2421,6 +4740,7 @@ void UI::update(
 
             }
 
+            }
         }
 
 
@@ -2449,6 +4769,272 @@ void UI::update(
 
         uint16_t y =
             touch.getY();
+
+        #if defined(OPENDRIFT_BOARD_AMOLED_164)
+        int8_t repeatButton =
+            repeatButtonAt(
+                x,
+                y
+            );
+
+        if(repeatButton != 0)
+        {
+            applyRepeatButton(
+                repeatButton,
+                gyro,
+                settings
+            );
+
+            lastTouchState =
+                touched;
+
+            return;
+        }
+
+        if(
+            page == 0 &&
+            buttonPressed(
+                x,
+                y,
+                276,
+                148,
+                158,
+                54
+            )
+        )
+        {
+            imu.update();
+
+            gyro.calibrate(
+                imu.getYawRate()
+            );
+
+            drawMainPage(
+                gyro,
+                settings
+            );
+
+            lastTouchState =
+                touched;
+
+            return;
+        }
+
+        if(
+            page == 1 &&
+            buttonPressed(
+                x,
+                y,
+                276,
+                110,
+                158,
+                48
+            )
+        )
+        {
+            settings.setGyroReverse(
+                !settings.getGyroReverse()
+            );
+
+            drawControlPage(
+                gyro,
+                settings
+            );
+
+            lastTouchState =
+                touched;
+
+            return;
+        }
+
+        if(page == 5)
+        {
+            if(
+                steeringRadio.hasSignal() &&
+                buttonPressed(
+                    x,
+                    y,
+                    286,
+                    34,
+                    136,
+                    44
+                )
+            )
+            {
+                settings.setSteeringMin(
+                    steeringRadio.getPulseWidth()
+                );
+
+                drawRadioPage(
+                    steeringRadio,
+                    gainRadio,
+                    settings,
+                    gyro
+                );
+
+                lastTouchState =
+                    touched;
+
+                return;
+            }
+
+            if(
+                steeringRadio.hasSignal() &&
+                buttonPressed(
+                    x,
+                    y,
+                    286,
+                    90,
+                    136,
+                    44
+                )
+            )
+            {
+                settings.setSteeringCenter(
+                    steeringRadio.getPulseWidth()
+                );
+
+                drawRadioPage(
+                    steeringRadio,
+                    gainRadio,
+                    settings,
+                    gyro
+                );
+
+                lastTouchState =
+                    touched;
+
+                return;
+            }
+
+            if(
+                steeringRadio.hasSignal() &&
+                buttonPressed(
+                    x,
+                    y,
+                    286,
+                    146,
+                    136,
+                    44
+                )
+            )
+            {
+                settings.setSteeringMax(
+                    steeringRadio.getPulseWidth()
+                );
+
+                drawRadioPage(
+                    steeringRadio,
+                    gainRadio,
+                    settings,
+                    gyro
+                );
+
+                lastTouchState =
+                    touched;
+
+                return;
+            }
+
+            if(buttonPressed(x, y, 202, 158, 34, 40))
+            {
+                settings.setRadioSteeringTravel(
+                    settings.getRadioSteeringTravel() - 1
+                );
+
+                drawRadioPage(
+                    steeringRadio,
+                    gainRadio,
+                    settings,
+                    gyro
+                );
+
+                lastTouchState =
+                    touched;
+
+                return;
+            }
+
+            if(buttonPressed(x, y, 242, 158, 34, 40))
+            {
+                settings.setRadioSteeringTravel(
+                    settings.getRadioSteeringTravel() + 1
+                );
+
+                drawRadioPage(
+                    steeringRadio,
+                    gainRadio,
+                    settings,
+                    gyro
+                );
+
+                lastTouchState =
+                    touched;
+
+                return;
+            }
+
+            if(buttonPressed(x, y, 286, 202, 62, 36))
+            {
+                settings.setServoReverse(
+                    !settings.getServoReverse()
+                );
+
+                drawRadioPage(
+                    steeringRadio,
+                    gainRadio,
+                    settings,
+                    gyro
+                );
+
+                lastTouchState =
+                    touched;
+
+                return;
+            }
+        }
+
+        if(
+            page == 6 &&
+            buttonPressed(
+                x,
+                y,
+                296,
+                70,
+                130,
+                92
+            )
+        )
+        {
+            if(wifi.isEnabled())
+            {
+                wifi.disable();
+
+                settings.setWifiEnabled(false);
+            }
+            else
+            {
+                wifi.enable();
+
+                settings.setWifiEnabled(true);
+            }
+
+            drawWifiPage(
+                wifi,
+                settings
+            );
+
+            lastTouchState =
+                touched;
+
+            return;
+        }
+
+        lastTouchState =
+            touched;
+
+        return;
+        #endif
 
 
 

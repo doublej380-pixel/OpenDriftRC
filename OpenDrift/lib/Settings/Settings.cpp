@@ -79,6 +79,11 @@ bool Settings::begin()
         100
     );
 
+    servoQuiet = prefs.getInt(
+        "quiet",
+        0
+    );
+
     wifiEnabled = prefs.getBool(
         "wifi",
         true
@@ -213,6 +218,11 @@ void Settings::save()
     prefs.putInt(
         "travel",
         servoTravel
+    );
+
+    prefs.putInt(
+        "quiet",
+        servoQuiet
     );
 
     prefs.putBool(
@@ -489,6 +499,23 @@ int Settings::getServoTravel()
 void Settings::setServoTravel(int value)
 {
     servoTravel = value;
+    dirty = true;
+}
+
+int Settings::getServoQuiet()
+{
+    return servoQuiet;
+}
+
+void Settings::setServoQuiet(int value)
+{
+    servoQuiet =
+        constrain(
+            value,
+            0,
+            50
+        );
+
     dirty = true;
 }
 

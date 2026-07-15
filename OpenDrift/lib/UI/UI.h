@@ -40,9 +40,49 @@ public:
 
 private:
 
-    LGFX* lcd = nullptr;
+    #if defined(OPENDRIFT_BOARD_AMOLED_164)
+    static constexpr int UI_CANVAS_WIDTH = 456;
+    static constexpr int UI_CANVAS_HEIGHT = 280;
+    static constexpr int UI_CENTER_X = 228;
+    static constexpr int UI_FOOTER_Y = 254;
+    static constexpr int UI_DOTS_Y = 260;
+    #else
+    static constexpr int UI_CANVAS_WIDTH = 240;
+    static constexpr int UI_CANVAS_HEIGHT = 240;
+    static constexpr int UI_CENTER_X = 120;
+    static constexpr int UI_FOOTER_Y = 230;
+    static constexpr int UI_DOTS_Y = 215;
+    #endif
 
+    LGFX* display = nullptr;
 
+    LGFX_Sprite canvas;
+
+    #if defined(OPENDRIFT_BOARD_AMOLED_164)
+    LGFX_Sprite panelCanvas;
+    LGFX_Sprite transitionCanvas;
+    bool panelCanvasReady = false;
+    bool transitionCanvasReady = false;
+    #endif
+
+    LGFX_Sprite* lcd = nullptr;
+
+    bool canvasReady = false;
+
+    bool suppressFlush = false;
+
+    void flushDisplay();
+
+    void flushDisplay(
+        int16_t xOffset
+    );
+
+    void flushTransitionDisplay(
+        int16_t xOffset,
+        int8_t direction
+    );
+
+    bool canUseRawAmoledBuffers();
 
     // Pages
     // 0 = Main
@@ -81,6 +121,20 @@ private:
 
     unsigned long nextRepeatAt = 0;
 
+    #if defined(OPENDRIFT_BOARD_AMOLED_164)
+    bool swipePreviewActive = false;
+
+    int8_t swipePreviewDirection = 0;
+
+    uint8_t swipePreviewSourcePage = 0;
+
+    uint8_t swipePreviewSourceRadioSection = 0;
+
+    int16_t swipePreviewOffset = 0;
+
+    unsigned long lastSwipePreviewAt = 0;
+    #endif
+
 
 
 
@@ -100,6 +154,19 @@ private:
         Settings& settings,
         RadioInput& steeringRadio,
         RadioInput& gainRadio
+    );
+
+    bool prepareSwipePreview(
+        int8_t direction,
+        GyroController& gyro,
+        WiFiManager& wifi,
+        Settings& settings,
+        RadioInput& steeringRadio,
+        RadioInput& gainRadio
+    );
+
+    void finishSwipePreview(
+        bool commit
     );
 
 
