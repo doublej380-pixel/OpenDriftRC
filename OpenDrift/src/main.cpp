@@ -19,6 +19,8 @@ IMU imu;
 
 ServoOutput steeringServo;
 
+ServoOutput throttleOutput;
+
 GyroController gyro;
 
 Touch touch;
@@ -34,6 +36,8 @@ WebConfigurator webConfig;
 RadioInput steeringRadio;
 
 RadioInput gainRadio;
+
+RadioInput throttleRadio;
 
 BlackboxLogger blackbox;
 
@@ -57,13 +61,322 @@ bool blackboxStartAttempted = false;
 
 #define SERVO_OUTPUT_PIN 16
 #define RADIO_STEERING_PIN 17
-#define RADIO_GAIN_PIN 18
+#define RADIO_THROTTLE_PIN 15
+#define SHARED_GAIN_THROTTLE_PIN 18
+
+bool pin18ModeConfigured = false;
+
+bool pin18ThrottleOutputMode = false;
+
+bool throttleOutputActive = false;
 
 const float radioGainMin = 0.5f;
 const float radioGainMax = 3.0f;
 
 const char* ssid = "OpenDrift";
 const char* password = "opendrift";
+
+
+
+class BootConsole
+{
+
+public:
+
+    void begin(
+        LGFX* display
+    )
+    {
+        #if defined(OPENDRIFT_BOARD_AMOLED_164)
+        this->display = display;
+
+        bool usePsram =
+            psramFound();
+
+        canvas.setPsram(
+            usePsram
+        );
+
+        panelCanvas.setPsram(
+            usePsram
+        );
+
+        canvas.setColorDepth(16);
+        panelCanvas.setColorDepth(16);
+
+        canvasReady =
+            canvas.createSprite(456, 280) != nullptr;
+
+        panelReady =
+            panelCanvas.createSprite(280, 456) != nullptr;
+
+        if(!canvasReady || !panelReady)
+        {
+            return;
+        }
+
+        canvas.fillScreen(TFT_BLACK);
+        canvas.setTextWrap(false);
+        canvas.setTextColor(TFT_WHITE);
+        canvas.setTextSize(2);
+        canvas.drawString(
+            "OpenDrift verbose boot",
+            8,
+            7
+        );
+
+        canvas.setTextSize(1);
+        canvas.setTextColor(0x7BEF);
+        canvas.drawString(
+            "control kernel 1.0.0-amoled  ttyOD0",
+            8,
+            27
+        );
+
+        nextLineY = 43;
+        flush();
+        #else
+        this->display = display;
+
+        display->fillScreen(TFT_BLACK);
+        display->setTextWrap(false);
+        display->setTextColor(TFT_WHITE);
+        display->setTextSize(2);
+        display->drawCenterString(
+            "OpenDrift boot",
+            120,
+            12
+        );
+
+        display->setTextSize(1);
+        display->setTextColor(0x7BEF);
+        display->drawCenterString(
+            "control kernel 1.0-round  ttyOD0",
+            120,
+            32
+        );
+
+        nextLineY = 49;
+        #endif
+    }
+
+
+    void log(
+        const char* message,
+        const char* status = "[ OK ]",
+        uint16_t statusColor = TFT_GREEN
+    )
+    {
+        #if defined(OPENDRIFT_BOARD_AMOLED_164)
+        if(!canvasReady || !panelReady)
+        {
+            return;
+        }
+
+        if(nextLineY > 266)
+        {
+            canvas.fillScreen(TFT_BLACK);
+            canvas.setTextSize(1);
+            canvas.setTextColor(0x7BEF);
+            canvas.drawString(
+                "OpenDrift boot log (continued)",
+                8,
+                8
+            );
+            nextLineY = 25;
+        }
+
+        char timestamp[16];
+
+        snprintf(
+            timestamp,
+            sizeof(timestamp),
+            "[%7.3f]",
+            millis() / 1000.0f
+        );
+
+        canvas.setTextSize(1);
+        canvas.setTextColor(0x8410);
+        canvas.drawString(timestamp, 8, nextLineY);
+
+        canvas.setTextColor(statusColor);
+        canvas.drawString(status, 72, nextLineY);
+
+        canvas.setTextColor(TFT_WHITE);
+        canvas.drawString(message, 112, nextLineY);
+
+        nextLineY += 11;
+        flush();
+        #else
+        if(display == nullptr)
+        {
+            return;
+        }
+
+        if(nextLineY > 211)
+        {
+            display->fillScreen(TFT_BLACK);
+            display->setTextSize(1);
+            display->setTextColor(0x7BEF);
+            display->drawCenterString(
+                "OpenDrift boot log (continued)",
+                120,
+                18
+            );
+            nextLineY = 42;
+        }
+
+        char timestamp[12];
+
+        snprintf(
+            timestamp,
+            sizeof(timestamp),
+            "[%5.2f]",
+            millis() / 1000.0f
+        );
+
+        display->setTextSize(1);
+        display->setTextColor(0x8410);
+        display->drawString(timestamp, 7, nextLineY);
+
+        display->setTextColor(statusColor);
+        display->drawString(status, 58, nextLineY);
+
+        display->setTextColor(TFT_WHITE);
+        display->drawString(message, 99, nextLineY);
+
+        nextLineY += 12;
+        #endif
+    }
+
+
+    void end()
+    {
+        #if defined(OPENDRIFT_BOARD_AMOLED_164)
+        canvas.deleteSprite();
+        panelCanvas.deleteSprite();
+        canvasReady = false;
+        panelReady = false;
+        display = nullptr;
+        #else
+        display = nullptr;
+        #endif
+    }
+
+
+private:
+
+    LGFX* display = nullptr;
+    int nextLineY = 43;
+
+    #if defined(OPENDRIFT_BOARD_AMOLED_164)
+    LGFX_Sprite canvas;
+    LGFX_Sprite panelCanvas;
+    bool canvasReady = false;
+    bool panelReady = false;
+
+
+    void flush()
+    {
+        if(display == nullptr)
+        {
+            return;
+        }
+
+        uint16_t* source =
+            static_cast<uint16_t*>(
+                canvas.getBuffer()
+            );
+
+        uint16_t* target =
+            static_cast<uint16_t*>(
+                panelCanvas.getBuffer()
+            );
+
+        for(int y = 0; y < 280; y++)
+        {
+            for(int x = 0; x < 456; x++)
+            {
+                target[
+                    ((455 - x) * 280) + y
+                ] = source[(y * 456) + x];
+            }
+        }
+
+        panelCanvas.pushSprite(
+            display,
+            0,
+            0
+        );
+    }
+    #endif
+};
+
+
+BootConsole bootConsole;
+
+
+
+bool configurePin18Mode()
+{
+    bool throttleMode =
+        settings.getThrottleOutputEnabled();
+
+    if(
+        pin18ModeConfigured &&
+        pin18ThrottleOutputMode == throttleMode
+    )
+    {
+        return true;
+    }
+
+    bool configured = false;
+
+    if(throttleMode)
+    {
+        gainRadio.end();
+
+        throttleOutput.end();
+        throttleOutputActive = false;
+
+        pinMode(
+            SHARED_GAIN_THROTTLE_PIN,
+            INPUT_PULLDOWN
+        );
+
+        configured = true;
+
+        Serial.println(
+            configured
+            ? "GPIO 18 mode: throttle output"
+            : "GPIO 18 throttle output unavailable"
+        );
+    }
+    else
+    {
+        throttleOutput.end();
+        throttleOutputActive = false;
+
+        configured =
+            gainRadio.begin(
+                SHARED_GAIN_THROTTLE_PIN
+            );
+
+        Serial.println(
+            configured
+            ? "GPIO 18 mode: gyro gain input"
+            : "GPIO 18 gain input unavailable"
+        );
+    }
+
+    pin18ThrottleOutputMode =
+        throttleMode;
+
+    pin18ModeConfigured =
+        true;
+
+    return configured;
+}
 
 int mapSteeringPulse(
     int pulse,
@@ -360,22 +673,50 @@ void setup()
     lcd.fillScreen(TFT_BLACK);
     lcd.setTextColor(TFT_WHITE);
 
-    int screenCenterX =
-        lcd.width()
-        /
-        2;
+    bootConsole.begin(
+        &lcd
+    );
 
-    #if !defined(OPENDRIFT_BOARD_AMOLED_164)
-    lcd.setTextSize(3);
-    lcd.drawCenterString("OpenDrift", screenCenterX, 20);
-    lcd.setTextSize(2);
-    #endif
+    bootConsole.log(
+        displayOk
+        ?
+        #if defined(OPENDRIFT_BOARD_AMOLED_164)
+        "sh8601: AMOLED framebuffer online"
+        #else
+        "gc9a01: round framebuffer online"
+        #endif
+        : "display initialization failed",
+        displayOk ? "[ OK ]" : "[FAIL]",
+        displayOk ? TFT_GREEN : TFT_RED
+    );
+
+    char memoryMessage[48];
+
+    snprintf(
+        memoryMessage,
+        sizeof(memoryMessage),
+        "memory: %u KB external PSRAM detected",
+        (unsigned int)(ESP.getPsramSize() / 1024)
+    );
+
+    bootConsole.log(
+        memoryMessage,
+        psramFound() ? "[ OK ]" : "[WARN]",
+        psramFound() ? TFT_GREEN : TFT_YELLOW
+    );
 
     //-------------------
     // SETTINGS
     //-------------------
 
-    settings.begin();
+    bool settingsOk =
+        settings.begin();
+
+    bootConsole.log(
+        "nvs: mounted OpenDrift settings store",
+        settingsOk ? "[ OK ]" : "[WARN]",
+        settingsOk ? TFT_GREEN : TFT_YELLOW
+    );
 
     //-------------------
     // IMU
@@ -383,20 +724,21 @@ void setup()
 
     if(!imu.begin())
     {
-        #if !defined(OPENDRIFT_BOARD_AMOLED_164)
-        lcd.setTextSize(2);
-        lcd.drawCenterString("IMU ERROR", screenCenterX, 90);
-        #endif
+        bootConsole.log(
+            "qmi8658: IMU probe failed",
+            "[FAIL]",
+            TFT_RED
+        );
 
         while(true)
             delay(1000);
     }
 
-    #if !defined(OPENDRIFT_BOARD_AMOLED_164)
-    lcd.drawCenterString("IMU OK", screenCenterX, 60);
-    #endif
-
     Serial.println("IMU OK");
+
+    bootConsole.log(
+        "qmi8658: 6-axis inertial sensor ready"
+    );
 
     //-------------------
     // SERVO
@@ -404,9 +746,11 @@ void setup()
 
     if(!steeringServo.begin(SERVO_OUTPUT_PIN))
     {
-        #if !defined(OPENDRIFT_BOARD_AMOLED_164)
-        lcd.drawCenterString("SERVO ERROR", screenCenterX, 100);
-        #endif
+        bootConsole.log(
+            "ledc: steering servo output failed",
+            "[FAIL]",
+            TFT_RED
+        );
 
         while(true)
             delay(1000);
@@ -421,35 +765,60 @@ void setup()
 
     steeringServo.center();
 
-    #if !defined(OPENDRIFT_BOARD_AMOLED_164)
-    lcd.drawCenterString("SERVO OK", screenCenterX, 85);
-    #endif
-
     Serial.println("SERVO OK");
+
+    bootConsole.log(
+        "ledc: steering servo attached on gpio16"
+    );
 
     //-------------------
     // RADIO
     //-------------------
 
-    steeringRadio.begin(
-        RADIO_STEERING_PIN
+    bool steeringRadioOk =
+        steeringRadio.begin(
+            RADIO_STEERING_PIN
+        );
+
+    bool throttleRadioOk =
+        throttleRadio.begin(
+            RADIO_THROTTLE_PIN
+        );
+
+    bool sharedPinOk =
+        configurePin18Mode();
+
+    bool radioOk =
+        steeringRadioOk &&
+        throttleRadioOk &&
+        sharedPinOk;
+
+    bootConsole.log(
+        "rc-input: steering and throttle channels armed",
+        radioOk ? "[ OK ]" : "[FAIL]",
+        radioOk ? TFT_GREEN : TFT_RED
     );
 
-    gainRadio.begin(
-        RADIO_GAIN_PIN
+    bootConsole.log(
+        pin18ThrottleOutputMode
+        ? "gpio18: throttle passthrough output"
+        : "gpio18: gyro gain adjustment input"
     );
 
-    #if !defined(OPENDRIFT_BOARD_AMOLED_164)
-    lcd.drawCenterString("RADIO OK", screenCenterX, 110);
-    #endif
-
-    Serial.println("Radio gain input OK");
+    Serial.println("Radio inputs initialized");
 
     //-------------------
     // GYRO CONTROLLER
     //-------------------
 
-    gyro.begin();
+    bool gyroOk =
+        gyro.begin();
+
+    bootConsole.log(
+        "opendrift-gyro: controller state initialized",
+        gyroOk ? "[ OK ]" : "[FAIL]",
+        gyroOk ? TFT_GREEN : TFT_RED
+    );
 
     gyro.setGain(
         settings.getGain()
@@ -491,19 +860,29 @@ void setup()
 
     if(!touch.begin())
     {
-        #if !defined(OPENDRIFT_BOARD_AMOLED_164)
-        lcd.drawCenterString("TOUCH ERROR", screenCenterX, 135);
-        #endif
+        bootConsole.log(
+            #if defined(OPENDRIFT_BOARD_AMOLED_164)
+            "cst92xx: touch controller probe failed",
+            #else
+            "cst816s: touch controller probe failed",
+            #endif
+            "[FAIL]",
+            TFT_RED
+        );
 
         while(true)
             delay(1000);
     }
 
-    #if !defined(OPENDRIFT_BOARD_AMOLED_164)
-    lcd.drawCenterString("TOUCH OK", screenCenterX, 135);
-    #endif
-
     Serial.println("TOUCH OK");
+
+    bootConsole.log(
+        #if defined(OPENDRIFT_BOARD_AMOLED_164)
+        "cst92xx: capacitive touch input ready"
+        #else
+        "cst816s: capacitive touch input ready"
+        #endif
+    );
 
     delay(1000);
 
@@ -511,9 +890,11 @@ void setup()
     // CALIBRATION
     //-------------------
 
-    #if !defined(OPENDRIFT_BOARD_AMOLED_164)
-    lcd.drawCenterString("Calibrating", screenCenterX, 170);
-    #endif
+    bootConsole.log(
+        "qmi8658: measuring stationary gyro bias",
+        "[....]",
+        TFT_CYAN
+    );
 
     delay(2000);
 
@@ -525,6 +906,10 @@ void setup()
 
     Serial.println("Gyro calibrated");
 
+    bootConsole.log(
+        "qmi8658: gyro bias calibration complete"
+    );
+
     delay(500);
 
     //-------------------
@@ -534,10 +919,24 @@ void setup()
     if(settings.getBlackboxEnabled())
     {
         updateBlackboxAvailability();
+
+        bootConsole.log(
+            blackbox.isReady()
+            ? "ffat: blackbox recorder mounted"
+            : "ffat: blackbox recorder unavailable",
+            blackbox.isReady() ? "[ OK ]" : "[WARN]",
+            blackbox.isReady() ? TFT_GREEN : TFT_YELLOW
+        );
     }
     else
     {
         Serial.println("Blackbox logging disabled");
+
+        bootConsole.log(
+            "ffat: blackbox recorder disabled",
+            "[SKIP]",
+            0x8410
+        );
     }
 
     //-------------------
@@ -562,30 +961,52 @@ void setup()
         Serial.print("WiFi IP: ");
         Serial.println(IP);
 
-        #if !defined(OPENDRIFT_BOARD_AMOLED_164)
-        lcd.fillScreen(TFT_BLACK);
+        char wifiMessage[48];
 
-        lcd.setTextSize(2);
-        lcd.drawCenterString("WiFi OK", screenCenterX, 40);
+        snprintf(
+            wifiMessage,
+            sizeof(wifiMessage),
+            "wlan0: AP OpenDrift ready at %s",
+            IP.toString().c_str()
+        );
 
-        lcd.setTextSize(1);
-        lcd.drawCenterString(IP.toString(), screenCenterX, 70);
-
-        delay(1000);
-        #endif
+        bootConsole.log(
+            wifiMessage
+        );
 
         webConfig.begin(
             settings,
             gyro,
             steeringRadio,
             gainRadio,
+            throttleRadio,
             blackbox
+        );
+
+        bootConsole.log(
+            "httpd: web configurator listening"
+        );
+    }
+    else
+    {
+        bootConsole.log(
+            "wlan0: interface disabled by settings",
+            "[SKIP]",
+            0x8410
         );
     }
 
     //-------------------
     // UI
     //-------------------
+
+    bootConsole.log(
+        "systemd[1]: Reached target OpenDrift UI"
+    );
+
+    delay(350);
+
+    bootConsole.end();
 
     ui.begin(
         &lcd,
@@ -644,6 +1065,7 @@ void loop()
             gyro,
             steeringRadio,
             gainRadio,
+            throttleRadio,
             blackbox
         );
     }
@@ -653,11 +1075,59 @@ void loop()
         webConfig.update();
     }
 
+    configurePin18Mode();
+
+    if(
+        pin18ThrottleOutputMode &&
+        throttleRadio.hasSignal()
+    )
+    {
+        if(!throttleOutputActive)
+        {
+            throttleOutput.configure(
+                1500,
+                false,
+                100,
+                0
+            );
+
+            throttleOutputActive =
+                throttleOutput.begin(
+                    SHARED_GAIN_THROTTLE_PIN
+                );
+        }
+
+        if(throttleOutputActive)
+        {
+            throttleOutput.writeMicroseconds(
+                throttleRadio.getPulseWidth()
+            );
+        }
+    }
+    else if(
+        pin18ThrottleOutputMode &&
+        throttleOutputActive
+    )
+    {
+        // Removing the PWM signal lets the ESC's own signal-loss
+        // failsafe take over instead of holding the last throttle value.
+        throttleOutput.end();
+        throttleOutputActive = false;
+
+        pinMode(
+            SHARED_GAIN_THROTTLE_PIN,
+            INPUT_PULLDOWN
+        );
+    }
+
     //-------------------
     // RADIO
     //-------------------
 
-    if(gainRadio.hasSignal())
+    if(
+        !pin18ThrottleOutputMode &&
+        gainRadio.hasSignal()
+    )
     {
         gyro.setGain(
             mapGainPulse(
@@ -872,6 +1342,7 @@ void loop()
             steeringCommand,
             servoCommand,
             settings.getServoQuiet(),
+            throttleRadio.getPulseWidth(),
             gainRadio.getPulseWidth(),
             gyro.getGain(),
             settings.getDeadband(),
@@ -885,7 +1356,9 @@ void loop()
             settings.getGyroAttackSpeed(),
             settings.getGyroReturnSpeed(),
             steeringRadio.hasSignal(),
-            gainRadio.hasSignal()
+            throttleRadio.hasSignal(),
+            gainRadio.hasSignal(),
+            pin18ThrottleOutputMode
         );
     }
 

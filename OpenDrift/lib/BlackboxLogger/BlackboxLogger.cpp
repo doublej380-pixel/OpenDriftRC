@@ -67,6 +67,7 @@ void BlackboxLogger::log(
     int steeringCommand,
     int servoCommand,
     int servoQuiet,
+    int throttleRaw,
     int gainRaw,
     float gain,
     float deadband,
@@ -80,7 +81,9 @@ void BlackboxLogger::log(
     int attack,
     int returnSpeed,
     bool steeringSignal,
-    bool gainSignal
+    bool throttleSignal,
+    bool gainSignal,
+    bool throttleOutputMode
 )
 {
     if(
@@ -98,12 +101,12 @@ void BlackboxLogger::log(
         return;
     }
 
-    char line[256];
+    char line[288];
 
     snprintf(
         line,
         sizeof(line),
-        "%lu,%.3f,%.3f,%d,%d,%d,%d,%d,%d,%d,%.3f,%.2f,%d,%.3f,%.3f,%d,%d,%d,%d,%d,%d,%d,%d\n",
+        "%lu,%.3f,%.3f,%d,%d,%d,%d,%d,%d,%d,%d,%.3f,%.2f,%d,%.3f,%.3f,%d,%d,%d,%d,%d,%d,%d,%d,%d,%d\n",
         timeMs,
         yaw,
         filteredYaw,
@@ -113,6 +116,7 @@ void BlackboxLogger::log(
         steeringCommand,
         servoCommand,
         servoQuiet,
+        throttleRaw,
         gainRaw,
         gain,
         deadband,
@@ -126,7 +130,9 @@ void BlackboxLogger::log(
         attack,
         returnSpeed,
         steeringSignal ? 1 : 0,
-        gainSignal ? 1 : 0
+        throttleSignal ? 1 : 0,
+        gainSignal ? 1 : 0,
+        throttleOutputMode ? 1 : 0
     );
 
     buffer += line;
@@ -257,7 +263,7 @@ bool BlackboxLogger::writeHeader()
     }
 
     file.println(
-        "time_ms,yaw,filtered_yaw,gyro_raw_us,gyro_slewed_us,steering_raw_us,steering_cmd_us,servo_us,servo_quiet,gain_raw_us,gain,deadband,max_corr,smooth,i_gain,i_limit,i_us,hold_boost,anti_wobble,attack,return,steering_signal,gain_signal"
+        "time_ms,yaw,filtered_yaw,gyro_raw_us,gyro_slewed_us,steering_raw_us,steering_cmd_us,servo_us,servo_quiet,throttle_raw_us,gain_raw_us,gain,deadband,max_corr,smooth,i_gain,i_limit,i_us,hold_boost,anti_wobble,attack,return,steering_signal,throttle_signal,gain_signal,pin18_throttle_out"
     );
 
     file.close();

@@ -3,13 +3,23 @@
 
 bool ServoOutput::begin(int pin)
 {
+    end();
+
     servo.setPeriodHertz(50);
 
-    servo.attach(
+    int channel =
+        servo.attach(
         pin,
         1000,
         2000
     );
+
+    if(channel == 0)
+    {
+        return false;
+    }
+
+    active = true;
 
 
     center();
@@ -20,6 +30,19 @@ bool ServoOutput::begin(int pin)
 
 
     return true;
+}
+
+
+
+void ServoOutput::end()
+{
+    if(!active)
+    {
+        return;
+    }
+
+    servo.detach();
+    active = false;
 }
 
 

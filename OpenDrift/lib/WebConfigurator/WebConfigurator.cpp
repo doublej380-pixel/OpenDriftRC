@@ -17,6 +17,7 @@ void WebConfigurator::begin(
     GyroController& gyroRef,
     RadioInput& steeringRadioRef,
     RadioInput& gainRadioRef,
+    RadioInput& throttleRadioRef,
     BlackboxLogger& blackboxRef
 )
 {
@@ -31,6 +32,9 @@ void WebConfigurator::begin(
 
     gainRadio =
         &gainRadioRef;
+
+    throttleRadio =
+        &throttleRadioRef;
 
     blackbox =
         &blackboxRef;
@@ -155,6 +159,13 @@ void WebConfigurator::handleRoot()
     html += F("</div><div class='pill'>Gain: ");
     html += String(gainRadio->getPulseWidth());
     html += gainRadio->hasSignal() ? F(" OK") : F(" NO SIGNAL");
+    html += F("</div><div class='pill'>Throttle: ");
+    html += String(throttleRadio->getPulseWidth());
+    html += throttleRadio->hasSignal() ? F(" OK") : F(" NO SIGNAL");
+    html += F("</div><div class='pill'>GPIO 18: ");
+    html += settings->getThrottleOutputEnabled()
+        ? F("THROTTLE OUT")
+        : F("GAIN INPUT");
     html += F("</div></div></div>");
 
     html += F("<form method='post' action='/save'>");
@@ -193,7 +204,13 @@ void WebConfigurator::handleRoot()
     html += F("<div class='card'><h2>Gain Channel Calibration</h2><div class='row'>");
     html += input("Gain low", "gainMin", String(settings->getGainMin()));
     html += input("Gain high", "gainMax", String(settings->getGainMax()));
-    html += F("</div></div>");
+    html += F("</div>");
+    html += checkbox(
+        "Use GPIO 18 as throttle output instead of gyro gain input",
+        "throttleOutputEnabled",
+        settings->getThrottleOutputEnabled()
+    );
+    html += F("</div>");
 
     html += F("<div class='card'><h2>WiFi</h2>");
     html += checkbox("Enable WiFi on boot", "wifiEnabled", settings->getWifiEnabled());
@@ -404,6 +421,10 @@ void WebConfigurator::handleSave()
             "gainMax",
             settings->getGainMax()
         )
+    );
+
+    settings->setThrottleOutputEnabled(
+        server.hasArg("throttleOutputEnabled")
     );
 
     settings->setWifiEnabled(

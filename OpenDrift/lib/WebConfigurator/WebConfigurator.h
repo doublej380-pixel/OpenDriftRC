@@ -20,6 +20,7 @@ public:
         GyroController& gyro,
         RadioInput& steeringRadio,
         RadioInput& gainRadio,
+        RadioInput& throttleRadio,
         BlackboxLogger& blackbox
     );
 
@@ -39,6 +40,8 @@ private:
     RadioInput* steeringRadio = nullptr;
 
     RadioInput* gainRadio = nullptr;
+
+    RadioInput* throttleRadio = nullptr;
 
     BlackboxLogger* blackbox = nullptr;
 

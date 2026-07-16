@@ -91,6 +91,9 @@ public:
     int getGainMax();
     void setGainMax(int value);
 
+    bool getThrottleOutputEnabled();
+    void setThrottleOutputEnabled(bool value);
+
 private:
 
     Preferences prefs;
@@ -150,6 +153,8 @@ private:
     int gainMin = 1000;
 
     int gainMax = 2000;
+
+    bool throttleOutputEnabled = false;
 
     void save();
 };

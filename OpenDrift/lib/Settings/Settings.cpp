@@ -129,6 +129,11 @@ bool Settings::begin()
         2000
     );
 
+    throttleOutputEnabled = prefs.getBool(
+        "thrOut",
+        false
+    );
+
     return true;
 }
 
@@ -268,6 +273,11 @@ void Settings::save()
     prefs.putInt(
         "gainMax",
         gainMax
+    );
+
+    prefs.putBool(
+        "thrOut",
+        throttleOutputEnabled
     );
 
     dirty = false;
@@ -633,5 +643,16 @@ int Settings::getGainMax()
 void Settings::setGainMax(int value)
 {
     gainMax = value;
+    dirty = true;
+}
+
+bool Settings::getThrottleOutputEnabled()
+{
+    return throttleOutputEnabled;
+}
+
+void Settings::setThrottleOutputEnabled(bool value)
+{
+    throttleOutputEnabled = value;
     dirty = true;
 }

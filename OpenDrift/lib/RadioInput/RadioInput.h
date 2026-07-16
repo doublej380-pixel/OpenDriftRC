@@ -11,6 +11,8 @@ public:
         uint8_t inputPin
     );
 
+    void end();
+
     bool hasSignal(
         uint32_t timeoutMs = 250
     );
@@ -34,6 +36,8 @@ private:
     volatile uint16_t pulseWidth = 1500;
 
     volatile uint32_t lastPulseMicros = 0;
+
+    bool active = false;
 
     static void IRAM_ATTR handleInterrupt(
         void* arg

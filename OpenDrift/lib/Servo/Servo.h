@@ -10,6 +10,8 @@ public:
 
     bool begin(int pin);
 
+    void end();
+
     void writeMicroseconds(int us);
 
     void center();
@@ -37,4 +39,6 @@ private:
     int travelPercent = 100;
 
     int quietBand = 0;
+
+    bool active = false;
 };

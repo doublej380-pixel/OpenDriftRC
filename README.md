@@ -1,6 +1,6 @@
 # OpenDrift
 
-OpenDrift is an open source drift gyro for RC drift cars, built around the Waveshare ESP32-S3 Touch AMOLED 1.64 board. It reads steering and gain channels from a receiver, mixes driver steering with gyro correction, outputs a servo signal, and exposes tuning through both the onboard touch UI and a WiFi web configurator.
+OpenDrift is an open source drift gyro for RC drift cars, built around the Waveshare ESP32-S3 Touch AMOLED 1.64 board. It reads steering, throttle, and optional gain channels from a receiver, mixes driver steering with gyro correction, outputs steering and optional throttle signals, and exposes tuning through both the onboard touch UI and a WiFi web configurator.
 
 The goal is to make gyro setup less of a black box: you can see receiver signals, calibrate steering, reverse servo or gyro direction independently, and tune the drift behavior at the car.
 
@@ -10,7 +10,9 @@ The goal is to make gyro setup less of a black box: you can see receiver signals
 - 280 x 456 AMOLED touch UI with a static RGB565 background and swipeable pages.
 - IMU yaw-rate based gyro correction.
 - Receiver steering input.
+- Receiver throttle input and blackbox capture.
 - Receiver gyro gain input.
+- Selectable GPIO 18 gyro-gain input or throttle passthrough output.
 - Servo output with center, reverse, and travel settings.
 - Servo quiet band for direct-drive steering buzz.
 - Steering calibration for max left, center, and max right.
@@ -43,7 +45,8 @@ Current default pinout:
 | --- | ---: | --- | --- |
 | Servo output | 16 | Output | Goes to steering servo signal |
 | Receiver steering | 17 | Input | Standard RC PWM input |
-| Receiver gyro gain | 18 | Input | Standard RC PWM input from knob/aux channel |
+| Receiver throttle | 15 | Input | Standard RC PWM input; always available to the blackbox |
+| Gain input / throttle output | 18 | Selectable | Gain-channel input by default, or throttle passthrough output |
 
 Make sure the receiver, ESP32 board, and servo power system share ground.
 
@@ -227,7 +230,7 @@ When WiFi is enabled, connect to the `OpenDrift` network and open:
 
 ### System
 
-Basic firmware/system information.
+Basic firmware/system information. Tap the GPIO 18 mode button to switch between `GAIN INPUT` and `THROTTLE OUT`.
 
 ## Web Configurator
 
@@ -256,11 +259,12 @@ Current web settings:
 - Steering max left / center / max right
 - Radio steering travel
 - Gain channel low / high
+- GPIO 18 gain-input or throttle-output mode
 - WiFi enabled on boot
 - WiFi auto-off timeout
 - Blackbox logging enabled
 
-The web page also shows live receiver pulse values for steering and gain.
+The web page also shows live receiver pulse values for steering, throttle, and gain, plus the active GPIO 18 mode.
 
 Use the web configurator when you want to make several changes quickly. Use the onboard UI when tuning trackside without a phone or laptop.
 
@@ -290,10 +294,11 @@ Log rows include:
 - Steering input and calibrated steering command
 - Servo output
 - Servo quiet band
+- Throttle input
 - Gain input and active gain
 - Active deadband, max correction, smoothing, hold boost, anti-wobble, attack, and return
 - Active I gain, I limit, and I correction
-- Steering/gain signal state
+- Steering/throttle/gain signal state and GPIO 18 mode
 
 Suggested test workflow:
 

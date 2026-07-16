@@ -5,8 +5,14 @@ bool RadioInput::begin(
     uint8_t inputPin
 )
 {
+    end();
+
     pin =
         inputPin;
+
+    riseTime = 0;
+    pulseWidth = 1500;
+    lastPulseMicros = 0;
 
     pinMode(
         pin,
@@ -20,7 +26,27 @@ bool RadioInput::begin(
         CHANGE
     );
 
+    active = true;
+
     return true;
+}
+
+
+
+void RadioInput::end()
+{
+    if(!active)
+    {
+        return;
+    }
+
+    detachInterrupt(
+        digitalPinToInterrupt(pin)
+    );
+
+    active = false;
+    riseTime = 0;
+    lastPulseMicros = 0;
 }
 
 

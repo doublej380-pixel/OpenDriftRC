@@ -23,6 +23,7 @@ public:
         int steeringCommand,
         int servoCommand,
         int servoQuiet,
+        int throttleRaw,
         int gainRaw,
         float gain,
         float deadband,
@@ -36,7 +37,9 @@ public:
         int attack,
         int returnSpeed,
         bool steeringSignal,
-        bool gainSignal
+        bool throttleSignal,
+        bool gainSignal,
+        bool throttleOutputMode
     );
 
     bool clear();
@@ -59,7 +62,7 @@ private:
 
     static const unsigned long flushIntervalMs = 1000;
 
-    const char* path = "/blackbox.csv";
+    const char* path = "/blackbox-v2.csv";
 
     String buffer;
 

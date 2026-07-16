@@ -58,11 +58,13 @@ private:
 
     LGFX_Sprite canvas;
 
+    LGFX_Sprite transitionCanvas;
+
+    bool transitionCanvasReady = false;
+
     #if defined(OPENDRIFT_BOARD_AMOLED_164)
     LGFX_Sprite panelCanvas;
-    LGFX_Sprite transitionCanvas;
     bool panelCanvasReady = false;
-    bool transitionCanvasReady = false;
     #endif
 
     LGFX_Sprite* lcd = nullptr;
@@ -82,6 +84,8 @@ private:
         int8_t direction
     );
 
+    void drawFixedPageDots();
+
     bool canUseRawAmoledBuffers();
 
     // Pages
@@ -91,13 +95,17 @@ private:
     // 3 = Response
     // 4 = Radio
     // 5 = Steering
-    // 6 = WiFi
-    // 7 = System
+    // AMOLED: 6 = WiFi, 7 = System
+    // Round: 6 = Steering Cal, 7 = WiFi, 8 = System
 
     uint8_t page = 0;
 
 
+    #if defined(OPENDRIFT_BOARD_AMOLED_164)
     const uint8_t totalPages = 8;
+    #else
+    const uint8_t totalPages = 9;
+    #endif
 
 
 
@@ -205,6 +213,13 @@ private:
     );
 
     void drawRadioPage(
+        RadioInput& steeringRadio,
+        RadioInput& gainRadio,
+        Settings& settings,
+        GyroController& gyro
+    );
+
+    void drawRoundRadioPage(
         RadioInput& steeringRadio,
         RadioInput& gainRadio,
         Settings& settings,
