@@ -61,7 +61,13 @@ bool blackboxStartAttempted = false;
 
 #define SERVO_OUTPUT_PIN 16
 #define RADIO_STEERING_PIN 17
+#if defined(OPENDRIFT_BOARD_AMOLED_164)
 #define RADIO_THROTTLE_PIN 15
+#else
+// The round board does not have a spare input. Its former GPIO 18 gain
+// channel is dedicated to throttle logging; gyro gain comes from settings.
+#define RADIO_THROTTLE_PIN 18
+#endif
 #define SHARED_GAIN_THROTTLE_PIN 18
 
 bool pin18ModeConfigured = false;
@@ -75,6 +81,11 @@ const float radioGainMax = 3.0f;
 
 const char* ssid = "OpenDrift";
 const char* password = "opendrift";
+
+
+#if defined(OPENDRIFT_BOARD_AMOLED_164)
+static constexpr float AMOLED_BOOT_LOG_TEXT_SIZE = 1.15f;
+#endif
 
 
 
@@ -125,7 +136,7 @@ public:
             7
         );
 
-        canvas.setTextSize(1);
+        canvas.setTextSize(AMOLED_BOOT_LOG_TEXT_SIZE);
         canvas.setTextColor(0x7BEF);
         canvas.drawString(
             "control kernel 1.0.0-amoled  ttyOD0",
@@ -133,7 +144,7 @@ public:
             27
         );
 
-        nextLineY = 43;
+        nextLineY = 44;
         flush();
         #else
         this->display = display;
@@ -173,17 +184,17 @@ public:
             return;
         }
 
-        if(nextLineY > 266)
+        if(nextLineY > 263)
         {
             canvas.fillScreen(TFT_BLACK);
-            canvas.setTextSize(1);
+            canvas.setTextSize(AMOLED_BOOT_LOG_TEXT_SIZE);
             canvas.setTextColor(0x7BEF);
             canvas.drawString(
                 "OpenDrift boot log (continued)",
                 8,
                 8
             );
-            nextLineY = 25;
+            nextLineY = 27;
         }
 
         char timestamp[16];
@@ -195,17 +206,17 @@ public:
             millis() / 1000.0f
         );
 
-        canvas.setTextSize(1);
+        canvas.setTextSize(AMOLED_BOOT_LOG_TEXT_SIZE);
         canvas.setTextColor(0x8410);
         canvas.drawString(timestamp, 8, nextLineY);
 
         canvas.setTextColor(statusColor);
-        canvas.drawString(status, 72, nextLineY);
+        canvas.drawString(status, 76, nextLineY);
 
         canvas.setTextColor(TFT_WHITE);
-        canvas.drawString(message, 112, nextLineY);
+        canvas.drawString(message, 120, nextLineY);
 
-        nextLineY += 11;
+        nextLineY += 13;
         flush();
         #else
         if(display == nullptr)
@@ -319,6 +330,12 @@ BootConsole bootConsole;
 
 bool configurePin18Mode()
 {
+    #if !defined(OPENDRIFT_BOARD_AMOLED_164)
+    // throttleRadio owns GPIO 18 for the lifetime of the round build.
+    pin18ThrottleOutputMode = false;
+    pin18ModeConfigured = true;
+    return true;
+    #else
     bool throttleMode =
         settings.getThrottleOutputEnabled();
 
@@ -376,6 +393,7 @@ bool configurePin18Mode()
         true;
 
     return configured;
+    #endif
 }
 
 int mapSteeringPulse(
@@ -800,9 +818,13 @@ void setup()
     );
 
     bootConsole.log(
+        #if defined(OPENDRIFT_BOARD_AMOLED_164)
         pin18ThrottleOutputMode
         ? "gpio18: throttle passthrough output"
         : "gpio18: gyro gain adjustment input"
+        #else
+        "gpio18: throttle input (gain uses saved setting)"
+        #endif
     );
 
     Serial.println("Radio inputs initialized");
@@ -850,6 +872,10 @@ void setup()
 
     gyro.setAntiWobble(
         settings.getGyroAntiWobble()
+    );
+
+    gyro.setHuntDamping(
+        settings.getGyroHuntDamping()
     );
 
     //-------------------
@@ -1171,6 +1197,10 @@ void loop()
         settings.getGyroAntiWobble()
     );
 
+    gyro.setHuntDamping(
+        settings.getGyroHuntDamping()
+    );
+
     //-------------------
     // UI
     //-------------------
@@ -1182,7 +1212,11 @@ void loop()
         wifi,
         settings,
         steeringRadio,
+        #if defined(OPENDRIFT_BOARD_AMOLED_164)
         gainRadio
+        #else
+        throttleRadio
+        #endif
     );
 
     //-------------------
@@ -1193,7 +1227,11 @@ void loop()
         imu.getYawRate();
 
     int gyroCommand =
-        gyro.update(yaw);
+        gyro.update(
+            yaw,
+            throttleRadio.getPulseWidth(),
+            throttleRadio.hasSignal()
+        );
 
     int steeringCommand = 1500;
 
@@ -1336,6 +1374,15 @@ void loop()
             lastBlackboxLog,
             yaw,
             gyro.getFilteredYaw(),
+            imu.getGyroX(),
+            imu.getGyroY(),
+            imu.getAccelX(),
+            imu.getAccelY(),
+            imu.getAccelZ(),
+            imu.getAccelMagnitude(),
+            imu.getAccelDelta(),
+            imu.getTiltRate(),
+            imu.getSurfaceDisturbanceScore(),
             rawGyroCorrection,
             gyroCorrection,
             steeringRadio.getPulseWidth(),
@@ -1353,6 +1400,16 @@ void loop()
             gyro.getIntegralCorrection(),
             settings.getGyroHoldBoost(),
             settings.getGyroAntiWobble(),
+            settings.getGyroHuntDamping(),
+            gyro.getHuntControlYaw(),
+            gyro.getHuntSlowYaw(),
+            gyro.getHuntFastYaw(),
+            gyro.getHuntBlend(),
+            gyro.getHuntScore(),
+            gyro.getControlPhase(),
+            gyro.getSettledBlend(),
+            gyro.getThrottleTransient(),
+            gyro.getActiveHoldFactor(),
             settings.getGyroAttackSpeed(),
             settings.getGyroReturnSpeed(),
             steeringRadio.hasSignal(),

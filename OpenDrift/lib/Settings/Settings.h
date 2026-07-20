@@ -7,6 +7,30 @@ class Settings
 {
 public:
 
+    static constexpr uint8_t MAX_PROFILES = 12;
+    static constexpr size_t PROFILE_NAME_LENGTH = 24;
+
+    struct DrivingProfile
+    {
+        uint32_t version = 1;
+        char name[PROFILE_NAME_LENGTH] = {0};
+
+        float gain = 1.5f;
+        float deadband = 2.0f;
+        float gyroSmoothing = 0.10f;
+        float gyroIntegralGain = 0.0f;
+
+        int32_t gyroMaxCorrection = 250;
+        int32_t gyroAttackSpeed = 80;
+        int32_t gyroReturnSpeed = 30;
+        int32_t gyroIntegralLimit = 120;
+        int32_t gyroHoldBoost = 0;
+        int32_t gyroAntiWobble = 50;
+        int32_t gyroHuntDamping = 0;
+        int32_t steeringDamper = 0;
+        int32_t radioSteeringTravel = 100;
+    };
+
     bool begin();
 
     void update();
@@ -44,6 +68,9 @@ public:
 
     int getGyroAntiWobble();
     void setGyroAntiWobble(int value);
+
+    int getGyroHuntDamping();
+    void setGyroHuntDamping(int value);
 
     int getSteeringDamper();
     void setSteeringDamper(int value);
@@ -94,6 +121,16 @@ public:
     bool getThrottleOutputEnabled();
     void setThrottleOutputEnabled(bool value);
 
+    // Driving profiles
+    uint8_t getProfileCount();
+    int8_t getActiveProfileIndex();
+    const char* getActiveProfileName();
+    const DrivingProfile* getProfile(uint8_t index);
+
+    int8_t createProfile(const String& name);
+    bool activateProfile(uint8_t index);
+    bool deleteProfile(uint8_t index);
+
 private:
 
     Preferences prefs;
@@ -126,6 +163,8 @@ private:
 
     int gyroAntiWobble = 50;
 
+    int gyroHuntDamping = 0;
+
     int steeringDamper = 0;
 
     int servoCenter = 1500;
@@ -156,5 +195,17 @@ private:
 
     bool throttleOutputEnabled = false;
 
+    DrivingProfile profiles[MAX_PROFILES];
+
+    uint8_t profileCount = 0;
+
+    int8_t activeProfileIndex = -1;
+
     void save();
+
+    void loadProfiles();
+    void captureProfile(DrivingProfile& profile);
+    void applyProfile(const DrivingProfile& profile);
+    bool persistProfile(uint8_t index);
+    String sanitizeProfileName(const String& name);
 };

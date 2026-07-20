@@ -261,6 +261,32 @@ static void drawRoundAdjustRow(
 }
 
 
+static void drawRoundCompactAdjustRow(
+    LGFX_Sprite* lcd,
+    const char* label,
+    const String& value,
+    int row,
+    uint16_t accent
+)
+{
+    int labelY = 39 + (row * 41);
+    int buttonY = 50 + (row * 41);
+
+    lcd->setTextSize(1);
+    lcd->setTextColor(0xBDF7);
+    lcd->drawCenterString(label, 120, labelY);
+
+    lcd->drawRect(26, buttonY, 44, 28, accent);
+    lcd->drawRect(170, buttonY, 44, 28, accent);
+
+    lcd->setTextSize(2);
+    lcd->setTextColor(TFT_WHITE);
+    lcd->drawCenterString("-", 48, buttonY + 6);
+    lcd->drawCenterString("+", 192, buttonY + 6);
+    lcd->drawCenterString(value.c_str(), 120, buttonY + 6);
+}
+
+
 static bool prepareRoundFrame()
 {
     if(
@@ -778,9 +804,35 @@ void UI::drawPage(
             break;
 
 
-        #if !defined(OPENDRIFT_BOARD_AMOLED_164)
         case 8:
+            #if defined(OPENDRIFT_BOARD_AMOLED_164)
+            drawStabilityPage(
+                settings
+            );
+            #else
             drawSystemPage(
+                settings
+            );
+            #endif
+            break;
+
+
+        case 9:
+            #if defined(OPENDRIFT_BOARD_AMOLED_164)
+            drawProfilesPage(
+                settings
+            );
+            #else
+            drawStabilityPage(
+                settings
+            );
+            #endif
+            break;
+
+
+        #if !defined(OPENDRIFT_BOARD_AMOLED_164)
+        case 10:
+            drawProfilesPage(
                 settings
             );
             break;
@@ -2214,7 +2266,7 @@ void UI::drawSystemPage(
 
     lcd->setTextColor(0xBDF7);
     lcd->drawCenterString(
-        "GPIO 18 MODE",
+        "GPIO 18",
         120,
         119
     );
@@ -2224,17 +2276,13 @@ void UI::drawSystemPage(
         137,
         154,
         40,
-        settings.getThrottleOutputEnabled()
-        ? TFT_YELLOW
-        : ROUND_CYAN
+        ROUND_CYAN
     );
 
     lcd->setTextSize(2);
     lcd->setTextColor(TFT_WHITE);
     lcd->drawCenterString(
-        settings.getThrottleOutputEnabled()
-        ? "THROTTLE"
-        : "GAIN INPUT",
+        "THROTTLE INPUT",
         120,
         148
     );
@@ -2242,7 +2290,7 @@ void UI::drawSystemPage(
     lcd->setTextSize(1);
     lcd->setTextColor(0xBDF7);
     lcd->drawCenterString(
-        "tap to switch",
+        "gain controlled by setting",
         120,
         184
     );
@@ -2287,7 +2335,7 @@ void UI::drawTunePage(
     );
     drawRoundAdjustRow(
         lcd,
-        "I GAIN",
+        "DRIFT MEMORY",
         String(settings.getGyroIntegralGain(), 2),
         2,
         TFT_YELLOW
@@ -2329,7 +2377,7 @@ void UI::drawTunePage(
     );
 
     lcd->drawString(
-        "I GAIN",
+        "DRIFT MEM",
         22,
         182
     );
@@ -2421,13 +2469,13 @@ void UI::drawTunePage(
     );
 
     lcd->drawString(
-        "I GAIN",
+        "DRIFT MEMORY",
         78,
         98
     );
 
     lcd->drawString(
-        "I LIM",
+        "MEM LIMIT",
         84,
         129
     );
@@ -2628,25 +2676,32 @@ void UI::drawResponsePage(
     lcd->setTextColor(ROUND_CYAN);
     lcd->drawCenterString("Response", 120, 14);
 
-    drawRoundAdjustRow(
+    drawRoundCompactAdjustRow(
         lcd,
         "ATTACK",
         String(settings.getGyroAttackSpeed()),
         0,
         ROUND_CYAN
     );
-    drawRoundAdjustRow(
+    drawRoundCompactAdjustRow(
         lcd,
         "RETURN",
         String(settings.getGyroReturnSpeed()),
         1,
         ROUND_CYAN
     );
-    drawRoundAdjustRow(
+    drawRoundCompactAdjustRow(
+        lcd,
+        "HOLD BOOST",
+        String(settings.getGyroHoldBoost()),
+        2,
+        ROUND_CYAN
+    );
+    drawRoundCompactAdjustRow(
         lcd,
         "STEERING DAMPER",
         String(settings.getSteeringDamper()),
-        2,
+        3,
         ROUND_CYAN
     );
 
@@ -2927,6 +2982,344 @@ void UI::drawResponsePage(
 
     drawPageDots();
 
+}
+
+
+
+void UI::drawStabilityPage(
+    Settings& settings
+)
+{
+    drawUiBackground(lcd);
+
+    #if defined(OPENDRIFT_BOARD_AMOLED_164)
+    drawAmoledHeader(
+        lcd,
+        "Stability",
+        OD_CYAN
+    );
+
+    lcd->setTextSize(2);
+    lcd->setTextColor(OD_MUTED);
+    lcd->drawString("HUNT DAMPING", 22, 120);
+
+    lcd->setTextSize(3);
+    lcd->setTextColor(OD_TEXT);
+    lcd->drawNumber(
+        settings.getGyroHuntDamping(),
+        174,
+        110
+    );
+
+    drawAmoledButton(
+        lcd,
+        276,
+        110,
+        70,
+        48,
+        "-",
+        OD_CYAN
+    );
+
+    drawAmoledButton(
+        lcd,
+        364,
+        110,
+        70,
+        48,
+        "+",
+        OD_CYAN
+    );
+
+    lcd->setTextSize(2);
+    lcd->setTextColor(OD_MUTED);
+    lcd->drawCenterString(
+        "Damps detected mid-drift hunting",
+        UI_CENTER_X,
+        190
+    );
+    lcd->drawCenterString(
+        "Idle, entry and transitions bypass it",
+        UI_CENTER_X,
+        218
+    );
+    #else
+    lcd->setTextSize(3);
+    lcd->setTextColor(ROUND_CYAN);
+    lcd->drawCenterString("Stability", 120, 14);
+
+    drawRoundAdjustRow(
+        lcd,
+        "HUNT DAMPING",
+        String(settings.getGyroHuntDamping()),
+        0,
+        ROUND_CYAN
+    );
+
+    lcd->setTextSize(1);
+    lcd->setTextColor(0xBDF7);
+    lcd->drawCenterString(
+        "damps detected mid-drift hunting",
+        120,
+        151
+    );
+    lcd->drawCenterString(
+        "idle / entry / transition bypass",
+        120,
+        169
+    );
+    #endif
+
+    drawPageDots();
+}
+
+
+bool UI::isProfilesPage()
+{
+    return
+        #if defined(OPENDRIFT_BOARD_AMOLED_164)
+        page == 9;
+        #else
+        page == 10;
+        #endif
+}
+
+
+void UI::drawProfilesPage(
+    Settings& settings
+)
+{
+    drawUiBackground(lcd);
+
+    const uint8_t visibleProfiles = 4;
+
+    uint8_t profileCount =
+        settings.getProfileCount();
+
+    uint8_t maxScroll =
+        profileCount > visibleProfiles
+        ?
+        profileCount - visibleProfiles
+        :
+        0;
+
+    profileScroll = min(
+        profileScroll,
+        maxScroll
+    );
+
+    #if defined(OPENDRIFT_BOARD_AMOLED_164)
+    drawAmoledHeader(
+        lcd,
+        "Profiles",
+        OD_CYAN
+    );
+
+    if(profileCount == 0)
+    {
+        lcd->setTextSize(2);
+        lcd->setTextColor(OD_TEXT);
+        lcd->drawCenterString(
+            "No driving profiles yet",
+            UI_CENTER_X,
+            104
+        );
+
+        lcd->setTextColor(OD_MUTED);
+        lcd->drawCenterString(
+            "Create profiles in the web configurator",
+            UI_CENTER_X,
+            142
+        );
+    }
+    else
+    {
+        const int rowStart = 46;
+        const int rowHeight = 47;
+
+        for(uint8_t slot = 0; slot < visibleProfiles; slot++)
+        {
+            uint8_t index =
+                profileScroll + slot;
+
+            if(index >= profileCount)
+            {
+                break;
+            }
+
+            const Settings::DrivingProfile* profile =
+                settings.getProfile(index);
+
+            if(profile == nullptr)
+            {
+                continue;
+            }
+
+            bool active =
+                settings.getActiveProfileIndex() == index;
+
+            int y =
+                rowStart + (slot * rowHeight);
+
+            uint16_t accent =
+                active ? OD_GREEN : OD_DIM;
+
+            lcd->drawRoundRect(
+                18,
+                y,
+                420,
+                41,
+                6,
+                accent
+            );
+
+            lcd->setTextSize(2);
+            lcd->setTextColor(
+                active ? OD_GREEN : OD_TEXT
+            );
+            lcd->drawString(
+                profile->name,
+                30,
+                y + 10
+            );
+
+            lcd->setTextSize(1);
+            lcd->setTextColor(OD_MUTED);
+
+            String summary =
+                "G " + String(profile->gain, 2) +
+                "   HUNT " + String(profile->gyroHuntDamping) +
+                "   HOLD " + String(profile->gyroHoldBoost);
+
+            lcd->drawRightString(
+                summary.c_str(),
+                426,
+                y + 14
+            );
+        }
+
+        if(profileCount > visibleProfiles)
+        {
+            int trackHeight = 182;
+            int thumbHeight = max(
+                24,
+                (trackHeight * visibleProfiles) / profileCount
+            );
+
+            int thumbY =
+                47 +
+                (
+                    (trackHeight - thumbHeight) *
+                    profileScroll
+                ) /
+                max(1, (int)maxScroll);
+
+            lcd->drawFastVLine(446, 47, trackHeight, OD_DIM);
+            lcd->fillRect(443, thumbY, 7, thumbHeight, OD_CYAN);
+        }
+    }
+    #else
+    lcd->setTextSize(3);
+    lcd->setTextColor(ROUND_CYAN);
+    lcd->drawCenterString("Profiles", 120, 14);
+
+    if(profileCount == 0)
+    {
+        lcd->setTextSize(2);
+        lcd->setTextColor(TFT_WHITE);
+        lcd->drawCenterString("NO PROFILES", 120, 94);
+
+        lcd->setTextSize(1);
+        lcd->setTextColor(0xBDF7);
+        lcd->drawCenterString("create one in web config", 120, 128);
+    }
+    else
+    {
+        const int rowStart = 43;
+        const int rowHeight = 40;
+
+        for(uint8_t slot = 0; slot < visibleProfiles; slot++)
+        {
+            uint8_t index =
+                profileScroll + slot;
+
+            if(index >= profileCount)
+            {
+                break;
+            }
+
+            const Settings::DrivingProfile* profile =
+                settings.getProfile(index);
+
+            if(profile == nullptr)
+            {
+                continue;
+            }
+
+            bool active =
+                settings.getActiveProfileIndex() == index;
+
+            int y =
+                rowStart + (slot * rowHeight);
+
+            uint16_t accent =
+                active ? TFT_GREEN : ROUND_DIM;
+
+            lcd->drawRoundRect(
+                24,
+                y,
+                192,
+                35,
+                5,
+                accent
+            );
+
+            lcd->setTextSize(1);
+            lcd->setTextColor(
+                active ? TFT_GREEN : TFT_WHITE
+            );
+            lcd->drawString(
+                profile->name,
+                34,
+                y + 6
+            );
+
+            lcd->setTextColor(0xBDF7);
+
+            String summary =
+                "G" + String(profile->gain, 2) +
+                " H" + String(profile->gyroHuntDamping);
+
+            lcd->drawRightString(
+                summary.c_str(),
+                205,
+                y + 19
+            );
+        }
+
+        if(profileCount > visibleProfiles)
+        {
+            int trackHeight = 154;
+            int thumbHeight = max(
+                20,
+                (trackHeight * visibleProfiles) / profileCount
+            );
+
+            int thumbY =
+                44 +
+                (
+                    (trackHeight - thumbHeight) *
+                    profileScroll
+                ) /
+                max(1, (int)maxScroll);
+
+            lcd->drawFastVLine(222, 44, trackHeight, ROUND_DIM);
+            lcd->fillRect(220, thumbY, 5, thumbHeight, ROUND_CYAN);
+        }
+    }
+    #endif
+
+    drawPageDots();
 }
 
 
@@ -3260,26 +3653,16 @@ void UI::drawRoundRadioPage(
 
         lcd->setTextSize(2);
         lcd->setTextColor(TFT_WHITE);
-        lcd->drawString("GAIN", 24, 106);
-
-        if(settings.getThrottleOutputEnabled())
-        {
-            lcd->setTextSize(1);
-            lcd->setTextColor(TFT_YELLOW);
-            lcd->drawString("GPIO18 THROTTLE OUT", 86, 111);
-        }
-        else
-        {
-            lcd->drawNumber(gainRadio.getPulseWidth(), 96, 106);
-            lcd->setTextColor(
-                gainRadio.hasSignal() ? TFT_GREEN : TFT_RED
-            );
-            lcd->drawString(
-                gainRadio.hasSignal() ? "OK" : "NO",
-                178,
-                106
-            );
-        }
+        lcd->drawString("THR", 24, 106);
+        lcd->drawNumber(gainRadio.getPulseWidth(), 96, 106);
+        lcd->setTextColor(
+            gainRadio.hasSignal() ? TFT_GREEN : TFT_RED
+        );
+        lcd->drawString(
+            gainRadio.hasSignal() ? "OK" : "NO",
+            178,
+            106
+        );
 
         lcd->setTextColor(TFT_WHITE);
         lcd->setTextSize(2);
@@ -3288,7 +3671,7 @@ void UI::drawRoundRadioPage(
         lcd->drawFloat(gyro.getGain(), 2, 136, 157);
         lcd->setTextSize(1);
         lcd->setTextColor(0xBDF7);
-        lcd->drawCenterString("three live radio values", 120, 188);
+        lcd->drawCenterString("radio inputs / saved gain", 120, 188);
     }
     else if(radioSection == 1)
     {
@@ -5105,88 +5488,165 @@ int8_t UI::repeatButtonAt(
             return 14;
     }
 
+    if(page == 8)
+    {
+        if(buttonPressed(x, y, 276, 110, 70, 48))
+            return 23;
+
+        if(buttonPressed(x, y, 364, 110, 70, 48))
+            return 24;
+    }
+
     return 0;
     #endif
 
     if(page == 0)
     {
-        if(buttonPressed(x, y, 20, 120, 60, 40))
+        if(buttonPressed(x, y, 30, 109, 58, 38))
             return 1;
 
-        if(buttonPressed(x, y, 160, 120, 60, 40))
+        if(buttonPressed(x, y, 152, 109, 58, 38))
             return 2;
     }
 
     if(page == 1)
     {
-        if(buttonPressed(x, y, 20, 120, 60, 40))
+        if(buttonPressed(x, y, 26, 61, 44, 30))
             return 3;
 
-        if(buttonPressed(x, y, 160, 120, 60, 40))
+        if(buttonPressed(x, y, 170, 61, 44, 30))
             return 4;
+
+        if(buttonPressed(x, y, 26, 171, 44, 30))
+            return 21;
+
+        if(buttonPressed(x, y, 170, 171, 44, 30))
+            return 22;
     }
 
     if(page == 2)
     {
-        if(buttonPressed(x, y, 20, 47, 44, 28))
+        if(buttonPressed(x, y, 26, 61, 44, 30))
             return 5;
 
-        if(buttonPressed(x, y, 176, 47, 44, 28))
+        if(buttonPressed(x, y, 170, 61, 44, 30))
             return 6;
 
-        if(buttonPressed(x, y, 20, 78, 44, 28))
+        if(buttonPressed(x, y, 26, 116, 44, 30))
             return 7;
 
-        if(buttonPressed(x, y, 176, 78, 44, 28))
+        if(buttonPressed(x, y, 170, 116, 44, 30))
             return 8;
 
-        if(buttonPressed(x, y, 20, 109, 44, 28))
+        if(buttonPressed(x, y, 26, 171, 44, 30))
             return 15;
 
-        if(buttonPressed(x, y, 176, 109, 44, 28))
+        if(buttonPressed(x, y, 170, 171, 44, 30))
             return 16;
-
-        if(buttonPressed(x, y, 20, 140, 44, 28))
-            return 17;
-
-        if(buttonPressed(x, y, 176, 140, 44, 28))
-            return 18;
-
-        if(buttonPressed(x, y, 20, 171, 44, 28))
-            return 19;
-
-        if(buttonPressed(x, y, 176, 171, 44, 28))
-            return 20;
     }
 
     if(page == 3)
     {
-        if(buttonPressed(x, y, 20, 54, 44, 28))
+        if(buttonPressed(x, y, 26, 50, 44, 28))
             return 9;
 
-        if(buttonPressed(x, y, 176, 54, 44, 28))
+        if(buttonPressed(x, y, 170, 50, 44, 28))
             return 10;
 
-        if(buttonPressed(x, y, 20, 88, 44, 28))
+        if(buttonPressed(x, y, 26, 91, 44, 28))
             return 11;
 
-        if(buttonPressed(x, y, 176, 88, 44, 28))
+        if(buttonPressed(x, y, 170, 91, 44, 28))
             return 12;
 
-        if(buttonPressed(x, y, 20, 122, 44, 28))
+        if(buttonPressed(x, y, 26, 132, 44, 28))
+            return 19;
+
+        if(buttonPressed(x, y, 170, 132, 44, 28))
+            return 20;
+
+        if(buttonPressed(x, y, 26, 173, 44, 28))
             return 13;
 
-        if(buttonPressed(x, y, 176, 122, 44, 28))
+        if(buttonPressed(x, y, 170, 173, 44, 28))
             return 14;
+    }
 
-        if(buttonPressed(x, y, 20, 156, 44, 28))
-            return 21;
+    if(page == 9)
+    {
+        if(buttonPressed(x, y, 22, 55, 52, 42))
+            return 23;
 
-        if(buttonPressed(x, y, 176, 156, 44, 28))
-            return 22;
+        if(buttonPressed(x, y, 166, 55, 52, 42))
+            return 24;
     }
 
     return 0;
+}
+
+
+bool UI::actionButtonAt(
+    uint16_t x,
+    uint16_t y
+)
+{
+    if(repeatButtonAt(x, y) != 0)
+    {
+        return true;
+    }
+
+    #if defined(OPENDRIFT_BOARD_AMOLED_164)
+    if(page == 0)
+        return buttonPressed(x, y, 276, 148, 158, 54);
+
+    if(page == 1)
+        return buttonPressed(x, y, 276, 110, 158, 48);
+
+    if(page == 5)
+    {
+        return
+            buttonPressed(x, y, 286, 34, 136, 44) ||
+            buttonPressed(x, y, 286, 90, 136, 44) ||
+            buttonPressed(x, y, 286, 146, 136, 44) ||
+            buttonPressed(x, y, 202, 158, 34, 40) ||
+            buttonPressed(x, y, 242, 158, 34, 40) ||
+            buttonPressed(x, y, 286, 202, 62, 36);
+    }
+
+    if(page == 6)
+        return buttonPressed(x, y, 296, 70, 130, 92);
+
+    if(page == 7)
+        return buttonPressed(x, y, 150, 202, 240, 38);
+    #else
+    if(page == 0)
+        return buttonPressed(x, y, 55, 164, 130, 38);
+
+    if(page == 1)
+        return buttonPressed(x, y, 43, 116, 154, 34);
+
+    if(page == 5)
+    {
+        return
+            buttonPressed(x, y, 43, 88, 154, 34) ||
+            buttonPressed(x, y, 38, 158, 44, 34) ||
+            buttonPressed(x, y, 158, 158, 44, 34);
+    }
+
+    if(page == 6)
+    {
+        return
+            buttonPressed(x, y, 40, 55, 160, 36) ||
+            buttonPressed(x, y, 40, 104, 160, 36) ||
+            buttonPressed(x, y, 40, 153, 160, 36);
+    }
+
+    if(page == 7)
+        return buttonPressed(x, y, 50, 145, 140, 42);
+
+    #endif
+
+    return false;
 }
 
 
@@ -5358,11 +5818,19 @@ bool UI::applyRepeatButton(
             settings.setGyroHoldBoost(
                 settings.getGyroHoldBoost() - 1
             );
+
+            gyro.setHoldBoost(
+                settings.getGyroHoldBoost()
+            );
             break;
 
         case 20:
             settings.setGyroHoldBoost(
                 settings.getGyroHoldBoost() + 1
+            );
+
+            gyro.setHoldBoost(
+                settings.getGyroHoldBoost()
             );
             break;
 
@@ -5386,36 +5854,52 @@ bool UI::applyRepeatButton(
             );
             break;
 
+        case 23:
+            settings.setGyroHuntDamping(
+                settings.getGyroHuntDamping() - 1
+            );
+
+            gyro.setHuntDamping(
+                settings.getGyroHuntDamping()
+            );
+            break;
+
+        case 24:
+            settings.setGyroHuntDamping(
+                settings.getGyroHuntDamping() + 1
+            );
+
+            gyro.setHuntDamping(
+                settings.getGyroHuntDamping()
+            );
+            break;
+
         default:
             return false;
     }
 
-    if(
-        page == 1 &&
-        (
-            button == 21 ||
-            button == 22
-        )
-    )
+    if(page == 1)
     {
         drawControlPage(
             gyro,
             settings
         );
     }
-    else if(
-        (
-            button >= 9 &&
-            button <= 14
-        )
-        ||
-        (
-            button >= 21 &&
-            button <= 22
-        )
-    )
+    else if(page == 3)
     {
         drawResponsePage(
+            settings
+        );
+    }
+    else if(
+        #if defined(OPENDRIFT_BOARD_AMOLED_164)
+        page == 8
+        #else
+        page == 9
+        #endif
+    )
+    {
+        drawStabilityPage(
             settings
         );
     }
@@ -5456,6 +5940,7 @@ void UI::update(
 
     #if !defined(OPENDRIFT_BOARD_AMOLED_164)
     if(
+        trackingSwipe &&
         gesture == SWIPE_LEFT &&
         millis() - lastPageSwipe > 350
     )
@@ -5485,6 +5970,7 @@ void UI::update(
     }
 
     if(
+        trackingSwipe &&
         gesture == SWIPE_RIGHT &&
         millis() - lastPageSwipe > 350
     )
@@ -5548,9 +6034,19 @@ void UI::update(
         touchStartY =
             touch.getY();
 
-        trackingSwipe = true;
+        heldRepeatButton =
+            repeatButtonAt(
+                touchStartX,
+                touchStartY
+            );
 
-        heldRepeatButton = 0;
+        trackingSwipe =
+            !actionButtonAt(
+                touchStartX,
+                touchStartY
+            );
+
+        nextRepeatAt = 0;
 
         #if defined(OPENDRIFT_BOARD_AMOLED_164)
         swipePreviewActive = false;
@@ -5562,6 +6058,63 @@ void UI::update(
         lastSwipePreviewAt = 0;
         #endif
 
+        if(heldRepeatButton != 0)
+        {
+            applyRepeatButton(
+                heldRepeatButton,
+                gyro,
+                settings
+            );
+
+            nextRepeatAt =
+                millis() + 450;
+
+            lastTouchState =
+                touched;
+
+            return;
+        }
+
+    }
+
+
+    if(
+        touched &&
+        heldRepeatButton != 0
+    )
+    {
+        int8_t currentButton =
+            repeatButtonAt(
+                touch.getX(),
+                touch.getY()
+            );
+
+        if(currentButton == heldRepeatButton)
+        {
+            unsigned long now =
+                millis();
+
+            if((long)(now - nextRepeatAt) >= 0)
+            {
+                applyRepeatButton(
+                    heldRepeatButton,
+                    gyro,
+                    settings
+                );
+
+                nextRepeatAt =
+                    now + 90;
+            }
+        }
+        else
+        {
+            heldRepeatButton = 0;
+        }
+
+        lastTouchState =
+            touched;
+
+        return;
     }
 
 
@@ -5660,6 +6213,110 @@ void UI::update(
 
         if(trackingSwipe)
         {
+            if(
+                isProfilesPage() &&
+                abs(deltaY) > 34 &&
+                abs(deltaY) > abs(delta)
+            )
+            {
+                #if defined(OPENDRIFT_BOARD_AMOLED_164)
+                if(swipePreviewActive)
+                {
+                    finishSwipePreview(false);
+                }
+                #endif
+
+                uint8_t profileCount =
+                    settings.getProfileCount();
+
+                uint8_t maxScroll =
+                    profileCount > 4
+                    ?
+                    profileCount - 4
+                    :
+                    0;
+
+                int rowHeight =
+                    #if defined(OPENDRIFT_BOARD_AMOLED_164)
+                    47;
+                    #else
+                    40;
+                    #endif
+
+                uint8_t steps = max(
+                    1,
+                    abs(deltaY) / rowHeight
+                );
+
+                if(deltaY < 0)
+                {
+                    profileScroll = min(
+                        (int)maxScroll,
+                        (int)profileScroll + steps
+                    );
+                }
+                else
+                {
+                    profileScroll = max(
+                        0,
+                        (int)profileScroll - steps
+                    );
+                }
+
+                drawProfilesPage(settings);
+            }
+            else if(
+                isProfilesPage() &&
+                abs(delta) < 22 &&
+                abs(deltaY) < 22
+            )
+            {
+                #if defined(OPENDRIFT_BOARD_AMOLED_164)
+                if(swipePreviewActive)
+                {
+                    finishSwipePreview(false);
+                }
+                #endif
+
+                int rowStart =
+                    #if defined(OPENDRIFT_BOARD_AMOLED_164)
+                    46;
+                    #else
+                    43;
+                    #endif
+
+                int rowHeight =
+                    #if defined(OPENDRIFT_BOARD_AMOLED_164)
+                    47;
+                    #else
+                    40;
+                    #endif
+
+                int rowEnd =
+                    rowStart + (4 * rowHeight);
+
+                if(
+                    touchStartY >= rowStart &&
+                    touchStartY < rowEnd
+                )
+                {
+                    uint8_t slot =
+                        (touchStartY - rowStart) /
+                        rowHeight;
+
+                    uint8_t index =
+                        profileScroll + slot;
+
+                    if(index < settings.getProfileCount())
+                    {
+                        settings.activateProfile(index);
+                    }
+                }
+
+                drawProfilesPage(settings);
+            }
+            else
+            {
             #if defined(OPENDRIFT_BOARD_AMOLED_164)
             if(swipePreviewActive)
             {
@@ -5730,6 +6387,7 @@ void UI::update(
             }
 
             }
+            }
         }
 
 
@@ -5760,26 +6418,6 @@ void UI::update(
             touch.getY();
 
         #if defined(OPENDRIFT_BOARD_AMOLED_164)
-        int8_t repeatButton =
-            repeatButtonAt(
-                x,
-                y
-            );
-
-        if(repeatButton != 0)
-        {
-            applyRepeatButton(
-                repeatButton,
-                gyro,
-                settings
-            );
-
-            lastTouchState =
-                touched;
-
-            return;
-        }
-
         if(
             page == 0 &&
             buttonPressed(
@@ -6358,8 +6996,8 @@ void UI::update(
 
             if(buttonPressed(
                 x,y,
-                26,61,
-                44,30
+                26,50,
+                44,28
             ))
             {
 
@@ -6372,8 +7010,8 @@ void UI::update(
 
             if(buttonPressed(
                 x,y,
-                170,61,
-                44,30
+                170,50,
+                44,28
             ))
             {
 
@@ -6386,8 +7024,8 @@ void UI::update(
 
             if(buttonPressed(
                 x,y,
-                26,116,
-                44,30
+                26,91,
+                44,28
             ))
             {
 
@@ -6400,8 +7038,8 @@ void UI::update(
 
             if(buttonPressed(
                 x,y,
-                170,116,
-                44,30
+                170,91,
+                44,28
             ))
             {
 
@@ -6413,8 +7051,44 @@ void UI::update(
 
             if(buttonPressed(
                 x,y,
-                26,171,
-                44,30
+                26,132,
+                44,28
+            ))
+            {
+
+                settings.setGyroHoldBoost(
+                    settings.getGyroHoldBoost() - 1
+                );
+
+                gyro.setHoldBoost(
+                    settings.getGyroHoldBoost()
+                );
+
+            }
+
+
+            if(buttonPressed(
+                x,y,
+                170,132,
+                44,28
+            ))
+            {
+
+                settings.setGyroHoldBoost(
+                    settings.getGyroHoldBoost() + 1
+                );
+
+                gyro.setHoldBoost(
+                    settings.getGyroHoldBoost()
+                );
+
+            }
+
+
+            if(buttonPressed(
+                x,y,
+                26,173,
+                44,28
             ))
             {
 
@@ -6427,8 +7101,8 @@ void UI::update(
 
             if(buttonPressed(
                 x,y,
-                170,171,
-                44,30
+                170,173,
+                44,28
             ))
             {
 
@@ -6674,31 +7348,17 @@ void UI::update(
                     settings
                 );
 
+                // WiFi startup/shutdown can outlive the original tap. Prevent
+                // its stale gesture from being handled as a page swipe.
+                trackingSwipe = false;
+
+                lastPageSwipe =
+                    millis();
+
             }
 
         }
 
-
-        if(
-            page == 8 &&
-            buttonPressed(
-                x,
-                y,
-                43,
-                137,
-                154,
-                40
-            )
-        )
-        {
-            settings.setThrottleOutputEnabled(
-                !settings.getThrottleOutputEnabled()
-            );
-
-            drawSystemPage(
-                settings
-            );
-        }
 
     }
 

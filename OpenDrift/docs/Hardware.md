@@ -1,17 +1,49 @@
 # OpenDrift Hardware Notes
 
-## IMU
+## Primary board
 
-Sensor:
-QMI8658
+The final supported target is the Waveshare ESP32-S3 Touch AMOLED 1.64. The older Waveshare 1.28-inch round display remains as a deprecated experimental build.
 
-I2C:
-SDA: GPIO 6
-SCL: GPIO 7
+## QMI8658 IMU
 
-Yaw axis:
-Z axis
+Both boards use the QMI8658 six-axis IMU. OpenDrift uses body Z as yaw and records body X/Y gyro plus all three accelerometer axes for terrain and load-transfer analysis.
 
-Rotation direction:
-Clockwise rotation = positive Z
-Counter-clockwise rotation = negative Z
+| Board | SDA | SCL |
+| --- | ---: | ---: |
+| AMOLED 1.64 | GPIO 47 | GPIO 48 |
+| Round 1.28 | GPIO 6 | GPIO 7 |
+
+The current board orientation reports clockwise rotation as positive Z and counter-clockwise rotation as negative Z. Always verify correction direction by rotating the complete car before driving.
+
+## Receiver and servo routing
+
+### AMOLED 1.64
+
+| Signal | GPIO | Direction |
+| --- | ---: | --- |
+| Servo output | 16 | Output |
+| Receiver steering | 17 | Input |
+| Receiver throttle sensing | 15 | Input |
+| Gain input or throttle passthrough | 18 | Selectable |
+
+### Round 1.28
+
+| Signal | GPIO | Direction |
+| --- | ---: | --- |
+| Servo output | 16 | Output |
+| Receiver steering | 17 | Input |
+| Receiver throttle sensing | 18 | Input |
+
+The round board does not have a spare gain-channel input in the current routing. Its Gain comes from the saved setting/profile.
+
+## Throttle sensing
+
+Throttle sensing is electrically optional and automatically falls back when no valid PWM signal exists. It is strongly recommended for Performance Mode because it lets the controller identify power changes and release settled-drift Hold, Memory, and Hunt behavior at the correct time.
+
+Only the receiver signal and a shared ground are required. OpenDrift does not power the receiver or ESC through the throttle input.
+
+## Power and grounding
+
+The receiver, ESP32 board, and servo/ESC system must share ground. Power the steering servo from an appropriate BEC or receiver rail; do not draw servo current through the ESP32 board.
+
+Fast drift servos can draw large transient current and can oscillate from their own internal settings. Verify servo stability directly from the receiver before diagnosing the gyro.

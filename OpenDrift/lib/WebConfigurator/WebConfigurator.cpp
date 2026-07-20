@@ -58,6 +58,33 @@ void WebConfigurator::begin(
     );
 
     server.on(
+        "/create-profile",
+        HTTP_POST,
+        [this]()
+        {
+            handleProfileCreate();
+        }
+    );
+
+    server.on(
+        "/activate-profile",
+        HTTP_POST,
+        [this]()
+        {
+            handleProfileActivate();
+        }
+    );
+
+    server.on(
+        "/delete-profile",
+        HTTP_POST,
+        [this]()
+        {
+            handleProfileDelete();
+        }
+    );
+
+    server.on(
         "/blackbox.csv",
         HTTP_GET,
         [this]()
@@ -136,7 +163,7 @@ void WebConfigurator::handleRoot()
 
     String html;
 
-    html.reserve(9000);
+    html.reserve(14000);
 
     html += F("<!doctype html><html><head><meta name='viewport' content='width=device-width,initial-scale=1'>");
     html += F("<title>OpenDrift Config</title><style>");
@@ -148,7 +175,8 @@ void WebConfigurator::handleRoot()
     html += F("input[type=checkbox]{width:auto;transform:scale(1.3);margin-right:8px}.row{display:grid;grid-template-columns:1fr 1fr;gap:10px}");
     html += F(".status{display:grid;grid-template-columns:1fr 1fr;gap:8px}.pill{background:#0b0d10;border:1px solid #33383f;border-radius:6px;padding:10px}");
     html += F("button{width:100%;padding:13px 16px;border:0;border-radius:6px;background:#24a36b;color:#fff;font-size:17px;font-weight:700;margin-top:16px}");
-    html += F("a{color:#65b7ff}@media(max-width:560px){.row,.status{grid-template-columns:1fr}}");
+    html += F(".profile{display:grid;grid-template-columns:1fr 96px 82px;gap:8px;align-items:center;background:#0b0d10;border:1px solid #33383f;border-radius:6px;padding:9px;margin:8px 0}.profile.active{border-color:#24a36b}.profile strong{display:block}.profile small{color:#aeb4bb}.profile form{margin:0}.profile button{margin:0;padding:9px 6px;font-size:13px}.profile .danger{background:#973b45}.create-profile{display:grid;grid-template-columns:1fr 150px;gap:10px;align-items:end}.create-profile button{margin:0;height:43px}");
+    html += F("a{color:#65b7ff}@media(max-width:560px){.row,.status,.create-profile{grid-template-columns:1fr}.profile{grid-template-columns:1fr 1fr}.profile>div{grid-column:1/-1}}");
     html += F("</style></head><body><main>");
     html += F("<h1>OpenDrift</h1><div class='sub'>Web configurator</div>");
 
@@ -156,17 +184,74 @@ void WebConfigurator::handleRoot()
     html += F("<div class='pill'>Steering: ");
     html += String(steeringRadio->getPulseWidth());
     html += steeringRadio->hasSignal() ? F(" OK") : F(" NO SIGNAL");
+    #if defined(OPENDRIFT_BOARD_AMOLED_164)
     html += F("</div><div class='pill'>Gain: ");
     html += String(gainRadio->getPulseWidth());
     html += gainRadio->hasSignal() ? F(" OK") : F(" NO SIGNAL");
+    #endif
     html += F("</div><div class='pill'>Throttle: ");
     html += String(throttleRadio->getPulseWidth());
     html += throttleRadio->hasSignal() ? F(" OK") : F(" NO SIGNAL");
     html += F("</div><div class='pill'>GPIO 18: ");
+    #if defined(OPENDRIFT_BOARD_AMOLED_164)
     html += settings->getThrottleOutputEnabled()
         ? F("THROTTLE OUT")
         : F("GAIN INPUT");
+    #else
+    html += F("THROTTLE INPUT");
+    #endif
     html += F("</div></div></div>");
+
+    html += F("<div class='card'><h2>Driving Profiles</h2><p class='sub'>Active: <strong>");
+    html += settings->getActiveProfileName();
+    html += F("</strong>. Active profiles automatically keep trackside tune changes.</p>");
+
+    for(uint8_t i = 0; i < settings->getProfileCount(); i++)
+    {
+        const Settings::DrivingProfile* profile =
+            settings->getProfile(i);
+
+        if(profile == nullptr)
+        {
+            continue;
+        }
+
+        html += F("<div class='profile");
+
+        if(settings->getActiveProfileIndex() == i)
+        {
+            html += F(" active");
+        }
+
+        html += F("'><div><strong>");
+        html += profile->name;
+        html += F("</strong><small>Gain ");
+        html += String(profile->gain, 2);
+        html += F(" &middot; Hunt ");
+        html += String(profile->gyroHuntDamping);
+        html += F(" &middot; Hold ");
+        html += String(profile->gyroHoldBoost);
+        html += F("</small></div>");
+
+        html += F("<form method='post' action='/activate-profile'><input type='hidden' name='profile' value='");
+        html += String(i);
+        html += F("'><button type='submit'>Activate</button></form>");
+
+        html += F("<form method='post' action='/delete-profile' onsubmit=\"return confirm('Delete this profile?')\"><input type='hidden' name='profile' value='");
+        html += String(i);
+        html += F("'><button class='danger' type='submit'>Delete</button></form></div>");
+    }
+
+    if(settings->getProfileCount() < Settings::MAX_PROFILES)
+    {
+        html += F("<form class='create-profile' method='post' action='/create-profile'><div><label>New profile name</label><input name='name' type='text' maxlength='23' required placeholder='Example: P-tile'></div><button type='submit'>Create from current tune</button></form>");
+    }
+    else
+    {
+        html += F("<p class='sub'>Profile limit reached. Delete one to create another.</p>");
+    }
+
+    html += F("</div>");
 
     html += F("<form method='post' action='/save'>");
 
@@ -175,12 +260,13 @@ void WebConfigurator::handleRoot()
     html += input("Deadband", "deadband", String(settings->getDeadband(), 2), "number", "1");
     html += input("Max correction us", "gyroMax", String(settings->getGyroMaxCorrection()), "number", "1");
     html += input("Smoothing", "gyroSmoothing", String(settings->getGyroSmoothing(), 2), "number", "0.01");
-    html += input("I gain", "gyroIGain", String(settings->getGyroIntegralGain(), 2), "number", "0.01");
-    html += input("I limit us", "gyroILimit", String(settings->getGyroIntegralLimit()), "number", "1");
+    html += input("Drift memory", "gyroIGain", String(settings->getGyroIntegralGain(), 2), "number", "0.01");
+    html += input("Memory limit us", "gyroILimit", String(settings->getGyroIntegralLimit()), "number", "1");
     html += input("Hold boost percent", "gyroHoldBoost", String(settings->getGyroHoldBoost()), "number", "1");
     html += input("Attack speed", "gyroAttack", String(settings->getGyroAttackSpeed()), "number", "1");
     html += input("Return speed", "gyroReturn", String(settings->getGyroReturnSpeed()), "number", "1");
-    html += input("Anti-wobble", "gyroAntiWobble", String(settings->getGyroAntiWobble()), "number", "1");
+    html += input("Anti-wobble (0-200)", "gyroAntiWobble", String(settings->getGyroAntiWobble()), "number", "1");
+    html += input("Detected hunt damping (0-100)", "gyroHuntDamping", String(settings->getGyroHuntDamping()), "number", "1");
     html += input("Steer damper ms", "steeringDamper", String(settings->getSteeringDamper()), "number", "1");
     html += F("</div>");
     html += checkbox("Reverse gyro correction", "gyroReverse", settings->getGyroReverse());
@@ -202,6 +288,7 @@ void WebConfigurator::handleRoot()
     html += F("</div></div>");
 
     html += F("<div class='card'><h2>Gain Channel Calibration</h2><div class='row'>");
+    #if defined(OPENDRIFT_BOARD_AMOLED_164)
     html += input("Gain low", "gainMin", String(settings->getGainMin()));
     html += input("Gain high", "gainMax", String(settings->getGainMax()));
     html += F("</div>");
@@ -210,6 +297,10 @@ void WebConfigurator::handleRoot()
         "throttleOutputEnabled",
         settings->getThrottleOutputEnabled()
     );
+    #else
+    html += F("GPIO 18 is dedicated to throttle input on the round board. Gyro gain uses the saved Gain setting.");
+    html += F("</div>");
+    #endif
     html += F("</div>");
 
     html += F("<div class='card'><h2>WiFi</h2>");
@@ -349,6 +440,13 @@ void WebConfigurator::handleSave()
         )
     );
 
+    settings->setGyroHuntDamping(
+        getIntArg(
+            "gyroHuntDamping",
+            settings->getGyroHuntDamping()
+        )
+    );
+
     settings->setSteeringDamper(
         getIntArg(
             "steeringDamper",
@@ -423,9 +521,11 @@ void WebConfigurator::handleSave()
         )
     );
 
+    #if defined(OPENDRIFT_BOARD_AMOLED_164)
     settings->setThrottleOutputEnabled(
         server.hasArg("throttleOutputEnabled")
     );
+    #endif
 
     settings->setWifiEnabled(
         server.hasArg("wifiEnabled")
@@ -475,6 +575,10 @@ void WebConfigurator::handleSave()
         gyro->setAntiWobble(
             settings->getGyroAntiWobble()
         );
+
+        gyro->setHuntDamping(
+            settings->getGyroHuntDamping()
+        );
     }
 
     server.sendHeader(
@@ -485,6 +589,95 @@ void WebConfigurator::handleSave()
     server.send(
         303
     );
+}
+
+
+
+void WebConfigurator::handleProfileCreate()
+{
+    if(
+        settings == nullptr ||
+        !server.hasArg("name")
+    )
+    {
+        server.send(
+            400,
+            "text/plain",
+            "Profile name required"
+        );
+
+        return;
+    }
+
+    if(settings->createProfile(server.arg("name")) < 0)
+    {
+        server.send(
+            400,
+            "text/plain",
+            "Could not create profile. Use a unique name and check the profile limit."
+        );
+
+        return;
+    }
+
+    server.sendHeader("Location", "/");
+    server.send(303);
+}
+
+
+void WebConfigurator::handleProfileActivate()
+{
+    if(
+        settings == nullptr ||
+        !server.hasArg("profile")
+    )
+    {
+        server.send(400, "text/plain", "Profile required");
+        return;
+    }
+
+    int index = server.arg("profile").toInt();
+
+    if(
+        index < 0 ||
+        index >= settings->getProfileCount() ||
+        !settings->activateProfile(index)
+    )
+    {
+        server.send(404, "text/plain", "Profile not found");
+        return;
+    }
+
+    server.sendHeader("Location", "/");
+    server.send(303);
+}
+
+
+void WebConfigurator::handleProfileDelete()
+{
+    if(
+        settings == nullptr ||
+        !server.hasArg("profile")
+    )
+    {
+        server.send(400, "text/plain", "Profile required");
+        return;
+    }
+
+    int index = server.arg("profile").toInt();
+
+    if(
+        index < 0 ||
+        index >= settings->getProfileCount() ||
+        !settings->deleteProfile(index)
+    )
+    {
+        server.send(404, "text/plain", "Profile not found");
+        return;
+    }
+
+    server.sendHeader("Location", "/");
+    server.send(303);
 }
 
 

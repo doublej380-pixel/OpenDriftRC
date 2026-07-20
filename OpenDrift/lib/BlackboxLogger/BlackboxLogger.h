@@ -17,6 +17,15 @@ public:
         unsigned long timeMs,
         float yaw,
         float filteredYaw,
+        float gyroX,
+        float gyroY,
+        float accelX,
+        float accelY,
+        float accelZ,
+        float accelMagnitude,
+        float accelDelta,
+        float tiltRate,
+        float surfaceDisturbance,
         int rawGyroCorrection,
         int slewedGyroCorrection,
         int steeringRaw,
@@ -34,6 +43,16 @@ public:
         int integralCorrection,
         int holdBoost,
         int antiWobble,
+        int huntDamping,
+        float huntControlYaw,
+        float huntSlowYaw,
+        float huntFastYaw,
+        float huntBlend,
+        float huntScore,
+        int controlPhase,
+        float settledBlend,
+        float throttleTransient,
+        float holdFactor,
         int attack,
         int returnSpeed,
         bool steeringSignal,
@@ -62,7 +81,7 @@ private:
 
     static const unsigned long flushIntervalMs = 1000;
 
-    const char* path = "/blackbox-v2.csv";
+    const char* path = "/blackbox-v5.csv";
 
     String buffer;
 

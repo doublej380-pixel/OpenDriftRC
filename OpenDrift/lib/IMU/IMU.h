@@ -18,6 +18,14 @@ public:
     float getGyroY();
     float getYawRate();
 
+    float getAccelX();
+    float getAccelY();
+    float getAccelZ();
+    float getAccelMagnitude();
+    float getAccelDelta();
+    float getTiltRate();
+    float getSurfaceDisturbanceScore();
+
 
 private:
 
@@ -26,6 +34,23 @@ private:
     float gyroX = 0;
     float gyroY = 0;
     float gyroZ = 0;
+
+    float accelX = 0;
+    float accelY = 0;
+    float accelZ = 0;
+
+    float slowAccelX = 0;
+    float slowAccelY = 0;
+    float slowAccelZ = 0;
+
+    float accelMagnitude = 0;
+    float accelDelta = 0;
+    float tiltRate = 0;
+    float surfaceDisturbanceScore = 0;
+
+    bool accelFilterReady = false;
+
+    uint32_t lastUpdateMicros = 0;
 
 
     #if defined(OPENDRIFT_BOARD_AMOLED_164)

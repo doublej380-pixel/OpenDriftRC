@@ -59,6 +59,11 @@ bool Settings::begin()
         50
     );
 
+    gyroHuntDamping = prefs.getInt(
+        "gyroHunt",
+        0
+    );
+
     steeringDamper = prefs.getInt(
         "strDamp",
         0
@@ -134,6 +139,8 @@ bool Settings::begin()
         false
     );
 
+    loadProfiles();
+
     return true;
 }
 
@@ -203,6 +210,11 @@ void Settings::save()
     prefs.putInt(
         "gyroWob",
         gyroAntiWobble
+    );
+
+    prefs.putInt(
+        "gyroHunt",
+        gyroHuntDamping
     );
 
     prefs.putInt(
@@ -278,6 +290,30 @@ void Settings::save()
     prefs.putBool(
         "thrOut",
         throttleOutputEnabled
+    );
+
+    if(
+        activeProfileIndex >= 0 &&
+        activeProfileIndex < profileCount
+    )
+    {
+        captureProfile(
+            profiles[activeProfileIndex]
+        );
+
+        persistProfile(
+            activeProfileIndex
+        );
+    }
+
+    prefs.putUChar(
+        "profCnt",
+        profileCount
+    );
+
+    prefs.putChar(
+        "profAct",
+        activeProfileIndex
     );
 
     dirty = false;
@@ -449,6 +485,23 @@ int Settings::getGyroAntiWobble()
 void Settings::setGyroAntiWobble(int value)
 {
     gyroAntiWobble =
+        constrain(
+            value,
+            0,
+            200
+        );
+
+    dirty = true;
+}
+
+int Settings::getGyroHuntDamping()
+{
+    return gyroHuntDamping;
+}
+
+void Settings::setGyroHuntDamping(int value)
+{
+    gyroHuntDamping =
         constrain(
             value,
             0,
@@ -655,4 +708,348 @@ void Settings::setThrottleOutputEnabled(bool value)
 {
     throttleOutputEnabled = value;
     dirty = true;
+}
+
+// --------------------
+// Driving profiles
+// --------------------
+
+uint8_t Settings::getProfileCount()
+{
+    return profileCount;
+}
+
+int8_t Settings::getActiveProfileIndex()
+{
+    return activeProfileIndex;
+}
+
+const char* Settings::getActiveProfileName()
+{
+    if(
+        activeProfileIndex < 0 ||
+        activeProfileIndex >= profileCount
+    )
+    {
+        return "Current Tune";
+    }
+
+    return profiles[activeProfileIndex].name;
+}
+
+const Settings::DrivingProfile* Settings::getProfile(
+    uint8_t index
+)
+{
+    if(index >= profileCount)
+    {
+        return nullptr;
+    }
+
+    return &profiles[index];
+}
+
+int8_t Settings::createProfile(
+    const String& requestedName
+)
+{
+    if(profileCount >= MAX_PROFILES)
+    {
+        return -1;
+    }
+
+    String name =
+        sanitizeProfileName(requestedName);
+
+    if(name.length() == 0)
+    {
+        return -1;
+    }
+
+    for(uint8_t i = 0; i < profileCount; i++)
+    {
+        if(name.equalsIgnoreCase(profiles[i].name))
+        {
+            return -1;
+        }
+    }
+
+    if(dirty)
+    {
+        save();
+    }
+
+    DrivingProfile& profile =
+        profiles[profileCount];
+
+    profile = DrivingProfile();
+
+    name.toCharArray(
+        profile.name,
+        PROFILE_NAME_LENGTH
+    );
+
+    captureProfile(profile);
+
+    uint8_t newIndex = profileCount;
+
+    profileCount++;
+    activeProfileIndex = newIndex;
+
+    persistProfile(newIndex);
+
+    prefs.putUChar(
+        "profCnt",
+        profileCount
+    );
+
+    prefs.putChar(
+        "profAct",
+        activeProfileIndex
+    );
+
+    return activeProfileIndex;
+}
+
+bool Settings::activateProfile(
+    uint8_t index
+)
+{
+    if(index >= profileCount)
+    {
+        return false;
+    }
+
+    if(dirty)
+    {
+        save();
+    }
+
+    activeProfileIndex = index;
+
+    applyProfile(
+        profiles[index]
+    );
+
+    dirty = true;
+    save();
+
+    return true;
+}
+
+bool Settings::deleteProfile(
+    uint8_t index
+)
+{
+    if(index >= profileCount)
+    {
+        return false;
+    }
+
+    if(dirty)
+    {
+        save();
+    }
+
+    bool deletedActive =
+        activeProfileIndex == index;
+
+    for(uint8_t i = index; i + 1 < profileCount; i++)
+    {
+        profiles[i] = profiles[i + 1];
+    }
+
+    uint8_t previousLast =
+        profileCount - 1;
+
+    profiles[previousLast] = DrivingProfile();
+    profileCount--;
+
+    if(deletedActive)
+    {
+        activeProfileIndex = -1;
+    }
+    else if(activeProfileIndex > index)
+    {
+        activeProfileIndex--;
+    }
+
+    for(uint8_t i = 0; i < profileCount; i++)
+    {
+        persistProfile(i);
+    }
+
+    char key[12];
+
+    snprintf(
+        key,
+        sizeof(key),
+        "prof%u",
+        previousLast
+    );
+
+    prefs.remove(key);
+
+    prefs.putUChar(
+        "profCnt",
+        profileCount
+    );
+
+    prefs.putChar(
+        "profAct",
+        activeProfileIndex
+    );
+
+    return true;
+}
+
+void Settings::loadProfiles()
+{
+    profileCount = constrain(
+        (int)prefs.getUChar("profCnt", 0),
+        0,
+        (int)MAX_PROFILES
+    );
+
+    uint8_t loadedCount = 0;
+
+    for(uint8_t i = 0; i < profileCount; i++)
+    {
+        char key[12];
+
+        snprintf(
+            key,
+            sizeof(key),
+            "prof%u",
+            i
+        );
+
+        if(
+            prefs.getBytesLength(key) == sizeof(DrivingProfile) &&
+            prefs.getBytes(
+                key,
+                &profiles[loadedCount],
+                sizeof(DrivingProfile)
+            ) == sizeof(DrivingProfile) &&
+            profiles[loadedCount].version == 1 &&
+            profiles[loadedCount].name[0] != '\0'
+        )
+        {
+            profiles[loadedCount].name[PROFILE_NAME_LENGTH - 1] = '\0';
+            loadedCount++;
+        }
+    }
+
+    profileCount = loadedCount;
+
+    int storedActive =
+        prefs.getChar("profAct", -1);
+
+    activeProfileIndex =
+        storedActive >= 0 &&
+        storedActive < profileCount
+        ?
+        storedActive
+        :
+        -1;
+}
+
+void Settings::captureProfile(
+    DrivingProfile& profile
+)
+{
+    profile.version = 1;
+    profile.gain = gain;
+    profile.deadband = deadband;
+    profile.gyroSmoothing = gyroSmoothing;
+    profile.gyroIntegralGain = gyroIntegralGain;
+    profile.gyroMaxCorrection = gyroMaxCorrection;
+    profile.gyroAttackSpeed = gyroAttackSpeed;
+    profile.gyroReturnSpeed = gyroReturnSpeed;
+    profile.gyroIntegralLimit = gyroIntegralLimit;
+    profile.gyroHoldBoost = gyroHoldBoost;
+    profile.gyroAntiWobble = gyroAntiWobble;
+    profile.gyroHuntDamping = gyroHuntDamping;
+    profile.steeringDamper = steeringDamper;
+    profile.radioSteeringTravel = radioSteeringTravel;
+}
+
+void Settings::applyProfile(
+    const DrivingProfile& profile
+)
+{
+    gain = profile.gain;
+    deadband = profile.deadband;
+    gyroSmoothing = profile.gyroSmoothing;
+    gyroIntegralGain = profile.gyroIntegralGain;
+    gyroMaxCorrection = profile.gyroMaxCorrection;
+    gyroAttackSpeed = profile.gyroAttackSpeed;
+    gyroReturnSpeed = profile.gyroReturnSpeed;
+    gyroIntegralLimit = profile.gyroIntegralLimit;
+    gyroHoldBoost = profile.gyroHoldBoost;
+    gyroAntiWobble = profile.gyroAntiWobble;
+    gyroHuntDamping = profile.gyroHuntDamping;
+    steeringDamper = profile.steeringDamper;
+    radioSteeringTravel = profile.radioSteeringTravel;
+}
+
+bool Settings::persistProfile(
+    uint8_t index
+)
+{
+    if(index >= profileCount)
+    {
+        return false;
+    }
+
+    char key[12];
+
+    snprintf(
+        key,
+        sizeof(key),
+        "prof%u",
+        index
+    );
+
+    return prefs.putBytes(
+        key,
+        &profiles[index],
+        sizeof(DrivingProfile)
+    ) == sizeof(DrivingProfile);
+}
+
+String Settings::sanitizeProfileName(
+    const String& requestedName
+)
+{
+    String name = requestedName;
+    name.trim();
+
+    String clean;
+    clean.reserve(PROFILE_NAME_LENGTH - 1);
+
+    for(
+        size_t i = 0;
+        i < name.length() &&
+        clean.length() < PROFILE_NAME_LENGTH - 1;
+        i++
+    )
+    {
+        char value = name.charAt(i);
+
+        if(
+            isAlphaNumeric(value) ||
+            value == ' ' ||
+            value == '-' ||
+            value == '_' ||
+            value == '.'
+        )
+        {
+            clean += value;
+        }
+    }
+
+    clean.trim();
+
+    return clean;
 }

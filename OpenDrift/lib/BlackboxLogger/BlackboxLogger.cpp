@@ -61,6 +61,15 @@ void BlackboxLogger::log(
     unsigned long timeMs,
     float yaw,
     float filteredYaw,
+    float gyroX,
+    float gyroY,
+    float accelX,
+    float accelY,
+    float accelZ,
+    float accelMagnitude,
+    float accelDelta,
+    float tiltRate,
+    float surfaceDisturbance,
     int rawGyroCorrection,
     int slewedGyroCorrection,
     int steeringRaw,
@@ -78,6 +87,16 @@ void BlackboxLogger::log(
     int integralCorrection,
     int holdBoost,
     int antiWobble,
+    int huntDamping,
+    float huntControlYaw,
+    float huntSlowYaw,
+    float huntFastYaw,
+    float huntBlend,
+    float huntScore,
+    int controlPhase,
+    float settledBlend,
+    float throttleTransient,
+    float holdFactor,
     int attack,
     int returnSpeed,
     bool steeringSignal,
@@ -101,15 +120,24 @@ void BlackboxLogger::log(
         return;
     }
 
-    char line[288];
+    char line[576];
 
     snprintf(
         line,
         sizeof(line),
-        "%lu,%.3f,%.3f,%d,%d,%d,%d,%d,%d,%d,%d,%.3f,%.2f,%d,%.3f,%.3f,%d,%d,%d,%d,%d,%d,%d,%d,%d,%d\n",
+        "%lu,%.3f,%.3f,%.3f,%.3f,%.4f,%.4f,%.4f,%.4f,%.4f,%.3f,%.3f,%d,%d,%d,%d,%d,%d,%d,%d,%.3f,%.2f,%d,%.3f,%.3f,%d,%d,%d,%d,%d,%.3f,%.3f,%.3f,%.3f,%.3f,%d,%.3f,%.3f,%.3f,%d,%d,%d,%d,%d,%d\n",
         timeMs,
         yaw,
         filteredYaw,
+        gyroX,
+        gyroY,
+        accelX,
+        accelY,
+        accelZ,
+        accelMagnitude,
+        accelDelta,
+        tiltRate,
+        surfaceDisturbance,
         rawGyroCorrection,
         slewedGyroCorrection,
         steeringRaw,
@@ -127,6 +155,16 @@ void BlackboxLogger::log(
         integralCorrection,
         holdBoost,
         antiWobble,
+        huntDamping,
+        huntControlYaw,
+        huntSlowYaw,
+        huntFastYaw,
+        huntBlend,
+        huntScore,
+        controlPhase,
+        settledBlend,
+        throttleTransient,
+        holdFactor,
         attack,
         returnSpeed,
         steeringSignal ? 1 : 0,
@@ -263,7 +301,7 @@ bool BlackboxLogger::writeHeader()
     }
 
     file.println(
-        "time_ms,yaw,filtered_yaw,gyro_raw_us,gyro_slewed_us,steering_raw_us,steering_cmd_us,servo_us,servo_quiet,throttle_raw_us,gain_raw_us,gain,deadband,max_corr,smooth,i_gain,i_limit,i_us,hold_boost,anti_wobble,attack,return,steering_signal,throttle_signal,gain_signal,pin18_throttle_out"
+        "time_ms,yaw,filtered_yaw,gyro_x_dps,gyro_y_dps,accel_x_g,accel_y_g,accel_z_g,accel_mag_g,accel_delta_g,tilt_rate_dps,surface_disturbance,gyro_raw_us,gyro_slewed_us,steering_raw_us,steering_cmd_us,servo_us,servo_quiet,throttle_raw_us,gain_raw_us,gain,deadband,max_corr,smooth,i_gain,i_limit,i_us,hold_boost,anti_wobble,hunt_damping,hunt_control_yaw,hunt_slow_yaw,hunt_fast_yaw,hunt_blend,hunt_score,control_phase,settled_blend,throttle_transient,hold_factor,attack,return,steering_signal,throttle_signal,gain_signal,pin18_throttle_out"
     );
 
     file.close();

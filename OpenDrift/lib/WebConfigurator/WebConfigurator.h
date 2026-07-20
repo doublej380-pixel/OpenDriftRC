@@ -51,6 +51,12 @@ private:
 
     void handleSave();
 
+    void handleProfileCreate();
+
+    void handleProfileActivate();
+
+    void handleProfileDelete();
+
     void handleLogDownload();
 
     void handleLogFlush();

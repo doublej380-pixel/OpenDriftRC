@@ -95,16 +95,17 @@ private:
     // 3 = Response
     // 4 = Radio
     // 5 = Steering
-    // AMOLED: 6 = WiFi, 7 = System
-    // Round: 6 = Steering Cal, 7 = WiFi, 8 = System
+    // AMOLED: 6 = WiFi, 7 = System, 8 = Stability, 9 = Profiles
+    // Round: 6 = Steering Cal, 7 = WiFi, 8 = System, 9 = Stability,
+    //        10 = Profiles
 
     uint8_t page = 0;
 
 
     #if defined(OPENDRIFT_BOARD_AMOLED_164)
-    const uint8_t totalPages = 8;
+    const uint8_t totalPages = 10;
     #else
-    const uint8_t totalPages = 9;
+    const uint8_t totalPages = 11;
     #endif
 
 
@@ -128,6 +129,8 @@ private:
     int8_t heldRepeatButton = 0;
 
     unsigned long nextRepeatAt = 0;
+
+    uint8_t profileScroll = 0;
 
     #if defined(OPENDRIFT_BOARD_AMOLED_164)
     bool swipePreviewActive = false;
@@ -199,6 +202,16 @@ private:
         Settings& settings
     );
 
+    void drawStabilityPage(
+        Settings& settings
+    );
+
+    void drawProfilesPage(
+        Settings& settings
+    );
+
+    bool isProfilesPage();
+
 
 
     void drawSystemPage(
@@ -249,6 +262,11 @@ private:
     );
 
     int8_t repeatButtonAt(
+        uint16_t x,
+        uint16_t y
+    );
+
+    bool actionButtonAt(
         uint16_t x,
         uint16_t y
     );

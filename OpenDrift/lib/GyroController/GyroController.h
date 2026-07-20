@@ -11,7 +11,9 @@ public:
 
 
     int update(
-        float yawRate
+        float yawRate,
+        int throttlePulse = 1500,
+        bool throttleSignal = false
     );
 
 
@@ -78,6 +80,30 @@ public:
 
     int getAntiWobble();
 
+    void setHuntDamping(
+        int value
+    );
+
+    int getHuntDamping();
+
+    float getHuntControlYaw();
+
+    float getHuntSlowYaw();
+
+    float getHuntFastYaw();
+
+    float getHuntBlend();
+
+    float getHuntScore();
+
+    int getControlPhase();
+
+    float getSettledBlend();
+
+    float getThrottleTransient();
+
+    float getActiveHoldFactor();
+
 
     float getFilteredYaw();
 
@@ -108,6 +134,8 @@ private:
 
     int antiWobble = 50;
 
+    int huntDamping = 0;
+
 
     float filteredYaw = 0;
 
@@ -117,16 +145,47 @@ private:
 
     float holdBoostFiltered = 0;
 
+    float huntControlYaw = 0;
+
+    float huntSlowYaw = 0;
+
+    float huntFastYaw = 0;
+
+    float huntBlend = 0;
+
+    float huntScore = 0;
+
+    float huntReversalAge = 10.0f;
+
+    int8_t huntFastDirection = 0;
+
+    int8_t driftDirection = 0;
+
+    float directionTime = 0;
+
+    float transitionTime = 0;
+
+    uint8_t controlPhase = 0;
+
+    float settledBlend = 0;
+
+    float throttleTransientTime = 0;
+
+    int lastThrottlePulse = 1500;
+
+    bool throttleReady = false;
+
+    float activeHoldFactor = 1.0f;
+
 
     int servoOutput = 1500;
 
     int correctionOutput = 0;
 
-    int lastCorrectionMove = 0;
-
-
     bool calibrated = false;
 
     uint32_t lastUpdateMicros = 0;
+
+    void resetDynamicState();
 
 };
