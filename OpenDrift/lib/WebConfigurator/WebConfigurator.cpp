@@ -58,6 +58,15 @@ void WebConfigurator::begin(
     );
 
     server.on(
+        "/toggle-terrain",
+        HTTP_POST,
+        [this]()
+        {
+            handleTerrainToggle();
+        }
+    );
+
+    server.on(
         "/create-profile",
         HTTP_POST,
         [this]()
@@ -255,22 +264,31 @@ void WebConfigurator::handleRoot()
 
     html += F("<form method='post' action='/save'>");
 
-    html += F("<div class='card'><h2>Gyro</h2><div class='row'>");
+    html += F("<div class='card'><h2>Drive &amp; Limits</h2><div class='row'>");
     html += input("Gain", "gain", String(settings->getGain(), 2), "number", "0.01");
     html += input("Deadband", "deadband", String(settings->getDeadband(), 2), "number", "1");
-    html += input("Max correction us", "gyroMax", String(settings->getGyroMaxCorrection()), "number", "1");
-    html += input("Smoothing", "gyroSmoothing", String(settings->getGyroSmoothing(), 2), "number", "0.01");
-    html += input("Drift memory", "gyroIGain", String(settings->getGyroIntegralGain(), 2), "number", "0.01");
-    html += input("Memory limit us", "gyroILimit", String(settings->getGyroIntegralLimit()), "number", "1");
-    html += input("Hold boost percent", "gyroHoldBoost", String(settings->getGyroHoldBoost()), "number", "1");
-    html += input("Attack speed", "gyroAttack", String(settings->getGyroAttackSpeed()), "number", "1");
-    html += input("Return speed", "gyroReturn", String(settings->getGyroReturnSpeed()), "number", "1");
-    html += input("Anti-wobble (0-200)", "gyroAntiWobble", String(settings->getGyroAntiWobble()), "number", "1");
-    html += input("Detected hunt damping (0-100)", "gyroHuntDamping", String(settings->getGyroHuntDamping()), "number", "1");
-    html += input("Steer damper ms", "steeringDamper", String(settings->getSteeringDamper()), "number", "1");
+    html += input("Max correction (us)", "gyroMax", String(settings->getGyroMaxCorrection()), "number", "1");
     html += F("</div>");
     html += checkbox("Reverse gyro correction", "gyroReverse", settings->getGyroReverse());
     html += F("</div>");
+
+    html += F("<div class='card'><h2>Response</h2><div class='row'>");
+    html += input("Smoothing", "gyroSmoothing", String(settings->getGyroSmoothing(), 2), "number", "0.01");
+    html += input("Attack speed", "gyroAttack", String(settings->getGyroAttackSpeed()), "number", "1");
+    html += input("Return speed", "gyroReturn", String(settings->getGyroReturnSpeed()), "number", "1");
+    html += F("</div></div>");
+
+    html += F("<div class='card'><h2>Drift</h2><div class='row'>");
+    html += input("Hold boost (%)", "gyroHoldBoost", String(settings->getGyroHoldBoost()), "number", "1");
+    html += input("Drift memory", "gyroIGain", String(settings->getGyroIntegralGain(), 2), "number", "0.01");
+    html += input("Memory limit (us)", "gyroILimit", String(settings->getGyroIntegralLimit()), "number", "1");
+    html += F("</div></div>");
+
+    html += F("<div class='card'><h2>Stability</h2><div class='row'>");
+    html += input("Hunt damping (0-100)", "gyroHuntDamping", String(settings->getGyroHuntDamping()), "number", "1");
+    html += input("Center quiet (0-200)", "gyroAntiWobble", String(settings->getGyroAntiWobble()), "number", "1");
+    html += input("Input damper (ms)", "steeringDamper", String(settings->getSteeringDamper()), "number", "1");
+    html += F("</div></div>");
 
     html += F("<div class='card'><h2>Servo</h2>");
     html += checkbox("Reverse servo", "servoReverse", settings->getServoReverse());
@@ -314,6 +332,13 @@ void WebConfigurator::handleRoot()
 
     html += F("<button type='submit'>Save Settings</button></form>");
 
+    html += F("<div class='card'><h2>Slope / Terrain Assist</h2><p class='sub'>Status: <strong>");
+    html += settings->getTerrainAssistEnabled() ? F("ON") : F("OFF");
+    html += F("</strong>. Raw terrain telemetry remains in the blackbox in both modes.</p>");
+    html += F("<form method='post' action='/toggle-terrain'><button type='submit'>Turn ");
+    html += settings->getTerrainAssistEnabled() ? F("OFF") : F("ON");
+    html += F(" for A/B Test</button></form></div>");
+
     html += F("<div class='card'><h2>Blackbox Log</h2>");
 
     if(!settings->getBlackboxEnabled())
@@ -348,6 +373,34 @@ void WebConfigurator::handleRoot()
         200,
         "text/html",
         html
+    );
+}
+
+
+void WebConfigurator::handleTerrainToggle()
+{
+    if(settings == nullptr)
+    {
+        server.send(
+            503,
+            "text/plain",
+            "Settings unavailable"
+        );
+
+        return;
+    }
+
+    settings->setTerrainAssistEnabled(
+        !settings->getTerrainAssistEnabled()
+    );
+
+    server.sendHeader(
+        "Location",
+        "/"
+    );
+
+    server.send(
+        303
     );
 }
 

@@ -89,15 +89,8 @@ private:
     bool canUseRawAmoledBuffers();
 
     // Pages
-    // 0 = Main
-    // 1 = Gyro
-    // 2 = Tune
-    // 3 = Response
-    // 4 = Radio
-    // 5 = Steering
-    // AMOLED: 6 = WiFi, 7 = System, 8 = Stability, 9 = Profiles
-    // Round: 6 = Steering Cal, 7 = WiFi, 8 = System, 9 = Stability,
-    //        10 = Profiles
+    // Shared order: Drive, Limits, Response, Drift, Stability, Profiles,
+    // Radio, Steering. Round adds Steering Cal before WiFi and System.
 
     uint8_t page = 0;
 

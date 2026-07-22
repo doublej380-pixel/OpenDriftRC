@@ -1,0 +1,12 @@
+﻿Designator,Footprint,Quantity,Value,LCSC Part #
+C1,0805,1,10µF 25V X7R,
+C2,0603,1,100nF X7R,
+C3,0805,1,22µF 6.3V X7R,
+C4,0805,1,47µF X7R,
+J1,JST_PH_S3B-PH-K_1x03_P2.00mm_Horizontal,1,Servo_In,
+J2,JST_PH_S3B-PH-K_1x03_P2.00mm_Horizontal,1,Esc_In,
+J3,JST_PH_S3B-PH-K_1x03_P2.00mm_Horizontal,1,Servo_Out,
+J4,JST_PH_S3B-PH-K_1x03_P2.00mm_Horizontal,1,Esc_out,
+"J5, J6",PinHeader_1x11_P2.54mm_Vertical,2,Conn_01x11_Pin,
+L1,L_Coilcraft_XAL4020-XXX,1,"2.2µH, 2A",
+U2,WSON-8-1EP_2x2mm_P0.5mm_EP0.9x1.6mm_ThermalVias,1,TPS62162DSG,

@@ -1,1 +1,5 @@
 /ESP32-S3-Touch-AMOLED-1.64-Demo/
+
+# KiCad per-user state and automatic local-history snapshots.
+*.kicad_prl
+**/.history/

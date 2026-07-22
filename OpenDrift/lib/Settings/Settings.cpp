@@ -69,6 +69,11 @@ bool Settings::begin()
         0
     );
 
+    terrainAssistEnabled = prefs.getBool(
+        "terrainAssist",
+        true
+    );
+
     servoCenter = prefs.getInt(
         "center",
         1500
@@ -220,6 +225,11 @@ void Settings::save()
     prefs.putInt(
         "strDamp",
         steeringDamper
+    );
+
+    prefs.putBool(
+        "terrainAssist",
+        terrainAssistEnabled
     );
 
     prefs.putInt(
@@ -525,6 +535,19 @@ void Settings::setSteeringDamper(int value)
             1000
         );
 
+    dirty = true;
+}
+
+
+bool Settings::getTerrainAssistEnabled()
+{
+    return terrainAssistEnabled;
+}
+
+
+void Settings::setTerrainAssistEnabled(bool value)
+{
+    terrainAssistEnabled = value;
     dirty = true;
 }
 

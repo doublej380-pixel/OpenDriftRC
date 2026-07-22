@@ -96,6 +96,9 @@ void BlackboxLogger::log(
     int controlPhase,
     float settledBlend,
     float throttleTransient,
+    bool terrainActive,
+    float terrainAssist,
+    bool terrainAssistEnabled,
     float holdFactor,
     int attack,
     int returnSpeed,
@@ -125,7 +128,7 @@ void BlackboxLogger::log(
     snprintf(
         line,
         sizeof(line),
-        "%lu,%.3f,%.3f,%.3f,%.3f,%.4f,%.4f,%.4f,%.4f,%.4f,%.3f,%.3f,%d,%d,%d,%d,%d,%d,%d,%d,%.3f,%.2f,%d,%.3f,%.3f,%d,%d,%d,%d,%d,%.3f,%.3f,%.3f,%.3f,%.3f,%d,%.3f,%.3f,%.3f,%d,%d,%d,%d,%d,%d\n",
+        "%lu,%.3f,%.3f,%.3f,%.3f,%.4f,%.4f,%.4f,%.4f,%.4f,%.3f,%.3f,%d,%d,%d,%d,%d,%d,%d,%d,%.3f,%.2f,%d,%.3f,%.3f,%d,%d,%d,%d,%d,%.3f,%.3f,%.3f,%.3f,%.3f,%d,%.3f,%.3f,%d,%.3f,%d,%.3f,%d,%d,%d,%d,%d,%d\n",
         timeMs,
         yaw,
         filteredYaw,
@@ -164,6 +167,9 @@ void BlackboxLogger::log(
         controlPhase,
         settledBlend,
         throttleTransient,
+        terrainActive ? 1 : 0,
+        terrainAssist,
+        terrainAssistEnabled ? 1 : 0,
         holdFactor,
         attack,
         returnSpeed,
@@ -301,7 +307,7 @@ bool BlackboxLogger::writeHeader()
     }
 
     file.println(
-        "time_ms,yaw,filtered_yaw,gyro_x_dps,gyro_y_dps,accel_x_g,accel_y_g,accel_z_g,accel_mag_g,accel_delta_g,tilt_rate_dps,surface_disturbance,gyro_raw_us,gyro_slewed_us,steering_raw_us,steering_cmd_us,servo_us,servo_quiet,throttle_raw_us,gain_raw_us,gain,deadband,max_corr,smooth,i_gain,i_limit,i_us,hold_boost,anti_wobble,hunt_damping,hunt_control_yaw,hunt_slow_yaw,hunt_fast_yaw,hunt_blend,hunt_score,control_phase,settled_blend,throttle_transient,hold_factor,attack,return,steering_signal,throttle_signal,gain_signal,pin18_throttle_out"
+        "time_ms,yaw,filtered_yaw,gyro_x_dps,gyro_y_dps,accel_x_g,accel_y_g,accel_z_g,accel_mag_g,accel_delta_g,tilt_rate_dps,surface_disturbance,gyro_raw_us,gyro_slewed_us,steering_raw_us,steering_cmd_us,servo_us,servo_quiet,throttle_raw_us,gain_raw_us,gain,deadband,max_corr,smooth,i_gain,i_limit,i_us,hold_boost,anti_wobble,hunt_damping,hunt_control_yaw,hunt_slow_yaw,hunt_fast_yaw,hunt_blend,hunt_score,control_phase,settled_blend,throttle_transient,terrain_active,terrain_assist,terrain_enabled,hold_factor,attack,return,steering_signal,throttle_signal,gain_signal,pin18_throttle_out"
     );
 
     file.close();

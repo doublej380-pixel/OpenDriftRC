@@ -25,7 +25,7 @@ Fast drift servos can create their own feedback loop. The Yokomo SP-02 used duri
 
 Set the servo's internal anti-wobble only as high as it can run without buzzing. Higher torque and power can amplify an unstable internal setting. Verify the servo directly on a plain receiver before diagnosing OpenDrift.
 
-OpenDrift `ANTI-WOBBLE` is a different feature. It suppresses tiny near-center correction chatter and does not repair an unstable servo.
+OpenDrift `CENTER QUIET` (formerly Anti-Wobble) is a different feature. It suppresses tiny near-center correction chatter and does not repair an unstable servo.
 
 ### Direction and calibration
 
@@ -82,8 +82,8 @@ The phase system is why a high Hold value can now be usable without making every
 | Drift Memory | Slowly accumulates settled-drift correction | Gradual loss of authority in sustained drift |
 | Memory Limit | Caps Drift Memory contribution in microseconds | Prevents accumulated correction from taking over |
 | Hunt Damping | Attenuates detected alternating mid-drift yaw | Wheel hunting after drift is established |
-| Anti-Wobble | Suppresses tiny correction chatter near center | Low-yaw servo-scale twitch |
-| Steering Damper | Smooths driver steering input in milliseconds | Abrupt transmitter input or transition stutter |
+| Center Quiet | Suppresses tiny correction chatter near center | Low-yaw servo-scale twitch |
+| Input Damper | Smooths driver steering input in milliseconds | Abrupt transmitter input or transition stutter |
 
 Drift Memory is internally logged using the historical `i_gain`, `i_limit`, and `i_us` CSV names. It is deliberately not a conventional all-purpose PID I term: it only accumulates during settled drift.
 
@@ -102,9 +102,9 @@ Use these conservative values for a new installation:
 | Hold Boost | `0` |
 | Attack | `80` |
 | Return | `30` |
-| Anti-Wobble | `50` |
+| Center Quiet | `50` |
 | Hunt Damping | `0` |
-| Steering Damper | `0` |
+| Input Damper | `0` |
 
 These values prioritize a safe first test, not maximum performance.
 
@@ -123,7 +123,7 @@ The following tune drove extremely well on uneven asphalt with throttle sensing 
 | Hold Boost | `90` |
 | Attack | `85` |
 | Return | `85` |
-| Anti-Wobble | `100` |
+| Center Quiet | `100` |
 | Hunt Damping | `50` |
 
 This is a reference for expected controller behavior, not a universal setup. Chassis geometry, grip, servo speed, tire, and surface can require substantially different Gain.
@@ -200,13 +200,13 @@ The damped control yaw is safety-capped: it cannot exceed current measured yaw m
 
 Before raising Hunt, confirm the oscillation is not caused by the servo's internal anti-wobble or receiver stability system.
 
-### 9. Use OpenDrift Anti-Wobble sparingly
+### 9. Use Center Quiet sparingly
 
-OpenDrift Anti-Wobble now operates only on tiny near-center correction changes. It is not the setting for sustained mid-drift hunting. Use Hunt Damping for that symptom.
+Center Quiet operates only on tiny near-center correction changes. It is not the setting for sustained mid-drift hunting. Use Hunt Damping for that symptom.
 
-### 10. Add Steering Damper only if needed
+### 10. Add Input Damper only if needed
 
-Steering Damper smooths transmitter input before gyro correction is mixed in. Add it lightly when driver steering changes upset the car. Too much can make transitions feel disconnected.
+Input Damper smooths transmitter input before gyro correction is mixed in. Add it lightly when driver steering changes upset the car. Too much can make transitions feel disconnected.
 
 ## Symptom Guide
 
@@ -218,7 +218,7 @@ Steering Damper smooths transmitter input before gyro correction is mixed in. Ad
 | High-speed entry spins | Blackbox correction timing and saturation | Determine whether gyro led or reacted to the spin before changing settings |
 | Long drift loses angle | Correction saturation | Add Hold; then minimal Drift Memory |
 | Mid-drift wheel hunting | Servo internal settings | Raise Hunt in steps of 10 |
-| Transition stutters | Throttle sensing, Steering Damper | Reduce Damper; check Hold/Memory release |
+| Transition stutters | Throttle sensing, Input Damper | Reduce Damper; check Hold/Memory release |
 | Transition carries old steering | `i_us`, Hold factor, controller phase | Lower Memory or Hold; verify throttle input |
 | Exit hangs | Drift Memory and Return | Lower Memory/limit or raise Return |
 | Car reacts badly to throttle changes | Throttle signal state | Connect throttle Performance Mode and inspect transient state |
@@ -235,8 +235,8 @@ Each profile stores:
 - Drift Memory and Memory Limit
 - Hold Boost
 - Attack and Return
-- Anti-Wobble and Hunt Damping
-- Steering Damper
+- Center Quiet and Hunt Damping
+- Input Damper
 - Radio steering travel
 
 Calibration, gyro/servo direction, servo center/travel, receiver endpoints, WiFi, blackbox state, and GPIO mode stay global.
@@ -249,7 +249,7 @@ For a new surface:
 4. Recheck Max Correction and Smoothing.
 5. Change Hold, Memory, or Hunt only when the matching symptom exists.
 
-## Reading Blackbox v5
+## Reading Blackbox v7
 
 OpenDrift records at approximately 20 Hz while steering signal is present. Important columns include:
 
@@ -268,7 +268,9 @@ OpenDrift records at approximately 20 Hz while steering signal is present. Impor
 | `accel_x_g`, `accel_y_g`, `accel_z_g` | Raw acceleration axes |
 | `accel_mag_g`, `accel_delta_g` | Total load and fast acceleration-vector change |
 | `tilt_rate_dps` | Combined roll/pitch activity |
-| `surface_disturbance` | Shadow terrain/load-transfer score from `0.0–1.0` |
+| `surface_disturbance` | Raw terrain/load-transfer score from `0.0–1.0`; remains available when assist is off |
+| `terrain_active`, `terrain_assist` | Detected disturbance latch and blended controller release amount |
+| `terrain_enabled` | `1` when slope/terrain assistance was enabled for this row; `0` for the A/B baseline |
 
 ### Diagnosing a spinout
 
@@ -280,9 +282,11 @@ Look at the order of events, not only the maximum values:
 - If an acceleration, tilt, or surface-disturbance spike precedes yaw, investigate a bump, crest, dip, camber transition, squat, dive, or tire unloading event.
 - If `i_us` or Hold remains active into a transition, inspect throttle signal and phase selection.
 
-### Surface and load-transfer telemetry
+### Slope / terrain assistance
 
-The current `surface_disturbance` score is shadow-only and never changes steering. It combines fast acceleration-vector changes, roll/pitch motion, and low-g unloading indicators.
+The `surface_disturbance` score combines fast acceleration-vector changes, roll/pitch motion, and low-g unloading indicators. When assistance is enabled and the score crosses its trigger, OpenDrift temporarily releases settled-drift Hold, Memory, and Hunt behavior. Base gain and maximum correction authority are never reduced.
+
+Use the dedicated **Slope / Terrain Assist** button in the web configurator for A/B testing. Turning assistance off immediately bypasses its controller effect, but raw disturbance telemetry continues to be logged. Check `terrain_enabled` before comparing runs.
 
 Pitch correlated with throttle may eventually distinguish chassis squat and dive from road slope:
 
@@ -290,7 +294,7 @@ Pitch correlated with throttle may eventually distinguish chassis squat and dive
 - Throttle lift or braking plus the opposite impulse suggests dive and rear unloading.
 - Pitch movement without a corresponding throttle change suggests terrain or elevation change.
 
-The physical pitch axis and sign must be confirmed from real logs for each board orientation before this telemetry is allowed to influence control.
+Pitch and roll telemetry should still be interpreted cautiously because road camber, chassis mounting angle, squat, dive, and bumps can produce similar signatures.
 
 ## Development Findings From Logs 20 and 21
 

@@ -117,8 +117,9 @@ void IMU::update()
         (deltaZ * deltaZ)
     );
 
-    // Shadow-only terrain detector. This score is logged for validation but
-    // deliberately has no influence on steering yet.
+    // Terrain detector used to release settled-drift features during a hard
+    // compression, unload, or pitch/roll impulse. It never creates steering
+    // correction directly.
     float accelerationScore = constrain(
         (accelDelta - 0.06f) / 0.50f,
         0.0f,

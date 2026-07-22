@@ -75,6 +75,9 @@ public:
     int getSteeringDamper();
     void setSteeringDamper(int value);
 
+    bool getTerrainAssistEnabled();
+    void setTerrainAssistEnabled(bool value);
+
     // Servo
     int getServoCenter();
     void setServoCenter(int value);
@@ -166,6 +169,8 @@ private:
     int gyroHuntDamping = 0;
 
     int steeringDamper = 0;
+
+    bool terrainAssistEnabled = true;
 
     int servoCenter = 1500;
 

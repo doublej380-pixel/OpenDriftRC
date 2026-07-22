@@ -36,7 +36,7 @@ See the [OpenDrift Tuning Guide](OpenDrift/docs/Tuning.md) for the current setup
 - Do-nothing signal-loss behavior when steering input is lost.
 - WiFi access point.
 - Browser-based web configurator.
-- Optional blackbox v5 logging with controller phase, throttle, six-axis terrain telemetry, and shadow surface-disturbance detection.
+- Optional blackbox v7 logging with controller phase, throttle, six-axis terrain telemetry, and an explicit slope-assist A/B state.
 - Persistent settings stored in ESP32 preferences.
 
 ## Hardware Routing
@@ -294,6 +294,7 @@ Current web settings:
 - WiFi enabled on boot
 - WiFi auto-off timeout
 - Blackbox logging enabled
+- Dedicated Slope / Terrain Assist A/B toggle; raw disturbance telemetry remains active in both modes
 
 The web page also shows the active profile, live receiver pulse values for steering, throttle, and gain, plus the active GPIO 18 mode.
 
@@ -324,6 +325,7 @@ Log rows include:
 - Raw X/Y/Z acceleration in g
 - Total acceleration magnitude and high-frequency acceleration delta
 - A filtered `surface_disturbance` score from `0.0` to `1.0`
+- Slope/terrain assist enabled state, disturbance latch, and blended release amount
 - Raw gyro correction
 - Slewed gyro correction
 - Steering input and calibrated steering command
@@ -349,7 +351,7 @@ Suggested test workflow:
 
 The CSV can be pasted into a spreadsheet or plotted to see whether the car spun because of delayed correction, overcorrection, max correction saturation, noisy yaw, or steering/radio behavior.
 
-`surface_disturbance` is currently shadow telemetry only. It combines sudden acceleration-vector changes, roll/pitch rate, and low-g unloading indicators. It does not alter gyro correction. Compare its peaks with spinouts, bumps, crests, dips, and camber changes before enabling any terrain compensation.
+`surface_disturbance` combines sudden acceleration-vector changes, roll/pitch rate, and low-g unloading indicators. With Slope / Terrain Assist enabled, strong events temporarily release settled Hold, Memory, and Hunt behavior without changing base gain or maximum correction authority. The web configurator can disable that response for A/B testing while continuing to record the raw telemetry.
 
 ## Gyro Algorithm Overview
 
@@ -391,6 +393,10 @@ Use the [OpenDrift Tuning Guide](OpenDrift/docs/Tuning.md) rather than tuning ev
 - Connect throttle sensing for the best transition and power-change behavior.
 
 A successful development reference on uneven asphalt used Gain `2.20`, Deadband `4`, Max Correction `400`, Smoothing `0.08`, Hold Boost `90`, Anti-Wobble `100`, Hunt Damping `50`, Attack `85`, Return `85`, and Drift Memory `0.00`. This is evidence that the controller works, not a universal tune; copy the process, not blindly the numbers.
+
+## Future Work
+
+- **Servo resonance calibration:** add a stationary calibration mode that sweeps a small steering command across a safe frequency range and captures high-rate chassis IMU data. Because the servo is rigidly mounted to the chassis, its buzz and self-oscillation should be measurable without another sensor. The first version should compare vibration energy, dominant resonances, settling, and left/right behavior to help evaluate internal servo anti-wobble, torque, power, and response settings and recommend OpenDrift quiet-band and correction-rate settings. Command shaping or resonance compensation should only follow after repeatable measurements show that it can reduce vibration without adding harmful control-loop delay.
 
 ## Project Layout
 

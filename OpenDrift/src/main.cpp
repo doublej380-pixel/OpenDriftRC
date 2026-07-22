@@ -1230,7 +1230,9 @@ void loop()
         gyro.update(
             yaw,
             throttleRadio.getPulseWidth(),
-            throttleRadio.hasSignal()
+            throttleRadio.hasSignal(),
+            imu.getSurfaceDisturbanceScore(),
+            settings.getTerrainAssistEnabled()
         );
 
     int steeringCommand = 1500;
@@ -1409,6 +1411,9 @@ void loop()
             gyro.getControlPhase(),
             gyro.getSettledBlend(),
             gyro.getThrottleTransient(),
+            gyro.getTerrainActive(),
+            gyro.getTerrainAssist(),
+            settings.getTerrainAssistEnabled(),
             gyro.getActiveHoldFactor(),
             settings.getGyroAttackSpeed(),
             settings.getGyroReturnSpeed(),

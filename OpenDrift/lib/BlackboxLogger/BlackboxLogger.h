@@ -52,6 +52,9 @@ public:
         int controlPhase,
         float settledBlend,
         float throttleTransient,
+        bool terrainActive,
+        float terrainAssist,
+        bool terrainAssistEnabled,
         float holdFactor,
         int attack,
         int returnSpeed,
@@ -81,7 +84,7 @@ private:
 
     static const unsigned long flushIntervalMs = 1000;
 
-    const char* path = "/blackbox-v5.csv";
+    const char* path = "/blackbox-v7.csv";
 
     String buffer;
 

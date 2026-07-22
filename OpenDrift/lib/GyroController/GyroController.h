@@ -13,7 +13,9 @@ public:
     int update(
         float yawRate,
         int throttlePulse = 1500,
-        bool throttleSignal = false
+        bool throttleSignal = false,
+        float surfaceDisturbance = 0.0f,
+        bool terrainAssistEnabled = true
     );
 
 
@@ -102,6 +104,10 @@ public:
 
     float getThrottleTransient();
 
+    bool getTerrainActive();
+
+    float getTerrainAssist();
+
     float getActiveHoldFactor();
 
 
@@ -170,6 +176,10 @@ private:
     float settledBlend = 0;
 
     float throttleTransientTime = 0;
+
+    float terrainTransientTime = 0;
+
+    float terrainAssistBlend = 0;
 
     int lastThrottlePulse = 1500;
 

@@ -51,6 +51,8 @@ private:
 
     void handleSave();
 
+    void handleTerrainToggle();
+
     void handleProfileCreate();
 
     void handleProfileActivate();

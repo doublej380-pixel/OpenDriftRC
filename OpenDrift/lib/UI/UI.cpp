@@ -3,6 +3,25 @@
 static constexpr uint16_t ROUND_CYAN = 0x07FF;
 static constexpr uint16_t ROUND_DIM = 0x3186;
 
+static constexpr uint8_t PAGE_DRIVE = 0;
+static constexpr uint8_t PAGE_LIMITS = 1;
+static constexpr uint8_t PAGE_RESPONSE = 2;
+static constexpr uint8_t PAGE_DRIFT = 3;
+static constexpr uint8_t PAGE_STABILITY = 4;
+static constexpr uint8_t PAGE_PROFILES = 5;
+static constexpr uint8_t PAGE_RADIO = 6;
+static constexpr uint8_t PAGE_STEERING = 7;
+
+#if defined(OPENDRIFT_BOARD_AMOLED_164)
+static constexpr uint8_t PAGE_STEERING_CAL = 0xFF;
+static constexpr uint8_t PAGE_WIFI = 8;
+static constexpr uint8_t PAGE_SYSTEM = 9;
+#else
+static constexpr uint8_t PAGE_STEERING_CAL = 8;
+static constexpr uint8_t PAGE_WIFI = 9;
+static constexpr uint8_t PAGE_SYSTEM = 10;
+#endif
+
 
 #if defined(OPENDRIFT_BOARD_AMOLED_164)
 #include "../../assets/backgrounds/background.c"
@@ -713,133 +732,91 @@ void UI::drawPage(
     RadioInput& gainRadio
 )
 {
-
     switch(page)
     {
-
-        case 0:
+        case PAGE_DRIVE:
             drawMainPage(
                 gyro,
                 settings
             );
             break;
 
-
-        case 1:
+        case PAGE_LIMITS:
             drawControlPage(
                 gyro,
                 settings
             );
             break;
 
-
-        case 2:
+        case PAGE_RESPONSE:
             drawTunePage(
                 settings
             );
             break;
 
-
-        case 3:
+        case PAGE_DRIFT:
             drawResponsePage(
                 settings
             );
             break;
 
-
-        case 4:
-            radioSection = 0;
-
-            drawRadioPage(
-                steeringRadio,
-                gainRadio,
-                settings,
-                gyro
-            );
-            break;
-
-
-        case 5:
-            radioSection = 1;
-
-            drawRadioPage(
-                steeringRadio,
-                gainRadio,
-                settings,
-                gyro
-            );
-            break;
-
-
-        case 6:
-            #if defined(OPENDRIFT_BOARD_AMOLED_164)
-            drawWifiPage(
-                wifi,
-                settings
-            );
-            #else
-            radioSection = 2;
-
-            drawRadioPage(
-                steeringRadio,
-                gainRadio,
-                settings,
-                gyro
-            );
-            #endif
-            break;
-
-
-        case 7:
-            #if defined(OPENDRIFT_BOARD_AMOLED_164)
-            drawSystemPage(
-                settings
-            );
-            #else
-            drawWifiPage(
-                wifi,
-                settings
-            );
-            #endif
-            break;
-
-
-        case 8:
-            #if defined(OPENDRIFT_BOARD_AMOLED_164)
+        case PAGE_STABILITY:
             drawStabilityPage(
                 settings
             );
-            #else
-            drawSystemPage(
-                settings
-            );
-            #endif
             break;
 
-
-        case 9:
-            #if defined(OPENDRIFT_BOARD_AMOLED_164)
+        case PAGE_PROFILES:
             drawProfilesPage(
                 settings
             );
-            #else
-            drawStabilityPage(
-                settings
-            );
-            #endif
             break;
 
+        case PAGE_RADIO:
+            radioSection = 0;
+            drawRadioPage(
+                steeringRadio,
+                gainRadio,
+                settings,
+                gyro
+            );
+            break;
+
+        case PAGE_STEERING:
+            radioSection = 1;
+            drawRadioPage(
+                steeringRadio,
+                gainRadio,
+                settings,
+                gyro
+            );
+            break;
 
         #if !defined(OPENDRIFT_BOARD_AMOLED_164)
-        case 10:
-            drawProfilesPage(
-                settings
+        case PAGE_STEERING_CAL:
+            radioSection = 2;
+            drawRadioPage(
+                steeringRadio,
+                gainRadio,
+                settings,
+                gyro
             );
             break;
         #endif
 
-    }
+        case PAGE_WIFI:
+            drawWifiPage(
+                wifi,
+                settings
+            );
+            break;
 
+        case PAGE_SYSTEM:
+            drawSystemPage(
+                settings
+            );
+            break;
+    }
 }
 
 
@@ -884,7 +861,7 @@ void UI::changePage(
             targetPage;
 
         radioSection =
-            page == 5 ? 1 : 0;
+            page == PAGE_STEERING ? 1 : 0;
 
         LGFX_Sprite* previousLcd =
             lcd;
@@ -945,7 +922,7 @@ void UI::changePage(
             targetPage;
 
         radioSection =
-            page == 5 ? 1 : 0;
+            page == PAGE_STEERING ? 1 : 0;
 
         memcpy(
             canvas.getBuffer(),
@@ -1004,7 +981,9 @@ void UI::changePage(
             targetPage;
 
         radioSection =
-            page == 6 ? 2 : (page == 5 ? 1 : 0);
+            page == PAGE_STEERING_CAL
+            ? 2
+            : (page == PAGE_STEERING ? 1 : 0);
 
         drawPage(
             gyro,
@@ -1052,7 +1031,9 @@ void UI::changePage(
             targetPage;
 
         radioSection =
-            page == 6 ? 2 : (page == 5 ? 1 : 0);
+            page == PAGE_STEERING_CAL
+            ? 2
+            : (page == PAGE_STEERING ? 1 : 0);
 
         memcpy(
             canvas.getBuffer(),
@@ -1082,9 +1063,11 @@ void UI::changePage(
 
     radioSection =
         #if defined(OPENDRIFT_BOARD_AMOLED_164)
-        page == 5 ? 1 : 0;
+        page == PAGE_STEERING ? 1 : 0;
         #else
-        page == 6 ? 2 : (page == 5 ? 1 : 0);
+        page == PAGE_STEERING_CAL
+        ? 2
+        : (page == PAGE_STEERING ? 1 : 0);
         #endif
 
     drawPage(
@@ -1182,7 +1165,7 @@ bool UI::prepareSwipePreview(
         targetPage;
 
     radioSection =
-        page == 5 ? 1 : 0;
+        page == PAGE_STEERING ? 1 : 0;
 
     drawPage(
         gyro,
@@ -1287,7 +1270,7 @@ void UI::finishSwipePreview(
         }
 
         radioSection =
-            page == 5 ? 1 : 0;
+            page == PAGE_STEERING ? 1 : 0;
 
         memcpy(
             canvas.getBuffer(),
@@ -1881,7 +1864,7 @@ void UI::drawControlPage(
 
     lcd->setTextSize(3);
     lcd->setTextColor(TFT_MAGENTA);
-    lcd->drawCenterString("Gyro", 120, 14);
+    lcd->drawCenterString("Limits", 120, 14);
 
     drawRoundAdjustRow(
         lcd,
@@ -1891,12 +1874,20 @@ void UI::drawControlPage(
         TFT_MAGENTA
     );
 
+    drawRoundAdjustRow(
+        lcd,
+        "MAX CORRECTION",
+        String(settings.getGyroMaxCorrection()),
+        1,
+        TFT_MAGENTA
+    );
+
     lcd->setTextSize(1);
     lcd->setTextColor(0xBDF7);
-    lcd->drawCenterString("REVERSE", 120, 102);
+    lcd->drawCenterString("GYRO REVERSE", 120, 157);
     lcd->drawRect(
         43,
-        116,
+        171,
         154,
         34,
         settings.getGyroReverse() ? TFT_GREEN : TFT_MAGENTA
@@ -1906,15 +1897,7 @@ void UI::drawControlPage(
     lcd->drawCenterString(
         settings.getGyroReverse() ? "ON" : "OFF",
         120,
-        125
-    );
-
-    drawRoundAdjustRow(
-        lcd,
-        "ANTI-WOBBLE",
-        String(settings.getGyroAntiWobble()),
-        2,
-        TFT_MAGENTA
+        180
     );
 
     drawPageDots();
@@ -1931,7 +1914,7 @@ void UI::drawControlPage(
     #if defined(OPENDRIFT_BOARD_AMOLED_164)
     drawAmoledHeader(
         lcd,
-        "Gyro",
+        "Limits",
         OD_MAGENTA
     );
 
@@ -1948,13 +1931,13 @@ void UI::drawControlPage(
     );
 
     lcd->drawString(
-        "REVERSE",
+        "MAX CORR",
         22,
         120
     );
 
     lcd->drawString(
-        "WOBBLE",
+        "REVERSE",
         22,
         182
     );
@@ -1972,14 +1955,14 @@ void UI::drawControlPage(
         48
     );
 
-    lcd->drawString(
-        settings.getGyroReverse() ? "ON" : "OFF",
+    lcd->drawNumber(
+        settings.getGyroMaxCorrection(),
         146,
         110
     );
 
-    lcd->drawNumber(
-        settings.getGyroAntiWobble(),
+    lcd->drawString(
+        settings.getGyroReverse() ? "ON" : "OFF",
         146,
         172
     );
@@ -2008,16 +1991,6 @@ void UI::drawControlPage(
         lcd,
         276,
         110,
-        158,
-        48,
-        "GYRO REV",
-        settings.getGyroReverse() ? OD_GREEN : OD_DIM
-    );
-
-    drawAmoledButton(
-        lcd,
-        276,
-        172,
         70,
         48,
         "-",
@@ -2027,11 +2000,21 @@ void UI::drawControlPage(
     drawAmoledButton(
         lcd,
         364,
-        172,
+        110,
         70,
         48,
         "+",
         OD_MAGENTA
+    );
+
+    drawAmoledButton(
+        lcd,
+        276,
+        172,
+        158,
+        48,
+        "GYRO REV",
+        settings.getGyroReverse() ? OD_GREEN : OD_DIM
     );
 
     drawPageDots();
@@ -2317,26 +2300,26 @@ void UI::drawTunePage(
 
     lcd->setTextSize(3);
     lcd->setTextColor(TFT_YELLOW);
-    lcd->drawCenterString("Tune", 120, 14);
+    lcd->drawCenterString("Response", 120, 14);
 
     drawRoundAdjustRow(
         lcd,
-        "MAX CORRECTION",
-        String(settings.getGyroMaxCorrection()),
+        "SMOOTHING",
+        String(settings.getGyroSmoothing(), 2),
         0,
         TFT_YELLOW
     );
     drawRoundAdjustRow(
         lcd,
-        "SMOOTHING",
-        String(settings.getGyroSmoothing(), 2),
+        "ATTACK",
+        String(settings.getGyroAttackSpeed()),
         1,
         TFT_YELLOW
     );
     drawRoundAdjustRow(
         lcd,
-        "DRIFT MEMORY",
-        String(settings.getGyroIntegralGain(), 2),
+        "RETURN",
+        String(settings.getGyroReturnSpeed()),
         2,
         TFT_YELLOW
     );
@@ -2354,7 +2337,7 @@ void UI::drawTunePage(
     #if defined(OPENDRIFT_BOARD_AMOLED_164)
     drawAmoledHeader(
         lcd,
-        "Tune",
+        "Response",
         OD_AMBER
     );
 
@@ -2365,19 +2348,19 @@ void UI::drawTunePage(
     );
 
     lcd->drawString(
-        "MAX CORR",
+        "SMOOTH",
         22,
         58
     );
 
     lcd->drawString(
-        "SMOOTH",
+        "ATTACK",
         22,
         120
     );
 
     lcd->drawString(
-        "DRIFT MEM",
+        "RETURN",
         22,
         182
     );
@@ -2388,22 +2371,21 @@ void UI::drawTunePage(
         OD_TEXT
     );
 
-    lcd->drawNumber(
-        settings.getGyroMaxCorrection(),
-        146,
-        48
-    );
-
     lcd->drawFloat(
         settings.getGyroSmoothing(),
         2,
         146,
+        48
+    );
+
+    lcd->drawNumber(
+        settings.getGyroAttackSpeed(),
+        146,
         110
     );
 
-    lcd->drawFloat(
-        settings.getGyroIntegralGain(),
-        2,
+    lcd->drawNumber(
+        settings.getGyroReturnSpeed(),
         146,
         172
     );
@@ -2674,34 +2656,27 @@ void UI::drawResponsePage(
 
     lcd->setTextSize(3);
     lcd->setTextColor(ROUND_CYAN);
-    lcd->drawCenterString("Response", 120, 14);
+    lcd->drawCenterString("Drift", 120, 14);
 
-    drawRoundCompactAdjustRow(
-        lcd,
-        "ATTACK",
-        String(settings.getGyroAttackSpeed()),
-        0,
-        ROUND_CYAN
-    );
-    drawRoundCompactAdjustRow(
-        lcd,
-        "RETURN",
-        String(settings.getGyroReturnSpeed()),
-        1,
-        ROUND_CYAN
-    );
-    drawRoundCompactAdjustRow(
+    drawRoundAdjustRow(
         lcd,
         "HOLD BOOST",
         String(settings.getGyroHoldBoost()),
-        2,
+        0,
         ROUND_CYAN
     );
-    drawRoundCompactAdjustRow(
+    drawRoundAdjustRow(
         lcd,
-        "STEERING DAMPER",
-        String(settings.getSteeringDamper()),
-        3,
+        "DRIFT MEMORY",
+        String(settings.getGyroIntegralGain(), 2),
+        1,
+        ROUND_CYAN
+    );
+    drawRoundAdjustRow(
+        lcd,
+        "MEMORY LIMIT",
+        String(settings.getGyroIntegralLimit()),
+        2,
         ROUND_CYAN
     );
 
@@ -2718,7 +2693,7 @@ void UI::drawResponsePage(
     #if defined(OPENDRIFT_BOARD_AMOLED_164)
     drawAmoledHeader(
         lcd,
-        "Response",
+        "Drift",
         OD_BLUE
     );
 
@@ -2729,19 +2704,19 @@ void UI::drawResponsePage(
     );
 
     lcd->drawString(
-        "ATTACK",
+        "HOLD BOOST",
         22,
         58
     );
 
     lcd->drawString(
-        "RETURN",
+        "DRIFT MEM",
         22,
         120
     );
 
     lcd->drawString(
-        "DAMPER",
+        "MEM LIMIT",
         22,
         182
     );
@@ -2753,19 +2728,20 @@ void UI::drawResponsePage(
     );
 
     lcd->drawNumber(
-        settings.getGyroAttackSpeed(),
+        settings.getGyroHoldBoost(),
         146,
         48
     );
 
-    lcd->drawNumber(
-        settings.getGyroReturnSpeed(),
+    lcd->drawFloat(
+        settings.getGyroIntegralGain(),
+        2,
         146,
         110
     );
 
     lcd->drawNumber(
-        settings.getSteeringDamper(),
+        settings.getGyroIntegralLimit(),
         146,
         172
     );
@@ -3001,14 +2977,46 @@ void UI::drawStabilityPage(
 
     lcd->setTextSize(2);
     lcd->setTextColor(OD_MUTED);
-    lcd->drawString("HUNT DAMPING", 22, 120);
+    lcd->drawString("HUNT DAMP", 22, 58);
+    lcd->drawString("CENTER QUIET", 22, 120);
+    lcd->drawString("INPUT DAMP", 22, 182);
 
     lcd->setTextSize(3);
     lcd->setTextColor(OD_TEXT);
     lcd->drawNumber(
         settings.getGyroHuntDamping(),
         174,
+        48
+    );
+    lcd->drawNumber(
+        settings.getGyroAntiWobble(),
+        174,
         110
+    );
+    lcd->drawNumber(
+        settings.getSteeringDamper(),
+        174,
+        172
+    );
+
+    drawAmoledButton(
+        lcd,
+        276,
+        48,
+        70,
+        48,
+        "-",
+        OD_CYAN
+    );
+
+    drawAmoledButton(
+        lcd,
+        364,
+        48,
+        70,
+        48,
+        "+",
+        OD_CYAN
     );
 
     drawAmoledButton(
@@ -3031,17 +3039,24 @@ void UI::drawStabilityPage(
         OD_CYAN
     );
 
-    lcd->setTextSize(2);
-    lcd->setTextColor(OD_MUTED);
-    lcd->drawCenterString(
-        "Damps detected mid-drift hunting",
-        UI_CENTER_X,
-        190
+    drawAmoledButton(
+        lcd,
+        276,
+        172,
+        70,
+        48,
+        "-",
+        OD_CYAN
     );
-    lcd->drawCenterString(
-        "Idle, entry and transitions bypass it",
-        UI_CENTER_X,
-        218
+
+    drawAmoledButton(
+        lcd,
+        364,
+        172,
+        70,
+        48,
+        "+",
+        OD_CYAN
     );
     #else
     lcd->setTextSize(3);
@@ -3055,18 +3070,19 @@ void UI::drawStabilityPage(
         0,
         ROUND_CYAN
     );
-
-    lcd->setTextSize(1);
-    lcd->setTextColor(0xBDF7);
-    lcd->drawCenterString(
-        "damps detected mid-drift hunting",
-        120,
-        151
+    drawRoundAdjustRow(
+        lcd,
+        "CENTER QUIET",
+        String(settings.getGyroAntiWobble()),
+        1,
+        ROUND_CYAN
     );
-    lcd->drawCenterString(
-        "idle / entry / transition bypass",
-        120,
-        169
+    drawRoundAdjustRow(
+        lcd,
+        "INPUT DAMPER",
+        String(settings.getSteeringDamper()),
+        2,
+        ROUND_CYAN
     );
     #endif
 
@@ -3076,12 +3092,7 @@ void UI::drawStabilityPage(
 
 bool UI::isProfilesPage()
 {
-    return
-        #if defined(OPENDRIFT_BOARD_AMOLED_164)
-        page == 9;
-        #else
-        page == 10;
-        #endif
+    return page == PAGE_PROFILES;
 }
 
 
@@ -5422,7 +5433,7 @@ int8_t UI::repeatButtonAt(
 )
 {
     #if defined(OPENDRIFT_BOARD_AMOLED_164)
-    if(page == 0)
+    if(page == PAGE_DRIVE)
     {
         if(buttonPressed(x, y, 276, 36, 70, 82))
             return 1;
@@ -5431,7 +5442,7 @@ int8_t UI::repeatButtonAt(
             return 2;
     }
 
-    if(page == 1)
+    if(page == PAGE_LIMITS)
     {
         if(buttonPressed(x, y, 276, 48, 70, 48))
             return 3;
@@ -5439,47 +5450,68 @@ int8_t UI::repeatButtonAt(
         if(buttonPressed(x, y, 364, 48, 70, 48))
             return 4;
 
-        if(buttonPressed(x, y, 276, 172, 70, 48))
-            return 21;
-
-        if(buttonPressed(x, y, 364, 172, 70, 48))
-            return 22;
-    }
-
-    if(page == 2)
-    {
-        if(buttonPressed(x, y, 276, 48, 70, 48))
+        if(buttonPressed(x, y, 276, 110, 70, 48))
             return 5;
 
-        if(buttonPressed(x, y, 364, 48, 70, 48))
-            return 6;
-
-        if(buttonPressed(x, y, 276, 110, 70, 48))
-            return 7;
-
         if(buttonPressed(x, y, 364, 110, 70, 48))
-            return 8;
-
-        if(buttonPressed(x, y, 276, 172, 70, 48))
-            return 15;
-
-        if(buttonPressed(x, y, 364, 172, 70, 48))
-            return 16;
+            return 6;
     }
 
-    if(page == 3)
+    if(page == PAGE_RESPONSE)
     {
         if(buttonPressed(x, y, 276, 48, 70, 48))
-            return 9;
+            return 7;
 
         if(buttonPressed(x, y, 364, 48, 70, 48))
-            return 10;
+            return 8;
 
         if(buttonPressed(x, y, 276, 110, 70, 48))
-            return 11;
+            return 9;
 
         if(buttonPressed(x, y, 364, 110, 70, 48))
+            return 10;
+
+        if(buttonPressed(x, y, 276, 172, 70, 48))
+            return 11;
+
+        if(buttonPressed(x, y, 364, 172, 70, 48))
             return 12;
+    }
+
+    if(page == PAGE_DRIFT)
+    {
+        if(buttonPressed(x, y, 276, 48, 70, 48))
+            return 19;
+
+        if(buttonPressed(x, y, 364, 48, 70, 48))
+            return 20;
+
+        if(buttonPressed(x, y, 276, 110, 70, 48))
+            return 15;
+
+        if(buttonPressed(x, y, 364, 110, 70, 48))
+            return 16;
+
+        if(buttonPressed(x, y, 276, 172, 70, 48))
+            return 17;
+
+        if(buttonPressed(x, y, 364, 172, 70, 48))
+            return 18;
+    }
+
+    if(page == PAGE_STABILITY)
+    {
+        if(buttonPressed(x, y, 276, 48, 70, 48))
+            return 23;
+
+        if(buttonPressed(x, y, 364, 48, 70, 48))
+            return 24;
+
+        if(buttonPressed(x, y, 276, 110, 70, 48))
+            return 21;
+
+        if(buttonPressed(x, y, 364, 110, 70, 48))
+            return 22;
 
         if(buttonPressed(x, y, 276, 172, 70, 48))
             return 13;
@@ -5488,19 +5520,10 @@ int8_t UI::repeatButtonAt(
             return 14;
     }
 
-    if(page == 8)
-    {
-        if(buttonPressed(x, y, 276, 110, 70, 48))
-            return 23;
-
-        if(buttonPressed(x, y, 364, 110, 70, 48))
-            return 24;
-    }
-
     return 0;
     #endif
 
-    if(page == 0)
+    if(page == PAGE_DRIVE)
     {
         if(buttonPressed(x, y, 30, 109, 58, 38))
             return 1;
@@ -5509,7 +5532,7 @@ int8_t UI::repeatButtonAt(
             return 2;
     }
 
-    if(page == 1)
+    if(page == PAGE_LIMITS)
     {
         if(buttonPressed(x, y, 26, 61, 44, 30))
             return 3;
@@ -5517,68 +5540,74 @@ int8_t UI::repeatButtonAt(
         if(buttonPressed(x, y, 170, 61, 44, 30))
             return 4;
 
-        if(buttonPressed(x, y, 26, 171, 44, 30))
-            return 21;
-
-        if(buttonPressed(x, y, 170, 171, 44, 30))
-            return 22;
-    }
-
-    if(page == 2)
-    {
-        if(buttonPressed(x, y, 26, 61, 44, 30))
+        if(buttonPressed(x, y, 26, 116, 44, 30))
             return 5;
 
-        if(buttonPressed(x, y, 170, 61, 44, 30))
+        if(buttonPressed(x, y, 170, 116, 44, 30))
             return 6;
+    }
 
-        if(buttonPressed(x, y, 26, 116, 44, 30))
+    if(page == PAGE_RESPONSE)
+    {
+        if(buttonPressed(x, y, 26, 61, 44, 30))
             return 7;
 
-        if(buttonPressed(x, y, 170, 116, 44, 30))
+        if(buttonPressed(x, y, 170, 61, 44, 30))
             return 8;
 
-        if(buttonPressed(x, y, 26, 171, 44, 30))
-            return 15;
-
-        if(buttonPressed(x, y, 170, 171, 44, 30))
-            return 16;
-    }
-
-    if(page == 3)
-    {
-        if(buttonPressed(x, y, 26, 50, 44, 28))
+        if(buttonPressed(x, y, 26, 116, 44, 30))
             return 9;
 
-        if(buttonPressed(x, y, 170, 50, 44, 28))
+        if(buttonPressed(x, y, 170, 116, 44, 30))
             return 10;
 
-        if(buttonPressed(x, y, 26, 91, 44, 28))
+        if(buttonPressed(x, y, 26, 171, 44, 30))
             return 11;
 
-        if(buttonPressed(x, y, 170, 91, 44, 28))
+        if(buttonPressed(x, y, 170, 171, 44, 30))
             return 12;
-
-        if(buttonPressed(x, y, 26, 132, 44, 28))
-            return 19;
-
-        if(buttonPressed(x, y, 170, 132, 44, 28))
-            return 20;
-
-        if(buttonPressed(x, y, 26, 173, 44, 28))
-            return 13;
-
-        if(buttonPressed(x, y, 170, 173, 44, 28))
-            return 14;
     }
 
-    if(page == 9)
+    if(page == PAGE_DRIFT)
     {
-        if(buttonPressed(x, y, 22, 55, 52, 42))
+        if(buttonPressed(x, y, 26, 61, 44, 30))
+            return 19;
+
+        if(buttonPressed(x, y, 170, 61, 44, 30))
+            return 20;
+
+        if(buttonPressed(x, y, 26, 116, 44, 30))
+            return 15;
+
+        if(buttonPressed(x, y, 170, 116, 44, 30))
+            return 16;
+
+        if(buttonPressed(x, y, 26, 171, 44, 30))
+            return 17;
+
+        if(buttonPressed(x, y, 170, 171, 44, 30))
+            return 18;
+    }
+
+    if(page == PAGE_STABILITY)
+    {
+        if(buttonPressed(x, y, 26, 61, 44, 30))
             return 23;
 
-        if(buttonPressed(x, y, 166, 55, 52, 42))
+        if(buttonPressed(x, y, 170, 61, 44, 30))
             return 24;
+
+        if(buttonPressed(x, y, 26, 116, 44, 30))
+            return 21;
+
+        if(buttonPressed(x, y, 170, 116, 44, 30))
+            return 22;
+
+        if(buttonPressed(x, y, 26, 171, 44, 30))
+            return 13;
+
+        if(buttonPressed(x, y, 170, 171, 44, 30))
+            return 14;
     }
 
     return 0;
@@ -5596,13 +5625,13 @@ bool UI::actionButtonAt(
     }
 
     #if defined(OPENDRIFT_BOARD_AMOLED_164)
-    if(page == 0)
+    if(page == PAGE_DRIVE)
         return buttonPressed(x, y, 276, 148, 158, 54);
 
-    if(page == 1)
-        return buttonPressed(x, y, 276, 110, 158, 48);
+    if(page == PAGE_LIMITS)
+        return buttonPressed(x, y, 276, 172, 158, 48);
 
-    if(page == 5)
+    if(page == PAGE_STEERING)
     {
         return
             buttonPressed(x, y, 286, 34, 136, 44) ||
@@ -5613,19 +5642,19 @@ bool UI::actionButtonAt(
             buttonPressed(x, y, 286, 202, 62, 36);
     }
 
-    if(page == 6)
+    if(page == PAGE_WIFI)
         return buttonPressed(x, y, 296, 70, 130, 92);
 
-    if(page == 7)
+    if(page == PAGE_SYSTEM)
         return buttonPressed(x, y, 150, 202, 240, 38);
     #else
-    if(page == 0)
+    if(page == PAGE_DRIVE)
         return buttonPressed(x, y, 55, 164, 130, 38);
 
-    if(page == 1)
-        return buttonPressed(x, y, 43, 116, 154, 34);
+    if(page == PAGE_LIMITS)
+        return buttonPressed(x, y, 43, 171, 154, 34);
 
-    if(page == 5)
+    if(page == PAGE_STEERING)
     {
         return
             buttonPressed(x, y, 43, 88, 154, 34) ||
@@ -5633,7 +5662,7 @@ bool UI::actionButtonAt(
             buttonPressed(x, y, 158, 158, 44, 34);
     }
 
-    if(page == 6)
+    if(page == PAGE_STEERING_CAL)
     {
         return
             buttonPressed(x, y, 40, 55, 160, 36) ||
@@ -5641,7 +5670,7 @@ bool UI::actionButtonAt(
             buttonPressed(x, y, 40, 153, 160, 36);
     }
 
-    if(page == 7)
+    if(page == PAGE_WIFI)
         return buttonPressed(x, y, 50, 145, 140, 42);
 
     #endif
@@ -5878,26 +5907,20 @@ bool UI::applyRepeatButton(
             return false;
     }
 
-    if(page == 1)
+    if(page == PAGE_LIMITS)
     {
         drawControlPage(
             gyro,
             settings
         );
     }
-    else if(page == 3)
+    else if(page == PAGE_DRIFT)
     {
         drawResponsePage(
             settings
         );
     }
-    else if(
-        #if defined(OPENDRIFT_BOARD_AMOLED_164)
-        page == 8
-        #else
-        page == 9
-        #endif
-    )
+    else if(page == PAGE_STABILITY)
     {
         drawStabilityPage(
             settings
@@ -6000,12 +6023,20 @@ void UI::update(
     }
     #endif
 
+    // Do not push a live-value refresh on the release frame. The swipe
+    // handler below still owns the display until it commits or cancels the
+    // preview; refreshing here would briefly restore the source page.
     if(
         (
-            page == 4 ||
-            page == 5
+            page == PAGE_RADIO ||
+            page == PAGE_STEERING
         ) &&
         !touched &&
+        !lastTouchState &&
+        !trackingSwipe &&
+        #if defined(OPENDRIFT_BOARD_AMOLED_164)
+        !swipePreviewActive &&
+        #endif
         millis() - lastRadioRefresh > 250
     )
     {
@@ -6334,7 +6365,7 @@ void UI::update(
 
             if(
                 false &&
-                page == 4 &&
+                page == PAGE_RADIO &&
                 abs(deltaY) > 50 &&
                 abs(deltaY) > abs(delta)
             )
@@ -6419,7 +6450,7 @@ void UI::update(
 
         #if defined(OPENDRIFT_BOARD_AMOLED_164)
         if(
-            page == 0 &&
+            page == PAGE_DRIVE &&
             buttonPressed(
                 x,
                 y,
@@ -6448,12 +6479,12 @@ void UI::update(
         }
 
         if(
-            page == 1 &&
+            page == PAGE_LIMITS &&
             buttonPressed(
                 x,
                 y,
                 276,
-                110,
+                172,
                 158,
                 48
             )
@@ -6474,7 +6505,7 @@ void UI::update(
             return;
         }
 
-        if(page == 5)
+        if(page == PAGE_STEERING)
         {
             if(
                 steeringRadio.hasSignal() &&
@@ -6622,7 +6653,7 @@ void UI::update(
         }
 
         if(
-            page == 6 &&
+            page == PAGE_WIFI &&
             buttonPressed(
                 x,
                 y,
@@ -6658,7 +6689,7 @@ void UI::update(
         }
 
         if(
-            page == 7 &&
+            page == PAGE_SYSTEM &&
             buttonPressed(
                 x,
                 y,
@@ -6694,7 +6725,7 @@ void UI::update(
 
         // MAIN PAGE BUTTONS
 
-        if(page == 0)
+        if(page == PAGE_DRIVE)
         {
 
 
@@ -6769,7 +6800,7 @@ void UI::update(
 
         // CONTROL PAGE BUTTONS
 
-        if(page == 1)
+        if(page == PAGE_LIMITS)
         {
 
             if(buttonPressed(
@@ -6815,7 +6846,7 @@ void UI::update(
 
             if(buttonPressed(
                 x,y,
-                43,116,
+                43,171,
                 154,34
             ))
             {
@@ -6826,7 +6857,7 @@ void UI::update(
 
             }
 
-            if(buttonPressed(x, y, 26, 171, 44, 30))
+            if(false && buttonPressed(x, y, 26, 171, 44, 30))
             {
                 settings.setGyroAntiWobble(
                     settings.getGyroAntiWobble() - 1
@@ -6837,7 +6868,7 @@ void UI::update(
                 );
             }
 
-            if(buttonPressed(x, y, 170, 171, 44, 30))
+            if(false && buttonPressed(x, y, 170, 171, 44, 30))
             {
                 settings.setGyroAntiWobble(
                     settings.getGyroAntiWobble() + 1
@@ -6864,7 +6895,7 @@ void UI::update(
 
         // TUNE PAGE BUTTONS
 
-        if(page == 2)
+        if(false && page == PAGE_RESPONSE)
         {
 
             if(buttonPressed(
@@ -6991,7 +7022,7 @@ void UI::update(
 
         // RESPONSE PAGE BUTTONS
 
-        if(page == 3)
+        if(false && page == PAGE_DRIFT)
         {
 
             if(buttonPressed(
@@ -7127,7 +7158,7 @@ void UI::update(
 
         // RADIO PAGE BUTTONS
 
-        if(page == 5)
+        if(page == PAGE_STEERING)
         {
             if(buttonPressed(x, y, 43, 88, 154, 34))
             {
@@ -7159,7 +7190,7 @@ void UI::update(
         }
 
 
-        if(page == 6)
+        if(page == PAGE_STEERING_CAL)
         {
             if(
                 steeringRadio.hasSignal() &&
@@ -7201,7 +7232,7 @@ void UI::update(
 
         if(
             false &&
-            page == 5
+            page == PAGE_STEERING
         )
         {
 
@@ -7313,7 +7344,7 @@ void UI::update(
 
         // WIFI PAGE BUTTON
 
-        if(page == 7)
+        if(page == PAGE_WIFI)
         {
 
             if(buttonPressed(

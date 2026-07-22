@@ -13,6 +13,8 @@ namespace
     static constexpr float SETTLE_DELAY_SECONDS = 0.45f;
     static constexpr float TRANSITION_SECONDS = 0.25f;
     static constexpr float THROTTLE_TRANSIENT_SECONDS = 0.25f;
+    static constexpr float TERRAIN_TRIGGER = 0.45f;
+    static constexpr float TERRAIN_CALM_SECONDS = 0.60f;
 }
 
 
@@ -41,6 +43,8 @@ void GyroController::resetDynamicState()
     settledBlend = 0;
 
     throttleTransientTime = 0;
+    terrainTransientTime = 0;
+    terrainAssistBlend = 0;
     lastThrottlePulse = 1500;
     throttleReady = false;
 
@@ -75,7 +79,9 @@ void GyroController::calibrate(float yawRate)
 int GyroController::update(
     float yawRate,
     int throttlePulse,
-    bool throttleSignal
+    bool throttleSignal,
+    float surfaceDisturbance,
+    bool terrainAssistEnabled
 )
 {
     uint32_t now = micros();
@@ -140,6 +146,63 @@ int GyroController::update(
     throttleTransientTime = max(
         0.0f,
         throttleTransientTime - dt
+    );
+
+
+    // A hard compression, unload, or pitch/roll impulse marks the chassis as
+    // unsettled. Each strong event refreshes the latch so a sequence of road
+    // disturbances stays covered without ordinary vibration holding it on.
+    // This never changes base gain or correction authority.
+    surfaceDisturbance = constrain(
+        surfaceDisturbance,
+        0.0f,
+        1.0f
+    );
+
+    if(!terrainAssistEnabled)
+    {
+        terrainTransientTime = 0.0f;
+        terrainAssistBlend = 0.0f;
+    }
+    else if(surfaceDisturbance >= TERRAIN_TRIGGER)
+    {
+        terrainTransientTime = TERRAIN_CALM_SECONDS;
+    }
+    else if(terrainTransientTime <= dt)
+    {
+        terrainTransientTime = 0.0f;
+    }
+    else
+    {
+        terrainTransientTime -= dt;
+    }
+
+    float terrainAssistTarget =
+        terrainTransientTime > 0.0f
+        ?
+        1.0f
+        :
+        0.0f;
+
+    float terrainAssistTimeConstant =
+        terrainAssistTarget > terrainAssistBlend
+        ?
+        0.10f
+        :
+        0.45f;
+
+    float terrainAssistAmount =
+        1.0f - expf(-dt / terrainAssistTimeConstant);
+
+    terrainAssistBlend +=
+        (terrainAssistTarget - terrainAssistBlend)
+        *
+        terrainAssistAmount;
+
+    terrainAssistBlend = constrain(
+        terrainAssistBlend,
+        0.0f,
+        1.0f
     );
 
 
@@ -300,6 +363,7 @@ int GyroController::update(
     }
     else if(
         throttleTransientTime > 0.0f ||
+        terrainTransientTime > 0.0f ||
         directionTime < SETTLE_DELAY_SECONDS ||
         fabsf(huntSlowYaw) < 30.0f
     )
@@ -504,7 +568,9 @@ int GyroController::update(
         holdTarget =
             holdAmountTarget
             *
-            settledBlend;
+            settledBlend
+            *
+            (1.0f - terrainAssistBlend);
     }
 
     float holdTimeConstant =
@@ -561,7 +627,10 @@ int GyroController::update(
     {
         float integralDecayBase = 0.94f;
 
-        if(controlPhase == PHASE_SETTLED)
+        if(
+            controlPhase == PHASE_SETTLED &&
+            terrainAssistBlend < 0.01f
+        )
         {
             integralDecayBase = 0.998f;
         }
@@ -604,7 +673,9 @@ int GyroController::update(
                 *
                 dt
                 *
-                settledBlend;
+                settledBlend
+                *
+                (1.0f - terrainAssistBlend);
         }
 
         float maxAccumulator =
@@ -934,6 +1005,18 @@ float GyroController::getThrottleTransient()
         0.0f,
         1.0f
     );
+}
+
+
+bool GyroController::getTerrainActive()
+{
+    return terrainTransientTime > 0.0f;
+}
+
+
+float GyroController::getTerrainAssist()
+{
+    return terrainAssistBlend;
 }
 
 
