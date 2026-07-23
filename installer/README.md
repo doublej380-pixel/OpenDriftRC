@@ -14,3 +14,11 @@ flashing hardware.
 Factory images include the bootloader, partition table, OTA boot data, and
 application. Do not replace them with PlatformIO's application-only
 `firmware.bin`.
+
+`site-host/` is the zero-dependency static build used by the connected
+production host. For that deployment, copy the static installer into
+`site-host/public/`, rename `index.html` to `installer.html`, and deploy with
+`site-host/` as the source root with the project's `.openai/hosting.json`. Its
+build script packages the installer under `dist/client`, adds the asset-serving
+entrypoint, and copies the Sites project metadata into `dist`. GitHub Pages
+continues to publish this folder directly.
