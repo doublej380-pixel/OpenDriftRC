@@ -1,0 +1,18 @@
+{
+  "name": "OpenDrift AMOLED 1.64",
+  "version": "2026.07.23-dev",
+  "new_install_prompt_erase": true,
+  "new_install_improv_wait_time": 0,
+  "builds": [
+    {
+      "chipFamily": "ESP32-S3",
+      "improv": false,
+      "parts": [
+        {
+          "path": "firmware/OpenDrift-AMOLED-2026.07.23-dev.factory.bin",
+          "offset": 0
+        }
+      ]
+    }
+  ]
+}

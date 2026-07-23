@@ -1,0 +1,249 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="theme-color" content="#070a0f">
+  <meta
+    name="description"
+    content="Install OpenDrift firmware on supported Waveshare ESP32-S3 boards directly from a desktop browser."
+  >
+  <title>OpenDrift Firmware Installer</title>
+  <link rel="preconnect" href="https://unpkg.com">
+  <link rel="stylesheet" href="./styles.css">
+  <script
+    type="module"
+    src="https://unpkg.com/esp-web-tools@10/dist/web/install-button.js?module"
+  ></script>
+  <script defer src="./installer.js"></script>
+</head>
+<body>
+  <div class="ambient ambient-one" aria-hidden="true"></div>
+  <div class="ambient ambient-two" aria-hidden="true"></div>
+
+  <header class="site-header">
+    <a class="brand" href="#top" aria-label="OpenDrift installer home">
+      <span class="brand-mark">OD</span>
+      <span class="brand-copy">
+        <strong>OPEN<span>DRIFT</span></strong>
+        <small>Firmware installer</small>
+      </span>
+    </a>
+    <nav aria-label="Installer navigation">
+      <a href="#install">Install</a>
+      <a href="#recovery">Recovery</a>
+      <a
+        href="https://github.com/doublej380-pixel/OpenDrift"
+        target="_blank"
+        rel="noreferrer"
+      >Source</a>
+    </nav>
+  </header>
+
+  <main id="top">
+    <section class="hero">
+      <div class="hero-copy">
+        <div class="eyebrow">
+          <span class="status-dot" aria-hidden="true"></span>
+          Development release · <span data-release-version>2026.07.23-dev</span>
+        </div>
+        <h1>Flash the gyro.<br><em>Skip the toolchain.</em></h1>
+        <p class="lede">
+          Install OpenDrift directly over USB. No VS Code, PlatformIO,
+          compilation, or command line required.
+        </p>
+        <div class="hero-actions">
+          <a class="primary-link" href="#install">Choose your board</a>
+          <a class="text-link" href="#before-you-start">Read the 60-second setup</a>
+        </div>
+      </div>
+
+      <div class="signal-card" aria-label="OpenDrift control telemetry illustration">
+        <div class="signal-card-header">
+          <span>CONTROL // LIVE</span>
+          <span>20 Hz BLACKBOX</span>
+        </div>
+        <svg viewBox="0 0 640 250" role="img" aria-label="Stylized gyro correction trace">
+          <defs>
+            <linearGradient id="traceGradient" x1="0" y1="0" x2="1" y2="0">
+              <stop offset="0" stop-color="#00e7d6"/>
+              <stop offset="0.55" stop-color="#8d66ff"/>
+              <stop offset="1" stop-color="#ff4da6"/>
+            </linearGradient>
+            <linearGradient id="areaGradient" x1="0" y1="0" x2="0" y2="1">
+              <stop offset="0" stop-color="#8d66ff" stop-opacity=".28"/>
+              <stop offset="1" stop-color="#8d66ff" stop-opacity="0"/>
+            </linearGradient>
+          </defs>
+          <g class="grid-lines">
+            <path d="M0 50H640M0 100H640M0 150H640M0 200H640"/>
+            <path d="M80 0V250M160 0V250M240 0V250M320 0V250M400 0V250M480 0V250M560 0V250"/>
+          </g>
+          <path
+            class="trace-area"
+            d="M0 168 C34 166 50 151 77 156 S119 210 151 184 S194 77 225 99 S267 173 297 146 S339 61 376 79 S419 199 457 168 S502 72 536 104 S586 163 640 111 V250 H0 Z"
+          />
+          <path
+            class="trace"
+            d="M0 168 C34 166 50 151 77 156 S119 210 151 184 S194 77 225 99 S267 173 297 146 S339 61 376 79 S419 199 457 168 S502 72 536 104 S586 163 640 111"
+          />
+        </svg>
+        <div class="signal-stats">
+          <span><small>PHASE</small> SETTLED</span>
+          <span><small>HUNT</small> DAMPED</span>
+          <span><small>TERRAIN</small> READY</span>
+        </div>
+      </div>
+    </section>
+
+    <section id="before-you-start" class="prep-section">
+      <div class="section-heading">
+        <span>01</span>
+        <div>
+          <p class="kicker">Before you connect</p>
+          <h2>Make the board safe.</h2>
+        </div>
+      </div>
+      <div class="prep-grid">
+        <article>
+          <strong>Disconnect the vehicle</strong>
+          <p>Unplug OpenDrift from receiver, servo, throttle, and external power. Flash the board over USB only.</p>
+        </article>
+        <article>
+          <strong>Use a data cable</strong>
+          <p>Charge-only USB cables power the board but cannot install firmware. Close PlatformIO and serial monitors.</p>
+        </article>
+        <article>
+          <strong>Use a desktop browser</strong>
+          <p>Open this page in Chrome or Edge on Windows, macOS, or Linux. Browser flashing is not supported on iPhone.</p>
+        </article>
+      </div>
+    </section>
+
+    <section id="install" class="install-section">
+      <div class="section-heading">
+        <span>02</span>
+        <div>
+          <p class="kicker">Select hardware</p>
+          <h2>Choose the exact display.</h2>
+          <p>Both boards contain an ESP32-S3, so the installer cannot identify the display automatically.</p>
+        </div>
+      </div>
+
+      <div class="board-grid">
+        <article class="board-card recommended">
+          <div class="board-topline">
+            <span class="board-badge">Recommended</span>
+            <span class="board-code">AMOLED // 280×456</span>
+          </div>
+          <div class="board-visual amoled-visual" aria-hidden="true">
+            <div class="amoled-screen">
+              <span>OPEN</span>
+              <strong>DRIFT</strong>
+              <i></i>
+            </div>
+          </div>
+          <div class="board-copy">
+            <p class="board-family">Final hardware</p>
+            <h3>Waveshare AMOLED 1.64</h3>
+            <p>The primary OpenDrift board with the complete portrait interface and current feature support.</p>
+          </div>
+          <div class="install-control">
+            <esp-web-install-button manifest="./manifest-amoled.json">
+              <button class="install-button" slot="activate">
+                Install AMOLED firmware
+                <span aria-hidden="true">→</span>
+              </button>
+              <p class="browser-warning" slot="unsupported">
+                Open this page in Chrome or Edge on a desktop computer to install.
+              </p>
+              <p class="browser-warning" slot="not-allowed">
+                Browser access to USB was blocked. Reload the page over HTTPS.
+              </p>
+            </esp-web-install-button>
+            <small>Factory image · 1.24 MiB · build <span data-release-version>2026.07.23-dev</span></small>
+          </div>
+        </article>
+
+        <article class="board-card legacy">
+          <div class="board-topline">
+            <span class="board-badge">Legacy</span>
+            <span class="board-code">ROUND // 240×240</span>
+          </div>
+          <div class="board-visual round-visual" aria-hidden="true">
+            <div class="round-screen">
+              <span>OD</span>
+              <i></i>
+            </div>
+          </div>
+          <div class="board-copy">
+            <p class="board-family">Deprecated hardware</p>
+            <h3>Waveshare Round 1.28</h3>
+            <p>Maintained for existing builds and experimentation. It may not receive every future interface feature.</p>
+          </div>
+          <div class="install-control">
+            <esp-web-install-button manifest="./manifest-round.json">
+              <button class="install-button secondary" slot="activate">
+                Install round firmware
+                <span aria-hidden="true">→</span>
+              </button>
+              <p class="browser-warning" slot="unsupported">
+                Open this page in Chrome or Edge on a desktop computer to install.
+              </p>
+              <p class="browser-warning" slot="not-allowed">
+                Browser access to USB was blocked. Reload the page over HTTPS.
+              </p>
+            </esp-web-install-button>
+            <small>Factory image · 1.25 MiB · build <span data-release-version>2026.07.23-dev</span></small>
+          </div>
+        </article>
+      </div>
+
+      <div class="erase-note">
+        <strong>First installation?</strong>
+        <span>Choose the erase option when prompted. For later updates, leave erase off to retain profiles and calibration.</span>
+      </div>
+    </section>
+
+    <section id="recovery" class="recovery-section">
+      <div class="section-heading">
+        <span>03</span>
+        <div>
+          <p class="kicker">Connection recovery</p>
+          <h2>If the board is not detected.</h2>
+        </div>
+      </div>
+      <ol class="recovery-steps">
+        <li><span>1</span><p>Keep the USB cable connected and hold the <strong>BOOT</strong> button.</p></li>
+        <li><span>2</span><p>While holding BOOT, press and release <strong>RESET</strong>.</p></li>
+        <li><span>3</span><p>Release BOOT, click Install again, and select the newly detected serial port.</p></li>
+      </ol>
+      <p class="recovery-footnote">
+        This is the download-mode sequence documented by Waveshare for both supported boards.
+      </p>
+    </section>
+
+    <section class="after-section">
+      <p class="kicker">After installation</p>
+      <h2>Reconnect. Calibrate. Create a profile. Go drive.</h2>
+      <div class="after-links">
+        <a href="https://github.com/doublej380-pixel/OpenDrift/blob/main/OpenDrift/docs/Hardware.md">Hardware guide</a>
+        <a href="https://github.com/doublej380-pixel/OpenDrift/blob/main/OpenDrift/docs/Tuning.md">Tuning guide</a>
+        <a href="https://github.com/doublej380-pixel/OpenDrift/issues">Report a problem</a>
+      </div>
+    </section>
+  </main>
+
+  <footer>
+    <div>
+      <strong>OPEN<span>DRIFT</span></strong>
+      <p>Open-source drift gyro control, tuning, and blackboxing.</p>
+    </div>
+    <div class="footer-meta">
+      <span>No analytics</span>
+      <span>No account</span>
+      <span>USB stays local</span>
+    </div>
+  </footer>
+</body>
+</html>
