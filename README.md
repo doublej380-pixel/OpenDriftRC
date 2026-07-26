@@ -8,7 +8,7 @@ See the current [Technical Tuning Reference](OpenDrift/docs/Tuning.md) for the s
 
 ## Install Firmware
 
-Use the [public OpenDrift browser installer](https://doublej380-pixel.github.io/OpenDrift/) to flash a supported board over USB without an account, source compilation, or command-line tools. Use Chrome or Edge on a desktop computer and disconnect the board from the receiver, servo, and external power before flashing.
+Use the [public OpenDrift browser installer](https://opendrift-installer.doublej380.chatgpt.site) to flash a supported board over USB without an account, source compilation, or command-line tools. Use Chrome or Edge on a desktop computer and disconnect the board from the receiver, servo, and external power before flashing.
 
 ## Current Features
 

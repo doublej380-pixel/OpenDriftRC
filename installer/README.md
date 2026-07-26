@@ -11,9 +11,9 @@ The installer must be served over HTTPS for Web Serial access. Opening
 `index.html` directly from disk is sufficient for visual review, but not for
 flashing hardware.
 
-The public account-free installer is deployed through GitHub Pages at:
+The public account-free installer is deployed at:
 
-`https://doublej380-pixel.github.io/OpenDrift/`
+`https://opendrift-installer.doublej380.chatgpt.site`
 
 Firmware flashing runs through the browser's local Web Serial connection. The
 site has no sign-in, analytics, or firmware-upload service.
@@ -27,5 +27,4 @@ production host. For that deployment, copy the static installer into
 `site-host/public/`, rename `index.html` to `installer.html`, and deploy with
 `site-host/` as the source root with the project's `.openai/hosting.json`. Its
 build script packages the installer under `dist/client`, adds the asset-serving
-entrypoint, and copies the Sites project metadata into `dist`. GitHub Pages
-continues to publish this folder directly.
+entrypoint, and copies the Sites project metadata into `dist`.
