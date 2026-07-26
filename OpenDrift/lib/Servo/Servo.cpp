@@ -1,11 +1,20 @@
 #include "Servo.h"
 
 
-bool ServoOutput::begin(int pin)
+bool ServoOutput::begin(
+    int pin,
+    int frequencyHz
+)
 {
     end();
 
-    servo.setPeriodHertz(50);
+    servo.setPeriodHertz(
+        constrain(
+            frequencyHz,
+            50,
+            333
+        )
+    );
 
     int channel =
         servo.attach(

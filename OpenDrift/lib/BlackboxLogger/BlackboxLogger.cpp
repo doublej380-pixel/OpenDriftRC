@@ -86,6 +86,7 @@ void BlackboxLogger::log(
     int integralLimit,
     int integralCorrection,
     int holdBoost,
+    int counterSteerAssist,
     int antiWobble,
     int huntDamping,
     float huntControlYaw,
@@ -93,6 +94,12 @@ void BlackboxLogger::log(
     float huntFastYaw,
     float huntBlend,
     float huntScore,
+    float outputChatterSlow,
+    int counterSteerCorrection,
+    float outputChatterFast,
+    float outputChatterBlend,
+    float outputChatterScore,
+    float steeringActivity,
     int controlPhase,
     float settledBlend,
     float throttleTransient,
@@ -123,12 +130,12 @@ void BlackboxLogger::log(
         return;
     }
 
-    char line[576];
+    char line[672];
 
     snprintf(
         line,
         sizeof(line),
-        "%lu,%.3f,%.3f,%.3f,%.3f,%.4f,%.4f,%.4f,%.4f,%.4f,%.3f,%.3f,%d,%d,%d,%d,%d,%d,%d,%d,%.3f,%.2f,%d,%.3f,%.3f,%d,%d,%d,%d,%d,%.3f,%.3f,%.3f,%.3f,%.3f,%d,%.3f,%.3f,%d,%.3f,%d,%.3f,%d,%d,%d,%d,%d,%d\n",
+        "%lu,%.3f,%.3f,%.3f,%.3f,%.4f,%.4f,%.4f,%.4f,%.4f,%.3f,%.3f,%d,%d,%d,%d,%d,%d,%d,%d,%.3f,%.2f,%d,%.3f,%.3f,%d,%d,%d,%d,%d,%d,%.3f,%.3f,%.3f,%.3f,%.3f,%.3f,%d,%.3f,%.3f,%.3f,%.3f,%d,%.3f,%.3f,%d,%.3f,%d,%.3f,%d,%d,%d,%d,%d,%d\n",
         timeMs,
         yaw,
         filteredYaw,
@@ -157,6 +164,7 @@ void BlackboxLogger::log(
         integralLimit,
         integralCorrection,
         holdBoost,
+        counterSteerAssist,
         antiWobble,
         huntDamping,
         huntControlYaw,
@@ -164,6 +172,12 @@ void BlackboxLogger::log(
         huntFastYaw,
         huntBlend,
         huntScore,
+        outputChatterSlow,
+        counterSteerCorrection,
+        outputChatterFast,
+        outputChatterBlend,
+        outputChatterScore,
+        steeringActivity,
         controlPhase,
         settledBlend,
         throttleTransient,
@@ -307,7 +321,7 @@ bool BlackboxLogger::writeHeader()
     }
 
     file.println(
-        "time_ms,yaw,filtered_yaw,gyro_x_dps,gyro_y_dps,accel_x_g,accel_y_g,accel_z_g,accel_mag_g,accel_delta_g,tilt_rate_dps,surface_disturbance,gyro_raw_us,gyro_slewed_us,steering_raw_us,steering_cmd_us,servo_us,servo_quiet,throttle_raw_us,gain_raw_us,gain,deadband,max_corr,smooth,i_gain,i_limit,i_us,hold_boost,anti_wobble,hunt_damping,hunt_control_yaw,hunt_slow_yaw,hunt_fast_yaw,hunt_blend,hunt_score,control_phase,settled_blend,throttle_transient,terrain_active,terrain_assist,terrain_enabled,hold_factor,attack,return,steering_signal,throttle_signal,gain_signal,pin18_throttle_out"
+        "time_ms,yaw,filtered_yaw,gyro_x_dps,gyro_y_dps,accel_x_g,accel_y_g,accel_z_g,accel_mag_g,accel_delta_g,tilt_rate_dps,surface_disturbance,gyro_raw_us,gyro_v2_us,steering_raw_us,steering_cmd_us,servo_us,servo_quiet,throttle_raw_us,gain_raw_us,gain,deadband,max_corr,smooth,drift_memory,memory_limit,memory_feedback_us,hold_assist,countersteer_assist,anti_wobble_legacy,prediction_strength,predicted_yaw,drift_reference_yaw,reference_error,reference_lock,throttle_prediction,direct_correction_us,countersteer_us,memory_feedback_copy_us,driver_activity_blend,throttle_prediction_blend,steering_activity_us_s,control_phase,settled_blend,throttle_transient,terrain_active_legacy,terrain_assist_legacy,terrain_enabled_legacy,hold_factor_legacy,attack_legacy,return_legacy,steering_signal,throttle_signal,gain_signal,pin18_throttle_out"
     );
 
     file.close();

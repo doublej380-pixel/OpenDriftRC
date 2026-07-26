@@ -1,5 +1,27 @@
 #include "Settings.h"
 
+namespace
+{
+    struct DrivingProfileV1
+    {
+        uint32_t version;
+        char name[Settings::PROFILE_NAME_LENGTH];
+        float gain;
+        float deadband;
+        float gyroSmoothing;
+        float gyroIntegralGain;
+        int32_t gyroMaxCorrection;
+        int32_t gyroAttackSpeed;
+        int32_t gyroReturnSpeed;
+        int32_t gyroIntegralLimit;
+        int32_t gyroHoldBoost;
+        int32_t gyroAntiWobble;
+        int32_t gyroHuntDamping;
+        int32_t steeringDamper;
+        int32_t radioSteeringTravel;
+    };
+}
+
 bool Settings::begin()
 {
     prefs.begin("OpenDrift", false);
@@ -51,6 +73,11 @@ bool Settings::begin()
 
     gyroHoldBoost = prefs.getInt(
         "gyroHold",
+        0
+    );
+
+    gyroCounterSteerAssist = prefs.getInt(
+        "counterAssist",
         0
     );
 
@@ -210,6 +237,11 @@ void Settings::save()
     prefs.putInt(
         "gyroHold",
         gyroHoldBoost
+    );
+
+    prefs.putInt(
+        "counterAssist",
+        gyroCounterSteerAssist
     );
 
     prefs.putInt(
@@ -473,6 +505,17 @@ void Settings::setGyroIntegralLimit(int value)
 int Settings::getGyroHoldBoost()
 {
     return gyroHoldBoost;
+}
+
+int Settings::getGyroCounterSteerAssist()
+{
+    return gyroCounterSteerAssist;
+}
+
+void Settings::setGyroCounterSteerAssist(int value)
+{
+    gyroCounterSteerAssist = constrain(value, 0, 100);
+    dirty = true;
 }
 
 void Settings::setGyroHoldBoost(int value)
@@ -947,23 +990,61 @@ void Settings::loadProfiles()
             i
         );
 
+        size_t storedSize = prefs.getBytesLength(key);
+
         if(
-            prefs.getBytesLength(key) == sizeof(DrivingProfile) &&
+            storedSize == sizeof(DrivingProfile) &&
             prefs.getBytes(
                 key,
                 &profiles[loadedCount],
                 sizeof(DrivingProfile)
             ) == sizeof(DrivingProfile) &&
-            profiles[loadedCount].version == 1 &&
+            profiles[loadedCount].version == 2 &&
             profiles[loadedCount].name[0] != '\0'
         )
         {
             profiles[loadedCount].name[PROFILE_NAME_LENGTH - 1] = '\0';
             loadedCount++;
         }
+        else if(storedSize == sizeof(DrivingProfileV1))
+        {
+            DrivingProfileV1 legacy = {};
+
+            if(
+                prefs.getBytes(key, &legacy, sizeof(legacy)) == sizeof(legacy) &&
+                legacy.version == 1 &&
+                legacy.name[0] != '\0'
+            )
+            {
+                DrivingProfile& profile = profiles[loadedCount];
+                profile = DrivingProfile();
+                memcpy(profile.name, legacy.name, PROFILE_NAME_LENGTH);
+                profile.name[PROFILE_NAME_LENGTH - 1] = '\0';
+                profile.gain = legacy.gain;
+                profile.deadband = legacy.deadband;
+                profile.gyroSmoothing = legacy.gyroSmoothing;
+                profile.gyroIntegralGain = legacy.gyroIntegralGain;
+                profile.gyroMaxCorrection = legacy.gyroMaxCorrection;
+                profile.gyroAttackSpeed = legacy.gyroAttackSpeed;
+                profile.gyroReturnSpeed = legacy.gyroReturnSpeed;
+                profile.gyroIntegralLimit = legacy.gyroIntegralLimit;
+                profile.gyroHoldBoost = legacy.gyroHoldBoost;
+                profile.gyroAntiWobble = legacy.gyroAntiWobble;
+                profile.gyroHuntDamping = legacy.gyroHuntDamping;
+                profile.steeringDamper = legacy.steeringDamper;
+                profile.radioSteeringTravel = legacy.radioSteeringTravel;
+                profile.gyroCounterSteerAssist = 0;
+                loadedCount++;
+            }
+        }
     }
 
     profileCount = loadedCount;
+
+    for(uint8_t i = 0; i < profileCount; i++)
+    {
+        persistProfile(i);
+    }
 
     int storedActive =
         prefs.getChar("profAct", -1);
@@ -981,7 +1062,7 @@ void Settings::captureProfile(
     DrivingProfile& profile
 )
 {
-    profile.version = 1;
+    profile.version = 2;
     profile.gain = gain;
     profile.deadband = deadband;
     profile.gyroSmoothing = gyroSmoothing;
@@ -995,6 +1076,7 @@ void Settings::captureProfile(
     profile.gyroHuntDamping = gyroHuntDamping;
     profile.steeringDamper = steeringDamper;
     profile.radioSteeringTravel = radioSteeringTravel;
+    profile.gyroCounterSteerAssist = gyroCounterSteerAssist;
 }
 
 void Settings::applyProfile(
@@ -1014,6 +1096,7 @@ void Settings::applyProfile(
     gyroHuntDamping = profile.gyroHuntDamping;
     steeringDamper = profile.steeringDamper;
     radioSteeringTravel = profile.radioSteeringTravel;
+    gyroCounterSteerAssist = profile.gyroCounterSteerAssist;
 }
 
 bool Settings::persistProfile(

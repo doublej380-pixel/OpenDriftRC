@@ -10,43 +10,52 @@ namespace
     static constexpr uint8_t PHASE_SETTLED = 2;
     static constexpr uint8_t PHASE_TRANSITION = 3;
 
-    static constexpr float SETTLE_DELAY_SECONDS = 0.45f;
-    static constexpr float TRANSITION_SECONDS = 0.25f;
-    static constexpr float THROTTLE_TRANSIENT_SECONDS = 0.25f;
-    static constexpr float TERRAIN_TRIGGER = 0.45f;
-    static constexpr float TERRAIN_CALM_SECONDS = 0.60f;
+    static constexpr float TRANSITION_SECONDS = 0.18f;
+    static constexpr float THROTTLE_TRANSIENT_SECONDS = 0.22f;
+    static constexpr float MEMORY_GAIN_SCALE = 6.0f;
 }
 
 
 void GyroController::resetDynamicState()
 {
-    filteredYaw = 0;
+    filteredYaw = 0.0f;
+    previousFilteredYaw = 0.0f;
+    filteredYawAcceleration = 0.0f;
 
-    integralAccumulator = 0;
-    integralCorrection = 0;
-
-    holdBoostFiltered = 0;
-    activeHoldFactor = 1.0f;
-
-    huntControlYaw = 0;
-    huntSlowYaw = 0;
-    huntFastYaw = 0;
-    huntBlend = 0;
-    huntScore = 0;
-    huntReversalAge = 10.0f;
-    huntFastDirection = 0;
-
+    driftReferenceYaw = 0.0f;
+    driftReferenceReady = false;
     driftDirection = 0;
-    directionTime = 0;
-    transitionTime = 0;
-    controlPhase = PHASE_IDLE;
-    settledBlend = 0;
+    transitionTime = 0.0f;
 
-    throttleTransientTime = 0;
-    terrainTransientTime = 0;
-    terrainAssistBlend = 0;
+    integralAccumulator = 0.0f;
+    integralCorrection = 0;
+    counterSteerCorrection = 0;
+
+    steeringActivity = 0.0f;
+    lastSteeringCommand = 1500;
+    steeringReady = false;
+
+    throttleRate = 0.0f;
+    throttleTransientTime = 0.0f;
     lastThrottlePulse = 1500;
     throttleReady = false;
+
+    controlPhase = PHASE_IDLE;
+    settledBlend = 0.0f;
+
+    huntControlYaw = 0.0f;
+    huntSlowYaw = 0.0f;
+    huntFastYaw = 0.0f;
+    huntBlend = 0.0f;
+    huntScore = 0.0f;
+
+    outputChatterSlow = 0.0f;
+    outputChatterFast = 0.0f;
+    outputChatterBlend = 0.0f;
+    outputChatterScore = 0.0f;
+
+    terrainAssistBlend = 0.0f;
+    activeHoldFactor = 1.0f;
 
     servoOutput = 1500;
     correctionOutput = 0;
@@ -55,7 +64,7 @@ void GyroController::resetDynamicState()
 
 bool GyroController::begin()
 {
-    gyroOffset = 0;
+    gyroOffset = 0.0f;
     calibrated = false;
     lastUpdateMicros = 0;
 
@@ -78,15 +87,19 @@ void GyroController::calibrate(float yawRate)
 
 int GyroController::update(
     float yawRate,
+    int steeringCommand,
+    bool steeringSignal,
     int throttlePulse,
     bool throttleSignal,
     float surfaceDisturbance,
     bool terrainAssistEnabled
 )
 {
-    uint32_t now = micros();
+    (void)surfaceDisturbance;
+    (void)terrainAssistEnabled;
 
-    float dt = 0.02f;
+    uint32_t now = micros();
+    float dt = 0.004f;
 
     if(lastUpdateMicros != 0)
     {
@@ -109,16 +122,63 @@ int GyroController::update(
         calibrate(yawRate);
     }
 
+    steeringCommand = constrain(
+        steeringCommand,
+        1000,
+        2000
+    );
 
-    // Throttle is deliberately not treated as vehicle speed. A sufficiently
-    // large pulse change only marks a short transient during which settled-
-    // drift features are allowed to release instead of accumulating harder.
+    if(!steeringSignal)
+    {
+        steeringReady = false;
+        steeringActivity = 0.0f;
+        lastSteeringCommand = 1500;
+    }
+    else if(!steeringReady)
+    {
+        lastSteeringCommand = steeringCommand;
+        steeringReady = true;
+    }
+    else
+    {
+        float steeringRate =
+            fabsf(
+                steeringCommand - lastSteeringCommand
+            )
+            /
+            dt;
+
+        float steeringAmount =
+            1.0f - expf(-dt / 0.04f);
+
+        steeringActivity +=
+            (steeringRate - steeringActivity)
+            *
+            steeringAmount;
+
+        lastSteeringCommand = steeringCommand;
+    }
+
+    float driverActivityBlend = constrain(
+        (steeringActivity - 80.0f) / 1800.0f,
+        0.0f,
+        1.0f
+    );
+
+    float throttleLevel = 0.0f;
+
     if(throttleSignal)
     {
         throttlePulse = constrain(
             throttlePulse,
             900,
             2100
+        );
+
+        throttleLevel = constrain(
+            fabsf(throttlePulse - 1500.0f) / 500.0f,
+            0.0f,
+            1.0f
         );
 
         if(!throttleReady)
@@ -128,7 +188,23 @@ int GyroController::update(
         }
         else
         {
-            if(abs(throttlePulse - lastThrottlePulse) >= 20)
+            int throttleDelta =
+                throttlePulse - lastThrottlePulse;
+
+            float rawThrottleRate =
+                throttleDelta
+                /
+                dt;
+
+            float throttleAmount =
+                1.0f - expf(-dt / 0.04f);
+
+            throttleRate +=
+                (rawThrottleRate - throttleRate)
+                *
+                throttleAmount;
+
+            if(abs(throttleDelta) >= 8)
             {
                 throttleTransientTime =
                     THROTTLE_TRANSIENT_SECONDS;
@@ -140,7 +216,8 @@ int GyroController::update(
     else
     {
         throttleReady = false;
-        throttleTransientTime = 0;
+        throttleRate = 0.0f;
+        throttleTransientTime = 0.0f;
     }
 
     throttleTransientTime = max(
@@ -148,63 +225,24 @@ int GyroController::update(
         throttleTransientTime - dt
     );
 
-
-    // A hard compression, unload, or pitch/roll impulse marks the chassis as
-    // unsettled. Each strong event refreshes the latch so a sequence of road
-    // disturbances stays covered without ordinary vibration holding it on.
-    // This never changes base gain or correction authority.
-    surfaceDisturbance = constrain(
-        surfaceDisturbance,
+    float throttleRateBlend = constrain(
+        (fabsf(throttleRate) - 250.0f) / 3000.0f,
         0.0f,
         1.0f
     );
 
-    if(!terrainAssistEnabled)
-    {
-        terrainTransientTime = 0.0f;
-        terrainAssistBlend = 0.0f;
-    }
-    else if(surfaceDisturbance >= TERRAIN_TRIGGER)
-    {
-        terrainTransientTime = TERRAIN_CALM_SECONDS;
-    }
-    else if(terrainTransientTime <= dt)
-    {
-        terrainTransientTime = 0.0f;
-    }
-    else
-    {
-        terrainTransientTime -= dt;
-    }
-
-    float terrainAssistTarget =
-        terrainTransientTime > 0.0f
-        ?
-        1.0f
-        :
-        0.0f;
-
-    float terrainAssistTimeConstant =
-        terrainAssistTarget > terrainAssistBlend
-        ?
-        0.10f
-        :
-        0.45f;
-
-    float terrainAssistAmount =
-        1.0f - expf(-dt / terrainAssistTimeConstant);
-
-    terrainAssistBlend +=
-        (terrainAssistTarget - terrainAssistBlend)
-        *
-        terrainAssistAmount;
-
-    terrainAssistBlend = constrain(
-        terrainAssistBlend,
+    float throttleLatchBlend = constrain(
+        throttleTransientTime
+        /
+        THROTTLE_TRANSIENT_SECONDS,
         0.0f,
         1.0f
     );
 
+    float throttlePredictionBlend = max(
+        throttleRateBlend,
+        throttleLatchBlend * 0.55f
+    );
 
     float correctedYaw =
         yawRate - gyroOffset;
@@ -214,25 +252,17 @@ int GyroController::update(
 
     if(yawMagnitude <= deadband)
     {
-        correctedYaw = 0;
+        correctedYaw = 0.0f;
     }
     else
     {
         correctedYaw =
-            (
-                correctedYaw > 0
-                ?
-                1.0f
-                :
-                -1.0f
-            )
+            (correctedYaw > 0.0f ? 1.0f : -1.0f)
             *
             (yawMagnitude - deadband);
     }
 
-
-    // Time-based input low-pass. Existing setting semantics are retained:
-    // larger smoothing values produce a slower yaw signal.
+    // One time-based gyro low-pass is the entire V2 filtering chain.
     float baseFilterAmount =
         1.0f -
         constrain(
@@ -254,23 +284,74 @@ int GyroController::update(
         1.0f
     );
 
-    float oldFilteredYaw = filteredYaw;
+    previousFilteredYaw = filteredYaw;
 
-    filteredYaw =
-        (filteredYaw * (1.0f - filterAmount))
-        +
-        (correctedYaw * filterAmount);
+    filteredYaw +=
+        (correctedYaw - filteredYaw)
+        *
+        filterAmount;
 
-    float yawAbs = fabsf(filteredYaw);
-    float oldYawAbs = fabsf(oldFilteredYaw);
-
-    float yawBuildRate =
-        (yawAbs - oldYawAbs)
+    float rawYawAcceleration =
+        (filteredYaw - previousFilteredYaw)
         /
         dt;
 
-    bool yawCrossedZero =
-        oldFilteredYaw * filteredYaw < 0.0f;
+    rawYawAcceleration = constrain(
+        rawYawAcceleration,
+        -4000.0f,
+        4000.0f
+    );
+
+    float accelerationAmount =
+        1.0f - expf(-dt / 0.035f);
+
+    filteredYawAcceleration +=
+        (rawYawAcceleration - filteredYawAcceleration)
+        *
+        accelerationAmount;
+
+    // Throttle does not pretend to be vehicle speed or prescribe a turn
+    // direction. It announces an upcoming chassis-load change, extending the
+    // short yaw-acceleration look-ahead before the resulting motion arrives.
+    float predictionSeconds =
+        0.003f
+        +
+        (
+            huntDamping
+            /
+            100.0f
+        )
+        *
+        0.024f
+        +
+        throttlePredictionBlend
+        *
+        0.012f
+        +
+        throttleLevel
+        *
+        0.003f;
+
+    float predictionDelta = constrain(
+        filteredYawAcceleration
+        *
+        predictionSeconds,
+        -45.0f,
+        45.0f
+    );
+
+    float predictedYaw =
+        filteredYaw + predictionDelta;
+
+    if(
+        fabsf(filteredYaw) > 5.0f &&
+        predictedYaw * filteredYaw < 0.0f
+    )
+    {
+        predictedYaw = 0.0f;
+    }
+
+    float yawAbs = fabsf(filteredYaw);
 
     int8_t definiteDirection =
         filteredYaw > 12.0f
@@ -290,30 +371,16 @@ int GyroController::update(
         driftDirection != 0 &&
         definiteDirection != driftDirection;
 
-    bool directionEvent =
-        yawCrossedZero || directionChanged;
-
-    if(directionEvent)
+    if(directionChanged)
     {
-        driftDirection = definiteDirection;
-        directionTime = 0;
         transitionTime = TRANSITION_SECONDS;
-
-        huntSlowYaw = filteredYaw;
-        huntFastDirection = 0;
-        huntReversalAge = 10.0f;
-        huntScore = 0;
-        huntBlend = 0;
+        driftReferenceReady = false;
+        integralCorrection = 0;
     }
-    else if(driftDirection == 0 && definiteDirection != 0)
+
+    if(definiteDirection != 0)
     {
         driftDirection = definiteDirection;
-        directionTime = 0;
-        huntSlowYaw = filteredYaw;
-    }
-    else if(driftDirection != 0)
-    {
-        directionTime += dt;
     }
 
     transitionTime = max(
@@ -321,73 +388,32 @@ int GyroController::update(
         transitionTime - dt
     );
 
+    bool idle =
+        yawAbs < 7.0f;
 
-    // Track the average rotation independently of the user-facing smoothing
-    // control. Hunt detection compares the current yaw against this baseline.
-    if(yawAbs < 3.0f || directionEvent)
-    {
-        huntSlowYaw = filteredYaw;
-    }
-    else
-    {
-        float slowAmount =
-            1.0f - expf(-dt / 0.30f);
+    float quietBlend =
+        (1.0f - driverActivityBlend)
+        *
+        (1.0f - throttlePredictionBlend);
 
-        huntSlowYaw +=
-            (filteredYaw - huntSlowYaw)
-            *
-            slowAmount;
-    }
-
-    huntFastYaw =
-        filteredYaw - huntSlowYaw;
-
-
-    bool nearTrueIdle =
-        yawAbs < 8.0f &&
-        fabsf(huntSlowYaw) < 15.0f;
-
-    if(nearTrueIdle)
-    {
-        controlPhase = PHASE_IDLE;
-        directionTime = 0;
-
-        if(yawAbs < 3.0f)
-        {
-            driftDirection = 0;
-        }
-    }
-    else if(transitionTime > 0.0f)
-    {
-        controlPhase = PHASE_TRANSITION;
-    }
-    else if(
-        throttleTransientTime > 0.0f ||
-        terrainTransientTime > 0.0f ||
-        directionTime < SETTLE_DELAY_SECONDS ||
-        fabsf(huntSlowYaw) < 30.0f
-    )
-    {
-        controlPhase = PHASE_ENTRY;
-    }
-    else
-    {
-        controlPhase = PHASE_SETTLED;
-    }
+    bool driftActive =
+        !idle &&
+        definiteDirection != 0;
 
     float settledTarget =
-        controlPhase == PHASE_SETTLED
+        driftActive &&
+        transitionTime <= 0.0f
         ?
-        1.0f
+        quietBlend
         :
         0.0f;
 
     float settledTimeConstant =
         settledTarget > settledBlend
         ?
-        0.18f
+        0.20f
         :
-        0.07f;
+        0.06f;
 
     float settledAmount =
         1.0f - expf(-dt / settledTimeConstant);
@@ -403,378 +429,153 @@ int GyroController::update(
         1.0f
     );
 
-
-    // Detect actual hunting. One fast-yaw excursion only establishes a side;
-    // repeated alternating excursions build the score. Monotonic entries and
-    // exits therefore do not automatically enable Hunt Damping.
-    huntReversalAge += dt;
-
-    if(
-        controlPhase == PHASE_SETTLED &&
-        settledBlend > 0.35f
-    )
+    if(idle)
     {
-        huntScore *= expf(-dt / 1.40f);
-
-        int8_t fastDirection =
-            huntFastYaw > 12.0f
-            ?
-            1
-            :
-            (
-                huntFastYaw < -12.0f
-                ?
-                -1
-                :
-                0
-            );
-
-        if(
-            fastDirection != 0 &&
-            fastDirection != huntFastDirection
-        )
-        {
-            bool validReversal =
-                huntFastDirection != 0 &&
-                huntReversalAge >= 0.08f &&
-                huntReversalAge <= 1.20f;
-
-            if(validReversal)
-            {
-                huntScore = min(
-                    1.0f,
-                    huntScore + 0.50f
-                );
-            }
-
-            huntFastDirection = fastDirection;
-            huntReversalAge = 0;
-        }
+        controlPhase = PHASE_IDLE;
+        driftDirection = 0;
+        driftReferenceReady = false;
+        driftReferenceYaw = 0.0f;
+        integralAccumulator = 0.0f;
+        integralCorrection = 0;
+    }
+    else if(transitionTime > 0.0f)
+    {
+        controlPhase = PHASE_TRANSITION;
+    }
+    else if(settledBlend > 0.55f)
+    {
+        controlPhase = PHASE_SETTLED;
     }
     else
     {
-        huntScore *= expf(-dt / 0.12f);
-        huntFastDirection = 0;
-        huntReversalAge = 10.0f;
+        controlPhase = PHASE_ENTRY;
     }
 
-    float huntThreshold =
-        huntBlend > 0.10f
-        ?
-        0.30f
-        :
-        0.55f;
-
-    bool huntDetected =
-        huntDamping > 0 &&
-        controlPhase == PHASE_SETTLED &&
-        huntScore >= huntThreshold;
-
-    float huntTarget =
-        huntDetected ? 1.0f : 0.0f;
-
-    float huntTimeConstant =
-        huntDetected ? 0.12f : 0.06f;
-
-    float huntAmount =
-        1.0f - expf(-dt / huntTimeConstant);
-
-    huntBlend +=
-        (huntTarget - huntBlend)
-        *
-        huntAmount;
-
-    huntBlend = constrain(
-        huntBlend,
-        0.0f,
-        1.0f
-    );
-
-    float fastAttenuation =
-        0.75f
-        *
-        (
-            huntDamping
-            /
-            100.0f
-        )
-        *
-        huntBlend;
-
-    huntControlYaw =
-        huntSlowYaw
-        +
-        (
-            huntFastYaw
-            *
-            (1.0f - fastAttenuation)
-        );
-
-    // The old shelving filter could retain a large correction while measured
-    // yaw was collapsing. Hunt Damping may soften a peak, but it may never
-    // invent more yaw magnitude or carry the old direction through zero.
-    if(
-        huntControlYaw * filteredYaw <= 0.0f ||
-        fabsf(huntControlYaw) > yawAbs
-    )
+    if(driftActive)
     {
-        huntControlYaw = filteredYaw;
-    }
-
-    if(huntDamping <= 0)
-    {
-        huntControlYaw = filteredYaw;
-        huntBlend = 0;
-        huntScore = 0;
-    }
-
-
-    // Hold Boost belongs to an established drift. Its reference is capped by
-    // current measured yaw so it cannot preserve a stale high-yaw command on
-    // the way out of a drift.
-    float holdTarget = 0;
-
-    if(
-        holdBoost > 0 &&
-        settledBlend > 0.0f
-    )
-    {
-        float holdReference = min(
-            yawAbs,
-            fabsf(huntSlowYaw)
-        );
-
-        float holdAmountTarget = constrain(
-            (holdReference - 45.0f) / 85.0f,
-            0.0f,
-            1.0f
-        );
-
-        if(yawBuildRate > 150.0f)
+        if(!driftReferenceReady)
         {
-            holdAmountTarget = 0;
+            driftReferenceYaw = filteredYaw;
+            driftReferenceReady = true;
         }
-        else if(yawBuildRate > 50.0f)
+        else
         {
-            holdAmountTarget *=
-                1.0f -
-                (
-                    (yawBuildRate - 50.0f)
-                    /
-                    100.0f
-                );
-        }
-
-        holdTarget =
-            holdAmountTarget
-            *
-            settledBlend
-            *
-            (1.0f - terrainAssistBlend);
-    }
-
-    float holdTimeConstant =
-        holdTarget > holdBoostFiltered
-        ?
-        0.12f
-        :
-        0.06f;
-
-    float holdFilterAmount =
-        1.0f - expf(-dt / holdTimeConstant);
-
-    holdBoostFiltered +=
-        (holdTarget - holdBoostFiltered)
-        *
-        holdFilterAmount;
-
-    holdBoostFiltered = constrain(
-        holdBoostFiltered,
-        0.0f,
-        1.0f
-    );
-
-    activeHoldFactor =
-        1.0f
-        +
-        (
-            holdBoostFiltered
-            *
-            (
+            float holdStrength =
                 holdBoost
                 /
-                100.0f
-            )
-        );
+                100.0f;
 
-    int proportionalCorrection =
-        (int)(
-            huntControlYaw
-            *
-            gyroGain
-            *
-            activeHoldFactor
-        );
-
-
-    // Drift Memory now accumulates only while settled. Entries, throttle
-    // transients, and transitions actively release it instead of allowing a
-    // previous drift to steer the next event.
-    if(
-        integralGain > 0.0f &&
-        integralLimit > 0
-    )
-    {
-        float integralDecayBase = 0.94f;
-
-        if(
-            controlPhase == PHASE_SETTLED &&
-            terrainAssistBlend < 0.01f
-        )
-        {
-            integralDecayBase = 0.998f;
-        }
-        else if(controlPhase == PHASE_TRANSITION)
-        {
-            integralDecayBase = 0.72f;
-        }
-        else if(controlPhase == PHASE_IDLE)
-        {
-            integralDecayBase = 0.0f;
-        }
-
-        bool integralOpposesYaw =
-            integralAccumulator * filteredYaw < 0.0f;
-
-        if(integralOpposesYaw)
-        {
-            integralDecayBase = min(
-                integralDecayBase,
-                0.82f
-            );
-        }
-
-        float decay =
-            integralDecayBase <= 0.0f
-            ?
-            0.0f
-            :
-            powf(
-                integralDecayBase,
-                dt / 0.02f
-            );
-
-        integralAccumulator *= decay;
-
-        if(controlPhase == PHASE_SETTLED)
-        {
-            integralAccumulator +=
-                huntControlYaw
+            float referenceTimeConstant =
+                0.045f
+                +
+                quietBlend
                 *
-                dt
+                (
+                    0.18f
+                    +
+                    2.20f
+                    *
+                    holdStrength
+                );
+
+            float referenceAmount =
+                1.0f -
+                expf(
+                    -dt
+                    /
+                    referenceTimeConstant
+                );
+
+            driftReferenceYaw +=
+                (filteredYaw - driftReferenceYaw)
                 *
-                settledBlend
-                *
-                (1.0f - terrainAssistBlend);
+                referenceAmount;
         }
+    }
 
-        float maxAccumulator =
-            integralLimit
-            /
-            integralGain;
+    float referenceError =
+        driftReferenceReady
+        ?
+        filteredYaw - driftReferenceYaw
+        :
+        0.0f;
 
-        integralAccumulator = constrain(
-            integralAccumulator,
-            -maxAccumulator,
-            maxAccumulator
-        );
+    integralAccumulator = referenceError;
 
-        integralCorrection = constrain(
-            (int)(integralAccumulator * integralGain),
+    float memoryCorrection =
+        referenceError
+        *
+        integralGain
+        *
+        MEMORY_GAIN_SCALE
+        *
+        settledBlend;
+
+    integralCorrection =
+        constrain(
+            (int)roundf(memoryCorrection),
             -integralLimit,
             integralLimit
         );
-    }
-    else
-    {
-        integralAccumulator = 0;
-        integralCorrection = 0;
-    }
 
+    float directCorrection =
+        predictedYaw
+        *
+        gyroGain;
 
-    int targetCorrection = constrain(
-        proportionalCorrection + integralCorrection,
-        -maxCorrection,
-        maxCorrection
-    );
+    // Countersteer Assist is deliberately sourced from the slow learned
+    // drift reference. It increases how much of a settled drift OpenDrift
+    // carries without raising fast yaw damping or responding to chatter.
+    float steadyAssistCorrection =
+        driftReferenceReady
+        ?
+        driftReferenceYaw
+        *
+        gyroGain
+        *
+        (counterSteerAssist / 100.0f)
+        *
+        settledBlend
+        :
+        0.0f;
 
-    bool idleSnap =
-        correctedYaw == 0.0f &&
-        yawAbs < 1.0f;
+    counterSteerCorrection =
+        (int)roundf(steadyAssistCorrection);
 
-    if(idleSnap)
-    {
-        integralAccumulator = 0;
-        integralCorrection = 0;
-        holdBoostFiltered = 0;
-        activeHoldFactor = 1.0f;
-        huntBlend = 0;
-        huntScore = 0;
-        targetCorrection = 0;
-    }
+    float baseCorrection =
+        directCorrection
+        +
+        steadyAssistCorrection;
 
-
-    // AntiWobble is intentionally limited to tiny, near-center correction
-    // chatter. Broad drift smoothing belongs to Hunt Damping; applying it
-    // here created phase delay in the old controller.
-    int correctionDelta =
-        targetCorrection - correctionOutput;
-
-    int absCorrectionDelta =
-        abs(correctionDelta);
-
+    // There is no accumulating state to wind up. When direct damping has
+    // saturated, memory may help it unwind but may not push farther into the
+    // same limit.
     if(
-        !idleSnap &&
-        antiWobble > 0 &&
-        yawAbs < 18.0f
+        fabsf(baseCorrection) >= maxCorrection &&
+        integralCorrection * baseCorrection > 0.0f
     )
     {
-        float antiStrength =
-            antiWobble
-            /
-            200.0f;
-
-        int holdThreshold =
-            1 + (int)roundf(5.0f * antiStrength);
-
-        int blendThreshold =
-            6 + (int)roundf(18.0f * antiStrength);
-
-        if(absCorrectionDelta <= holdThreshold)
-        {
-            targetCorrection = correctionOutput;
-        }
-        else if(absCorrectionDelta <= blendThreshold)
-        {
-            float correctionBlend =
-                1.0f - (0.65f * antiStrength);
-
-            targetCorrection =
-                correctionOutput
-                +
-                (int)roundf(
-                    correctionDelta
-                    *
-                    correctionBlend
-                );
-        }
+        integralCorrection = 0;
     }
 
-    correctionOutput = constrain(
-        targetCorrection,
-        -maxCorrection,
-        maxCorrection
-    );
+    int targetCorrection =
+        constrain(
+            (int)roundf(
+                baseCorrection
+                +
+                integralCorrection
+            ),
+            -maxCorrection,
+            maxCorrection
+        );
+
+    if(idle && correctedYaw == 0.0f)
+    {
+        targetCorrection = 0;
+        filteredYawAcceleration = 0.0f;
+    }
+
+    correctionOutput = targetCorrection;
 
     servoOutput = constrain(
         1500 - correctionOutput,
@@ -782,13 +583,33 @@ int GyroController::update(
         2000
     );
 
+    // Map V2 internals onto the existing diagnostics until the binary logger
+    // replaces the legacy CSV schema.
+    huntControlYaw = predictedYaw;
+    huntSlowYaw = driftReferenceYaw;
+    huntFastYaw = referenceError;
+    huntBlend = settledBlend;
+    huntScore = throttlePredictionBlend;
+
+    outputChatterSlow = directCorrection;
+    outputChatterFast = integralCorrection;
+    outputChatterBlend = driverActivityBlend;
+    outputChatterScore = throttlePredictionBlend;
+
+    terrainAssistBlend = 0.0f;
+    activeHoldFactor = 1.0f;
+
     return servoOutput;
 }
 
 
 void GyroController::setGain(float value)
 {
-    gyroGain = value;
+    gyroGain = constrain(
+        value,
+        0.0f,
+        10.0f
+    );
 }
 
 
@@ -800,7 +621,11 @@ float GyroController::getGain()
 
 void GyroController::setDeadband(float value)
 {
-    deadband = value;
+    deadband = constrain(
+        value,
+        0.0f,
+        100.0f
+    );
 }
 
 
@@ -858,7 +683,7 @@ void GyroController::setIntegralGain(float value)
 
     if(integralGain <= 0.0f)
     {
-        integralAccumulator = 0;
+        integralAccumulator = 0.0f;
         integralCorrection = 0;
     }
 }
@@ -880,7 +705,6 @@ void GyroController::setIntegralLimit(int value)
 
     if(integralLimit <= 0)
     {
-        integralAccumulator = 0;
         integralCorrection = 0;
     }
 }
@@ -913,6 +737,26 @@ int GyroController::getHoldBoost()
     return holdBoost;
 }
 
+void GyroController::setCounterSteerAssist(int value)
+{
+    counterSteerAssist = constrain(value, 0, 100);
+
+    if(counterSteerAssist <= 0)
+    {
+        counterSteerCorrection = 0;
+    }
+}
+
+int GyroController::getCounterSteerAssist()
+{
+    return counterSteerAssist;
+}
+
+int GyroController::getCounterSteerCorrection()
+{
+    return counterSteerCorrection;
+}
+
 
 void GyroController::setAntiWobble(int value)
 {
@@ -937,20 +781,31 @@ void GyroController::setHuntDamping(int value)
         0,
         100
     );
-
-    if(huntDamping == 0)
-    {
-        huntControlYaw = filteredYaw;
-        huntBlend = 0;
-        huntScore = 0;
-        huntFastDirection = 0;
-    }
 }
 
 
 int GyroController::getHuntDamping()
 {
     return huntDamping;
+}
+
+
+int GyroController::applyOutputChatterDamping(
+    int correction,
+    int steeringCommand,
+    bool steeringSignal,
+    float dt
+)
+{
+    (void)steeringCommand;
+    (void)steeringSignal;
+    (void)dt;
+
+    return constrain(
+        correction,
+        -maxCorrection,
+        maxCorrection
+    );
 }
 
 
@@ -984,6 +839,36 @@ float GyroController::getHuntScore()
 }
 
 
+float GyroController::getOutputChatterSlow()
+{
+    return outputChatterSlow;
+}
+
+
+float GyroController::getOutputChatterFast()
+{
+    return outputChatterFast;
+}
+
+
+float GyroController::getOutputChatterBlend()
+{
+    return outputChatterBlend;
+}
+
+
+float GyroController::getOutputChatterScore()
+{
+    return outputChatterScore;
+}
+
+
+float GyroController::getSteeringActivity()
+{
+    return steeringActivity;
+}
+
+
 int GyroController::getControlPhase()
 {
     return controlPhase;
@@ -998,19 +883,13 @@ float GyroController::getSettledBlend()
 
 float GyroController::getThrottleTransient()
 {
-    return constrain(
-        throttleTransientTime
-        /
-        THROTTLE_TRANSIENT_SECONDS,
-        0.0f,
-        1.0f
-    );
+    return throttleTransientTime;
 }
 
 
 bool GyroController::getTerrainActive()
 {
-    return terrainTransientTime > 0.0f;
+    return false;
 }
 
 

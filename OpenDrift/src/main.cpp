@@ -1,5 +1,8 @@
 #include <Arduino.h>
 #include <WiFi.h>
+#include <freertos/FreeRTOS.h>
+#include <freertos/semphr.h>
+#include <freertos/task.h>
 
 #include "LGFX_OpenDrift.hpp"
 #include "IMU.h"
@@ -41,16 +44,6 @@ RadioInput throttleRadio;
 
 BlackboxLogger blackbox;
 
-float slewedGyroCorrection = 0;
-
-float dampedSteeringCommand = 1500;
-
-uint32_t lastCorrectionMicros = 0;
-
-uint32_t lastSteeringDampMicros = 0;
-
-bool steeringDamperReady = false;
-
 unsigned long lastBlackboxLog = 0;
 
 bool blackboxStarted = false;
@@ -58,6 +51,30 @@ bool blackboxStarted = false;
 bool lastBlackboxEnabled = false;
 
 bool blackboxStartAttempted = false;
+
+static constexpr uint32_t CONTROL_LOOP_HZ = 250;
+static constexpr uint32_t CONTROL_LOOP_PERIOD_MS =
+    1000 / CONTROL_LOOP_HZ;
+
+struct ControlTelemetry
+{
+    float yaw = 0.0f;
+    int rawGyroCorrection = 0;
+    int gyroCorrection = 0;
+    int steeringCommand = 1500;
+    int servoCommand = 1500;
+    bool steeringSignal = false;
+    bool throttleSignal = false;
+};
+
+ControlTelemetry controlTelemetry;
+
+portMUX_TYPE controlTelemetryMux =
+    portMUX_INITIALIZER_UNLOCKED;
+
+SemaphoreHandle_t i2cBusMutex = nullptr;
+
+TaskHandle_t controlTaskHandle = nullptr;
 
 #define SERVO_OUTPUT_PIN 16
 #define RADIO_STEERING_PIN 17
@@ -139,7 +156,7 @@ public:
         canvas.setTextSize(AMOLED_BOOT_LOG_TEXT_SIZE);
         canvas.setTextColor(0x7BEF);
         canvas.drawString(
-            "control kernel 1.0.0-amoled  ttyOD0",
+            "control kernel 2.0.0-amoled  ttyOD0",
             8,
             27
         );
@@ -162,7 +179,7 @@ public:
         display->setTextSize(1);
         display->setTextColor(0x7BEF);
         display->drawCenterString(
-            "control kernel 1.0-round  ttyOD0",
+            "control kernel 2.0-round  ttyOD0",
             120,
             32
         );
@@ -540,72 +557,201 @@ float mapGainPulse(
 
 
 
-int dampSteeringInput(
-    int target,
-    Settings& settings
-)
+void runControlIteration()
 {
-    int damperMs =
-        settings.getSteeringDamper();
-
-    uint32_t now =
-        micros();
-
-    float dt =
-        0.02f;
-
-    if(lastSteeringDampMicros != 0)
-    {
-        dt =
-            (now - lastSteeringDampMicros)
-            /
-            1000000.0f;
-
-        dt =
-            constrain(
-                dt,
-                0.001f,
-                0.05f
-            );
-    }
-
-    lastSteeringDampMicros =
-        now;
-
     if(
-        damperMs <= 0 ||
-        !steeringDamperReady
+        !pin18ThrottleOutputMode &&
+        gainRadio.hasSignal()
     )
     {
-        dampedSteeringCommand =
-            target;
-
-        steeringDamperReady =
-            true;
-
-        return target;
+        gyro.setGain(
+            mapGainPulse(
+                gainRadio.getPulseWidth(),
+                settings
+            )
+        );
+    }
+    else
+    {
+        gyro.setGain(
+            settings.getGain()
+        );
     }
 
-    float tau =
-        damperMs
-        /
-        1000.0f;
-
-    float alpha =
-        dt
-        /
-        (tau + dt);
-
-    dampedSteeringCommand +=
-        (target - dampedSteeringCommand)
-        *
-        alpha;
-
-    return constrain(
-        (int)roundf(dampedSteeringCommand),
-        1000,
-        2000
+    gyro.setDeadband(
+        settings.getDeadband()
     );
+
+    gyro.setSmoothing(
+        settings.getGyroSmoothing()
+    );
+
+    gyro.setMaxCorrection(
+        settings.getGyroMaxCorrection()
+    );
+
+    gyro.setIntegralGain(
+        settings.getGyroIntegralGain()
+    );
+
+    gyro.setIntegralLimit(
+        settings.getGyroIntegralLimit()
+    );
+
+    gyro.setHoldBoost(
+        settings.getGyroHoldBoost()
+    );
+
+    gyro.setCounterSteerAssist(
+        settings.getGyroCounterSteerAssist()
+    );
+
+    gyro.setAntiWobble(
+        settings.getGyroAntiWobble()
+    );
+
+    gyro.setHuntDamping(
+        settings.getGyroHuntDamping()
+    );
+
+    if(i2cBusMutex != nullptr)
+    {
+        xSemaphoreTake(
+            i2cBusMutex,
+            portMAX_DELAY
+        );
+    }
+
+    imu.update();
+
+    if(i2cBusMutex != nullptr)
+    {
+        xSemaphoreGive(
+            i2cBusMutex
+        );
+    }
+
+    bool steeringSignal =
+        steeringRadio.hasSignal();
+
+    bool throttleSignal =
+        throttleRadio.hasSignal();
+
+    int steeringCommand = 1500;
+
+    if(steeringSignal)
+    {
+        steeringCommand =
+            mapSteeringPulse(
+                steeringRadio.getPulseWidth(),
+                settings
+            );
+
+        steeringCommand =
+            applyRadioSteeringTravel(
+                steeringCommand,
+                settings
+            );
+    }
+    float yaw =
+        imu.getYawRate();
+
+    int gyroCommand =
+        gyro.update(
+            yaw,
+            steeringCommand,
+            steeringSignal,
+            throttleRadio.getPulseWidth(),
+            throttleSignal,
+            imu.getSurfaceDisturbanceScore(),
+            settings.getTerrainAssistEnabled()
+        );
+
+    int gyroCorrection =
+        gyroCommand - 1500;
+
+    if(settings.getGyroReverse())
+    {
+        gyroCorrection =
+            -gyroCorrection;
+    }
+
+    int rawGyroCorrection =
+        gyroCorrection;
+
+    int servoCommand =
+        steeringServo.getPosition();
+
+    if(steeringSignal)
+    {
+        servoCommand =
+            constrainToRadioSteeringTravel(
+                steeringCommand + gyroCorrection,
+                settings
+            );
+
+        steeringServo.configure(
+            settings.getServoCenter(),
+            settings.getServoReverse(),
+            settings.getServoTravel(),
+            settings.getServoQuiet()
+        );
+
+        steeringServo.writeMicroseconds(
+            servoCommand
+        );
+    }
+
+    ControlTelemetry nextTelemetry;
+
+    nextTelemetry.yaw = yaw;
+    nextTelemetry.rawGyroCorrection =
+        rawGyroCorrection;
+    nextTelemetry.gyroCorrection =
+        gyroCorrection;
+    nextTelemetry.steeringCommand =
+        steeringCommand;
+    nextTelemetry.servoCommand =
+        servoCommand;
+    nextTelemetry.steeringSignal =
+        steeringSignal;
+    nextTelemetry.throttleSignal =
+        throttleSignal;
+
+    portENTER_CRITICAL(
+        &controlTelemetryMux
+    );
+
+    controlTelemetry =
+        nextTelemetry;
+
+    portEXIT_CRITICAL(
+        &controlTelemetryMux
+    );
+}
+
+
+void controlTask(void* parameter)
+{
+    (void)parameter;
+
+    TickType_t lastWake =
+        xTaskGetTickCount();
+
+    const TickType_t period =
+        pdMS_TO_TICKS(
+            CONTROL_LOOP_PERIOD_MS
+        );
+
+    while(true)
+    {
+        runControlIteration();
+
+        vTaskDelayUntil(
+            &lastWake,
+            period
+        );
+    }
 }
 
 
@@ -762,7 +908,10 @@ void setup()
     // SERVO
     //-------------------
 
-    if(!steeringServo.begin(SERVO_OUTPUT_PIN))
+    if(!steeringServo.begin(
+        SERVO_OUTPUT_PIN,
+        CONTROL_LOOP_HZ
+    ))
     {
         bootConsole.log(
             "ledc: steering servo output failed",
@@ -868,6 +1017,10 @@ void setup()
 
     gyro.setHoldBoost(
         settings.getGyroHoldBoost()
+    );
+
+    gyro.setCounterSteerAssist(
+        settings.getGyroCounterSteerAssist()
     );
 
     gyro.setAntiWobble(
@@ -1045,6 +1198,27 @@ void setup()
 
     touch.update();
 
+    i2cBusMutex =
+        xSemaphoreCreateMutex();
+
+    BaseType_t taskStarted =
+        xTaskCreatePinnedToCore(
+            controlTask,
+            "OpenDriftControl",
+            8192,
+            nullptr,
+            4,
+            &controlTaskHandle,
+            1
+        );
+
+    Serial.println(
+        taskStarted == pdPASS
+        ?
+        "Controller V2: 250 Hz task online"
+        :
+        "Controller V2: task start failed"
+    );
 }
 
 void loop()
@@ -1059,9 +1233,22 @@ void loop()
         Serial.println("OpenDrift heartbeat");
     }
 
-    imu.update();
+    if(i2cBusMutex != nullptr)
+    {
+        xSemaphoreTake(
+            i2cBusMutex,
+            portMAX_DELAY
+        );
+    }
 
     touch.update();
+
+    if(i2cBusMutex != nullptr)
+    {
+        xSemaphoreGive(
+            i2cBusMutex
+        );
+    }
 
     //-------------------
     // SETTINGS
@@ -1147,61 +1334,6 @@ void loop()
     }
 
     //-------------------
-    // RADIO
-    //-------------------
-
-    if(
-        !pin18ThrottleOutputMode &&
-        gainRadio.hasSignal()
-    )
-    {
-        gyro.setGain(
-            mapGainPulse(
-                gainRadio.getPulseWidth(),
-                settings
-            )
-        );
-    }
-    else
-    {
-        gyro.setGain(
-            settings.getGain()
-        );
-    }
-
-    gyro.setDeadband(
-        settings.getDeadband()
-    );
-
-    gyro.setSmoothing(
-        settings.getGyroSmoothing()
-    );
-
-    gyro.setMaxCorrection(
-        settings.getGyroMaxCorrection()
-    );
-
-    gyro.setIntegralGain(
-        settings.getGyroIntegralGain()
-    );
-
-    gyro.setIntegralLimit(
-        settings.getGyroIntegralLimit()
-    );
-
-    gyro.setHoldBoost(
-        settings.getGyroHoldBoost()
-    );
-
-    gyro.setAntiWobble(
-        settings.getGyroAntiWobble()
-    );
-
-    gyro.setHuntDamping(
-        settings.getGyroHuntDamping()
-    );
-
-    //-------------------
     // UI
     //-------------------
 
@@ -1219,144 +1351,18 @@ void loop()
         #endif
     );
 
-    //-------------------
-    // GYRO
-    //-------------------
+    ControlTelemetry telemetry;
 
-    float yaw =
-        imu.getYawRate();
+    portENTER_CRITICAL(
+        &controlTelemetryMux
+    );
 
-    int gyroCommand =
-        gyro.update(
-            yaw,
-            throttleRadio.getPulseWidth(),
-            throttleRadio.hasSignal(),
-            imu.getSurfaceDisturbanceScore(),
-            settings.getTerrainAssistEnabled()
-        );
+    telemetry =
+        controlTelemetry;
 
-    int steeringCommand = 1500;
-
-    if(steeringRadio.hasSignal())
-    {
-        steeringCommand =
-            mapSteeringPulse(
-                steeringRadio.getPulseWidth(),
-                settings
-            );
-
-        steeringCommand =
-            applyRadioSteeringTravel(
-                steeringCommand,
-                settings
-            );
-
-        steeringCommand =
-            dampSteeringInput(
-                steeringCommand,
-                settings
-            );
-    }
-    else
-    {
-        steeringDamperReady =
-            false;
-
-        lastSteeringDampMicros =
-            0;
-    }
-
-    int gyroCorrection =
-        gyroCommand - 1500;
-
-    int rawGyroCorrection =
-        gyroCorrection;
-
-    if(settings.getGyroReverse())
-    {
-        gyroCorrection =
-            -gyroCorrection;
-
-        rawGyroCorrection =
-            -rawGyroCorrection;
-    }
-
-    uint32_t correctionNow =
-        micros();
-
-    float correctionDt =
-        0.02f;
-
-    if(lastCorrectionMicros != 0)
-    {
-        correctionDt =
-            (correctionNow - lastCorrectionMicros)
-            /
-            1000000.0f;
-
-        correctionDt =
-            constrain(
-                correctionDt,
-                0.001f,
-                0.05f
-            );
-    }
-
-    lastCorrectionMicros =
-        correctionNow;
-
-    float correctionDelta =
-        gyroCorrection - slewedGyroCorrection;
-
-    int rateSetting =
-        abs(gyroCorrection) > abs(slewedGyroCorrection)
-        ?
-        settings.getGyroAttackSpeed()
-        :
-        settings.getGyroReturnSpeed();
-
-    float rateLimit =
-        rateSetting
-        *
-        (correctionDt / 0.02f);
-
-    correctionDelta =
-        constrain(
-            correctionDelta,
-            -rateLimit,
-            rateLimit
-        );
-
-    slewedGyroCorrection +=
-        correctionDelta;
-
-    gyroCorrection =
-        (int)roundf(
-            slewedGyroCorrection
-        );
-
-    int servoCommand =
-        steeringServo.getPosition();
-
-    if(steeringRadio.hasSignal())
-    {
-        servoCommand =
-            constrainToRadioSteeringTravel(
-                steeringCommand + gyroCorrection,
-                settings
-            );
-
-        steeringServo.configure(
-            settings.getServoCenter(),
-            settings.getServoReverse(),
-            settings.getServoTravel(),
-            settings.getServoQuiet()
-        );
-
-        steeringServo.writeMicroseconds(
-            servoCommand
-        );
-    }
+    portEXIT_CRITICAL(
+        &controlTelemetryMux
+    );
 
     //-------------------
     // BLACKBOX LOG
@@ -1365,7 +1371,7 @@ void loop()
     if(
         settings.getBlackboxEnabled() &&
         blackbox.isReady() &&
-        steeringRadio.hasSignal() &&
+        telemetry.steeringSignal &&
         millis() - lastBlackboxLog >= 50
     )
     {
@@ -1374,7 +1380,7 @@ void loop()
 
         blackbox.log(
             lastBlackboxLog,
-            yaw,
+            telemetry.yaw,
             gyro.getFilteredYaw(),
             imu.getGyroX(),
             imu.getGyroY(),
@@ -1385,11 +1391,11 @@ void loop()
             imu.getAccelDelta(),
             imu.getTiltRate(),
             imu.getSurfaceDisturbanceScore(),
-            rawGyroCorrection,
-            gyroCorrection,
+            telemetry.rawGyroCorrection,
+            telemetry.gyroCorrection,
             steeringRadio.getPulseWidth(),
-            steeringCommand,
-            servoCommand,
+            telemetry.steeringCommand,
+            telemetry.servoCommand,
             settings.getServoQuiet(),
             throttleRadio.getPulseWidth(),
             gainRadio.getPulseWidth(),
@@ -1401,6 +1407,7 @@ void loop()
             settings.getGyroIntegralLimit(),
             gyro.getIntegralCorrection(),
             settings.getGyroHoldBoost(),
+            settings.getGyroCounterSteerAssist(),
             settings.getGyroAntiWobble(),
             settings.getGyroHuntDamping(),
             gyro.getHuntControlYaw(),
@@ -1408,6 +1415,12 @@ void loop()
             gyro.getHuntFastYaw(),
             gyro.getHuntBlend(),
             gyro.getHuntScore(),
+            gyro.getOutputChatterSlow(),
+            gyro.getCounterSteerCorrection(),
+            gyro.getOutputChatterFast(),
+            gyro.getOutputChatterBlend(),
+            gyro.getOutputChatterScore(),
+            gyro.getSteeringActivity(),
             gyro.getControlPhase(),
             gyro.getSettledBlend(),
             gyro.getThrottleTransient(),
@@ -1417,8 +1430,8 @@ void loop()
             gyro.getActiveHoldFactor(),
             settings.getGyroAttackSpeed(),
             settings.getGyroReturnSpeed(),
-            steeringRadio.hasSignal(),
-            throttleRadio.hasSignal(),
+            telemetry.steeringSignal,
+            telemetry.throttleSignal,
             gainRadio.hasSignal(),
             pin18ThrottleOutputMode
         );

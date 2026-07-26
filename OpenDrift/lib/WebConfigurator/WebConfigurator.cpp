@@ -236,10 +236,12 @@ void WebConfigurator::handleRoot()
         html += profile->name;
         html += F("</strong><small>Gain ");
         html += String(profile->gain, 2);
-        html += F(" &middot; Hunt ");
+        html += F(" &middot; Prediction ");
         html += String(profile->gyroHuntDamping);
         html += F(" &middot; Hold ");
         html += String(profile->gyroHoldBoost);
+        html += F(" &middot; Countersteer ");
+        html += String(profile->gyroCounterSteerAssist);
         html += F("</small></div>");
 
         html += F("<form method='post' action='/activate-profile'><input type='hidden' name='profile' value='");
@@ -272,22 +274,16 @@ void WebConfigurator::handleRoot()
     html += checkbox("Reverse gyro correction", "gyroReverse", settings->getGyroReverse());
     html += F("</div>");
 
-    html += F("<div class='card'><h2>Response</h2><div class='row'>");
+    html += F("<div class='card'><h2>OpenDrift v1.0 Response</h2><div class='row'>");
     html += input("Smoothing", "gyroSmoothing", String(settings->getGyroSmoothing(), 2), "number", "0.01");
-    html += input("Attack speed", "gyroAttack", String(settings->getGyroAttackSpeed()), "number", "1");
-    html += input("Return speed", "gyroReturn", String(settings->getGyroReturnSpeed()), "number", "1");
+    html += input("Prediction strength (0-100)", "gyroHuntDamping", String(settings->getGyroHuntDamping()), "number", "1");
     html += F("</div></div>");
 
-    html += F("<div class='card'><h2>Drift</h2><div class='row'>");
-    html += input("Hold boost (%)", "gyroHoldBoost", String(settings->getGyroHoldBoost()), "number", "1");
+    html += F("<div class='card'><h2>Drift Assist</h2><p class='sub'>Countersteer Assist changes only the steady steering workload. Zero preserves the base v1.0 response; higher values let OpenDrift carry more of a settled drift.</p><div class='row'>");
+    html += input("Countersteer assist (0-100)", "counterSteerAssist", String(settings->getGyroCounterSteerAssist()), "number", "1");
+    html += input("Hold assist (0-100)", "gyroHoldBoost", String(settings->getGyroHoldBoost()), "number", "1");
     html += input("Drift memory", "gyroIGain", String(settings->getGyroIntegralGain(), 2), "number", "0.01");
     html += input("Memory limit (us)", "gyroILimit", String(settings->getGyroIntegralLimit()), "number", "1");
-    html += F("</div></div>");
-
-    html += F("<div class='card'><h2>Stability</h2><div class='row'>");
-    html += input("Hunt damping (0-100)", "gyroHuntDamping", String(settings->getGyroHuntDamping()), "number", "1");
-    html += input("Center quiet (0-200)", "gyroAntiWobble", String(settings->getGyroAntiWobble()), "number", "1");
-    html += input("Input damper (ms)", "steeringDamper", String(settings->getSteeringDamper()), "number", "1");
     html += F("</div></div>");
 
     html += F("<div class='card'><h2>Servo</h2>");
@@ -331,13 +327,6 @@ void WebConfigurator::handleRoot()
     html += F("</div>");
 
     html += F("<button type='submit'>Save Settings</button></form>");
-
-    html += F("<div class='card'><h2>Slope / Terrain Assist</h2><p class='sub'>Status: <strong>");
-    html += settings->getTerrainAssistEnabled() ? F("ON") : F("OFF");
-    html += F("</strong>. Raw terrain telemetry remains in the blackbox in both modes.</p>");
-    html += F("<form method='post' action='/toggle-terrain'><button type='submit'>Turn ");
-    html += settings->getTerrainAssistEnabled() ? F("OFF") : F("ON");
-    html += F(" for A/B Test</button></form></div>");
 
     html += F("<div class='card'><h2>Blackbox Log</h2>");
 
@@ -486,6 +475,13 @@ void WebConfigurator::handleSave()
         )
     );
 
+    settings->setGyroCounterSteerAssist(
+        getIntArg(
+            "counterSteerAssist",
+            settings->getGyroCounterSteerAssist()
+        )
+    );
+
     settings->setGyroAntiWobble(
         getIntArg(
             "gyroAntiWobble",
@@ -623,6 +619,10 @@ void WebConfigurator::handleSave()
 
         gyro->setHoldBoost(
             settings->getGyroHoldBoost()
+        );
+
+        gyro->setCounterSteerAssist(
+            settings->getGyroCounterSteerAssist()
         );
 
         gyro->setAntiWobble(

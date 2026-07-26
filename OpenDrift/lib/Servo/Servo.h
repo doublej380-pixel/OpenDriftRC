@@ -8,7 +8,10 @@ class ServoOutput
 {
 public:
 
-    bool begin(int pin);
+    bool begin(
+        int pin,
+        int frequencyHz = 50
+    );
 
     void end();
 

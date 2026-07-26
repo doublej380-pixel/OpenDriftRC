@@ -1,16 +1,18 @@
 # OpenDrift
 
-OpenDrift is an open source, phase-aware drift gyro for RC drift cars, built around the Waveshare ESP32-S3 Touch AMOLED 1.64 board. It reads steering, throttle, and optional gain channels from a receiver, mixes driver steering with gyro correction, outputs steering and optional throttle signals, and exposes tuning through both the onboard touch UI and a WiFi web configurator.
+OpenDrift is an open source drift gyro for RC drift cars, built around the Waveshare ESP32-S3 Touch AMOLED 1.64 board. It reads steering, throttle, and optional gain channels from a receiver, mixes driver steering with gyro correction, outputs steering and optional throttle signals, and exposes tuning through both the onboard touch UI and a WiFi web configurator.
 
-The goal is to make gyro setup less of a black box: OpenDrift distinguishes entry, settled drift, throttle transients, and transitions; exposes every meaningful behavior; and records enough telemetry to explain what the car did.
+OpenDrift v1.0 uses a dedicated 250 Hz control task, a single gyro filter, continuous yaw prediction, throttle-informed load-change prediction, and non-accumulating quiet-drift reference feedback. The goal is to make gyro setup less of a black box while keeping the active control path small enough to reason about.
 
-See the [OpenDrift Tuning Guide](OpenDrift/docs/Tuning.md) for the current setup order, symptom table, surface-profile workflow, and findings from real track testing.
+See the current [Technical Tuning Reference](OpenDrift/docs/Tuning.md) for the setup order, symptom table, surface-profile workflow, and findings from real track testing. A simpler beginner guide is being prepared for the v1.0 release.
 
 ## Current Features
 
 - ESP32-S3 firmware using PlatformIO and Arduino.
 - 280 x 456 AMOLED touch UI with a static RGB565 background and swipeable pages.
-- Phase-aware IMU yaw-rate correction with idle, entry, settled, and transition states.
+- Dedicated 250 Hz IMU/control/steering task isolated from UI, WiFi, and logging work.
+- Continuous yaw-acceleration prediction with throttle-informed look-ahead.
+- Quiet-drift reference feedback that yields to driver steering and throttle changes.
 - Receiver steering input.
 - Optional receiver throttle sensing with automatic Performance Mode behavior.
 - Receiver gyro gain input.
@@ -26,17 +28,15 @@ See the [OpenDrift Tuning Guide](OpenDrift/docs/Tuning.md) for the current setup
   - maximum correction
   - smoothing
   - Drift Memory and limit
-  - Hold Boost
-  - Anti-Wobble
-  - Hunt Damping
-  - attack speed
-  - return speed
+  - Hold Assist
+  - Prediction
+  - Countersteer Assist
 - Up to 12 persistent named surface/driving profiles.
 - Scrollable trackside profile selection on both displays.
 - Do-nothing signal-loss behavior when steering input is lost.
 - WiFi access point.
 - Browser-based web configurator.
-- Optional blackbox v7 logging with controller phase, throttle, six-axis terrain telemetry, and an explicit slope-assist A/B state.
+- Temporary blackbox v10 CSV logging with OpenDrift v1.0 reference, prediction, throttle, and correction telemetry.
 - Persistent settings stored in ESP32 preferences.
 
 ## Hardware Routing
@@ -125,78 +125,66 @@ Shows the current gyro gain and provides:
 - `- / +`: adjust stored gain when radio gain input is not overriding it.
 - `CAL`: recalibrate gyro offset. Use this when the car is sitting still and the gyro seems biased.
 
-### Gyro
+### Core
 
-Basic gyro behavior settings:
+Primary correction limits:
 
 - `Deadband`: yaw-rate zone ignored around zero.
+- `MAX CORRECTION`: maximum gyro correction in servo microseconds.
 - `GYRO REV`: reverses only the gyro correction direction.
 
 Use `GYRO REV` when normal steering direction is correct, but the gyro counter-steers the wrong way.
 
-### Gyro Tune
+### Response
 
-Trackside tuning page for correction strength and filtering:
+Fast controller behavior:
 
-- `MAX CORR`: maximum gyro correction in servo microseconds.
-- `SMOOTH`: time-based low-pass filter amount. Higher values are smoother/slower.
-- `DRIFT MEMORY`: slowly accumulated correction during sustained yaw. `0.00` is off.
-- `MEMORY LIMIT`: maximum accumulated correction in servo microseconds.
-- `HOLD`: extra high-yaw correction boost. `0` is off; higher values add more authority once the car is already rotating and settled.
+- `SMOOTHING`: the single time-based yaw low-pass.
+- `PREDICTION`: continuous yaw-acceleration look-ahead.
+- `SERVO QUIET`: suppresses very small physical servo-command changes.
+
+### Assistance
+
+Slow quiet-drift behavior:
+
+- `COUNTERSTEER`: chooses how much additional steady countersteer OpenDrift carries. Zero preserves the driver-led base response; higher values reduce the steering load on the driver without increasing fast yaw damping.
+- `HOLD ASSIST`: controls how firmly the quiet-drift reference is retained.
+- `DRIFT MEMORY`: feedback for deviation from a learned quiet-drift reference.
+
+The Drift Memory limit remains available in the web configurator as an advanced limit.
 
 `SMOOTH` is intentionally inverted from raw filter math: higher numbers mean more smoothing and slower gyro response.
 
 Deadband is applied as a soft deadband. Small yaw noise is still ignored, but correction fades in from zero instead of jumping as soon as yaw crosses the deadband value.
-
-### Response
-
-Trackside tuning page for how quickly steering and gyro correction move:
-
-- `ATTACK`: how quickly gyro correction can build, in fine 1-step adjustments.
-- `RETURN`: how quickly gyro correction can return toward center, in fine 1-step adjustments.
-- `DAMPER`: steering input damping in milliseconds. `0` is off; higher values calm faster driver steering changes.
-- `WOBBLE`: near-center correction chatter suppression. It no longer smooths broad mid-drift correction changes; that job belongs to Hunt Damping.
-
-### Stability
-
-The Stability page contains `HUNT DAMPING`, which targets repeated mid-drift wheel oscillation without reducing entry authority. The controller must first enter its settled phase and observe repeated alternating fast-yaw excursions. A single entry, exit, or throttle change cannot activate it.
-
-While hunting is detected, OpenDrift attenuates fast yaw peaks around the slow average rotation. The damped control yaw is never allowed to exceed the currently measured yaw magnitude, preventing old drift rotation from being carried through an exit. Idle, entry, throttle-transient, and transition phases bypass Hunt Damping.
-
-`0` preserves the original controller behavior. Start around `40` or `50`, then raise it in steps of `10`. Very high values can make small mid-drift corrections feel muted, although the controller always retains part of the fast response.
 
 Conservative first-power values:
 
 | Setting | Start |
 | --- | ---: |
 | Gain | 1.50 |
-| Deadband | 2.0 |
+| Deadband | 4.0 |
 | Max correction | 250 |
-| Smoothing | 0.10 |
+| Smoothing | 0.01 |
+| Countersteer Assist | 0 |
 | Drift memory | 0.00 |
-| Memory limit | 120 |
-| Hold | 0 |
-| Attack | 80 |
-| Return | 30 |
-| Damper | 0 |
-| Wobble | 50 |
-| Hunt damping | 0 |
+| Memory limit | 80 |
+| Hold Assist | 0 |
+| Prediction | 0 |
 
 Tune symptoms:
 
 | Symptom | Try |
 | --- | --- |
-| Weaves left/right driving straight | Increase deadband, lower gain, or raise smoothing |
-| Spins out easily | Lower max correction or return speed first |
-| Won't hold drift | Raise max correction slowly |
-| Gradually loses authority during long drifts | Add a small amount of drift memory after gain and hold boost are tuned |
-| Exits feel like correction hangs on too long | Lower drift memory or its memory limit |
-| Transitions snap back too hard | Lower return speed |
-| Steering input feels too abrupt | Increase damper |
-| Repeated wheel oscillation after the drift is established | Raise Hunt Damping in steps of 10 |
-| Countersteer arrives too slowly | Increase attack speed |
+| Weaves left/right driving straight | Increase deadband or lower gain |
+| Initial response is strong but runs out of authority | Raise Max Correction carefully |
+| Fast response overshoots | Add Prediction in steps of 5 |
+| Prediction makes transitions nervous | Lower Prediction |
+| Car is stable but the driver carries too much countersteer | Raise Countersteer Assist in steps of 10 |
+| Gyro feels too hands-on during a settled drift | Lower Countersteer Assist |
+| Long drift slowly wanders | Add Hold Assist, then minimal Drift Memory |
+| Transition carries the old drift | Lower Hold Assist or Drift Memory |
+| Mid-drift wheel oscillation | Lower gain first; verify servo and chassis |
 | Feels slow or lazy | Lower smoothing slightly or raise gain |
-| Feels twitchy | Raise smoothing or lower gain |
 
 ### Radio
 
@@ -257,7 +245,7 @@ Basic firmware/system information. Tap the GPIO 18 mode button to switch between
 
 The Profiles page lists the driving profiles created in the web configurator. Tap a profile to activate its complete driving tune. Swipe vertically when more than four profiles exist; the list supports up to 12 profiles.
 
-Profiles contain gain, deadband, max correction, smoothing, Drift Memory and its limit, Hold Boost, Attack, Return, Anti-Wobble, Hunt Damping, steering damper, and radio steering travel. Trackside adjustments automatically save back to the active profile.
+Profiles save gain, deadband, max correction, smoothing, Prediction, Countersteer Assist, Hold Assist, Drift Memory and its limit, and radio steering travel. Trackside adjustments automatically save back to the active profile.
 
 Hardware and installation settings remain global, including gyro/servo direction, servo center and travel, receiver calibration, WiFi, logging, and GPIO mode. Switching surfaces therefore cannot disturb the car's physical setup.
 
@@ -276,13 +264,10 @@ Current web settings:
 - Reverse gyro correction
 - Max correction
 - Smoothing
+- Prediction strength
 - Drift memory
 - Memory limit
-- Hold boost
-- Attack speed
-- Return speed
-- Steering input damper
-- Anti-wobble strength
+- Hold Assist
 - Servo reverse
 - Servo center
 - Servo travel
@@ -325,18 +310,17 @@ Log rows include:
 - Raw X/Y/Z acceleration in g
 - Total acceleration magnitude and high-frequency acceleration delta
 - A filtered `surface_disturbance` score from `0.0` to `1.0`
-- Slope/terrain assist enabled state, disturbance latch, and blended release amount
 - Raw gyro correction
-- Slewed gyro correction
+- OpenDrift v1.0 correction
 - Steering input and calibrated steering command
 - Servo output
 - Servo quiet band
 - Throttle input
 - Gain input and active gain
-- Active deadband, max correction, smoothing, hold boost, anti-wobble, Hunt Damping, attack, and return
-- Active drift-memory strength, limit, and correction (`i_gain`, `i_limit`, and `i_us` in the CSV)
-- Hunt Damping control yaw, slow yaw, fast yaw, detection score, and engagement blend
-- Controller phase (`0` idle, `1` entry/transient, `2` settled, `3` transition), settled blend, throttle-transient state, and active Hold Boost factor
+- Active deadband, max correction, smoothing, Prediction, Countersteer Assist, Hold Assist, Drift Memory, and memory limit
+- Predicted yaw, quiet-drift reference, reference error, steady countersteer contribution, and memory correction
+- Driver steering activity and throttle-prediction blend
+- Controller phase (`0` idle, `1` entry, `2` settled, `3` transition) and reference-lock blend
 - Steering/throttle/gain signal state and GPIO 18 mode
 
 Suggested test workflow:
@@ -351,28 +335,27 @@ Suggested test workflow:
 
 The CSV can be pasted into a spreadsheet or plotted to see whether the car spun because of delayed correction, overcorrection, max correction saturation, noisy yaw, or steering/radio behavior.
 
-`surface_disturbance` combines sudden acceleration-vector changes, roll/pitch rate, and low-g unloading indicators. With Slope / Terrain Assist enabled, strong events temporarily release settled Hold, Memory, and Hunt behavior without changing base gain or maximum correction authority. The web configurator can disable that response for A/B testing while continuing to record the raw telemetry.
+`surface_disturbance` still combines sudden acceleration-vector changes, roll/pitch rate, and low-g unloading indicators for analysis. OpenDrift v1.0 logs it but does not currently apply terrain correction.
 
 ## Gyro Algorithm Overview
 
-The current control loop works like this:
+OpenDrift v1.0 runs this path at 250 Hz:
 
-1. Read IMU yaw rate.
-2. Subtract calibrated gyro offset.
-3. Apply soft deadband.
-4. Smooth yaw rate using a time-based tunable low-pass filter.
-5. Classify the current behavior as idle, entry/throttle transient, settled drift, or transition.
-6. Detect repeated alternating fast-yaw movement during settled drift and apply Hunt Damping only while that hunting is present.
-7. Convert the resulting control yaw into correction using gyro gain. Hold Boost ramps in only during settled drift and is capped by current yaw.
-8. Accumulate leaky, clamped Drift Memory only during settled drift; release it during entry, throttle transients, and transitions.
-9. Limit correction with max correction.
-10. Suppress only tiny near-center correction chatter.
-11. Optionally reverse gyro correction.
-12. Slew-limit correction using time-based attack and return speed.
-13. Add gyro correction to calibrated steering command.
-14. Apply servo center/reverse/travel and output to the servo.
+1. Read receiver steering, throttle, and IMU yaw.
+2. Subtract calibrated gyro offset and apply soft deadband.
+3. Apply one time-based yaw low-pass.
+4. Estimate short-horizon yaw from filtered yaw acceleration.
+5. Extend that horizon briefly when throttle predicts a chassis-load change.
+6. Convert predicted yaw directly into correction with Gain.
+7. Learn a slow yaw reference while driver steering and throttle are quiet.
+8. Add optional Countersteer Assist from the slow learned reference only.
+9. Apply Drift Memory only to error from that reference.
+10. Prevent memory from pushing farther into correction saturation.
+11. Clamp to Max Correction, optionally reverse, mix with calibrated steering,
+    and output to the steering servo at 250 Hz.
 
-This keeps driver steering as the base command and lets the gyro assist rather than fully take over.
+Driver steering activity and throttle changes make the slow reference yield
+immediately. Neither disables the fast direct damping path.
 
 ## Signal Loss Behavior
 
@@ -382,17 +365,19 @@ This leaves the servo at the last commanded position. It is intentionally a simp
 
 ## Tuning
 
-Use the [OpenDrift Tuning Guide](OpenDrift/docs/Tuning.md) rather than tuning every setting at once. The most important lessons from development are:
+Use the [Technical Tuning Reference](OpenDrift/docs/Tuning.md) rather than tuning every setting at once. The most important lessons from development are:
 
 - Establish a mechanically sound car before blaming the gyro.
 - Set the servo's internal anti-wobble only as high as it can run without buzzing; high servo torque/power can amplify internal oscillation.
 - Treat Gain as the primary surface-dependent setting and store each surface in a profile.
-- Tune entries with Gain, Max Correction, Smoothing, and Attack/Return before adding settled-drift features.
-- Use Hold Boost for sustained drift authority, then add only the minimum Drift Memory required.
-- Use Hunt Damping for detected mid-drift oscillation; OpenDrift Anti-Wobble is only near-center chatter suppression.
-- Connect throttle sensing for the best transition and power-change behavior.
+- Tune entries with Gain, Max Correction, and Smoothing before adding slow reference feedback.
+- Add Prediction in small steps only after the direct response is understood.
+- Use Hold Assist for sustained-drift reference retention, then add only the minimum Drift Memory required.
+- Use Countersteer Assist to choose driver-led versus gyro-led settled drifts without retuning Gain.
+- Connect throttle sensing so OpenDrift can anticipate power and load changes.
 
-A successful development reference on uneven asphalt used Gain `2.20`, Deadband `4`, Max Correction `400`, Smoothing `0.08`, Hold Boost `90`, Anti-Wobble `100`, Hunt Damping `50`, Attack `85`, Return `85`, and Drift Memory `0.00`. This is evidence that the controller works, not a universal tune; copy the process, not blindly the numbers.
+OpenDrift v1.0 is the first public controller. Start from the conservative
+values in the tuning reference and save proven surface setups as profiles.
 
 ## Future Work
 

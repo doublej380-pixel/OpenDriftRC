@@ -38,7 +38,7 @@ The round board does not have a spare gain-channel input in the current routing.
 
 ## Throttle sensing
 
-Throttle sensing is electrically optional and automatically falls back when no valid PWM signal exists. It is strongly recommended for Performance Mode because it lets the controller identify power changes and release settled-drift Hold, Memory, and Hunt behavior at the correct time.
+Throttle sensing is electrically optional and automatically falls back when no valid PWM signal exists. It is strongly recommended for OpenDrift v1.0 because it announces power and chassis-load changes, temporarily extends yaw prediction, and makes the slow drift reference yield before stale feedback can fight the transition.
 
 Only the receiver signal and a shared ground are required. OpenDrift does not power the receiver or ESC through the throttle input.
 

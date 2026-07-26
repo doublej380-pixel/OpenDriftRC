@@ -42,6 +42,7 @@ public:
         int integralLimit,
         int integralCorrection,
         int holdBoost,
+        int counterSteerAssist,
         int antiWobble,
         int huntDamping,
         float huntControlYaw,
@@ -49,6 +50,12 @@ public:
         float huntFastYaw,
         float huntBlend,
         float huntScore,
+        float outputChatterSlow,
+        int counterSteerCorrection,
+        float outputChatterFast,
+        float outputChatterBlend,
+        float outputChatterScore,
+        float steeringActivity,
         int controlPhase,
         float settledBlend,
         float throttleTransient,
@@ -84,7 +91,7 @@ private:
 
     static const unsigned long flushIntervalMs = 1000;
 
-    const char* path = "/blackbox-v7.csv";
+    const char* path = "/blackbox-v10.csv";
 
     String buffer;
 

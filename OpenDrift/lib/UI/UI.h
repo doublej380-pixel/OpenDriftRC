@@ -89,16 +89,16 @@ private:
     bool canUseRawAmoledBuffers();
 
     // Pages
-    // Shared order: Drive, Limits, Response, Drift, Stability, Profiles,
-    // Radio, Steering. Round adds Steering Cal before WiFi and System.
+    // Shared order: Drive, Core, Response, Drift Assist, Profiles, Radio,
+    // Steering. Round adds Steering Cal before WiFi and System.
 
     uint8_t page = 0;
 
 
     #if defined(OPENDRIFT_BOARD_AMOLED_164)
-    const uint8_t totalPages = 10;
+    const uint8_t totalPages = 9;
     #else
-    const uint8_t totalPages = 11;
+    const uint8_t totalPages = 10;
     #endif
 
 
@@ -182,12 +182,8 @@ private:
 
 
 
-    void drawControlPage(
+    void drawCorePage(
         GyroController& gyro,
-        Settings& settings
-    );
-
-    void drawTunePage(
         Settings& settings
     );
 
@@ -195,7 +191,7 @@ private:
         Settings& settings
     );
 
-    void drawStabilityPage(
+    void drawDriftAssistPage(
         Settings& settings
     );
 

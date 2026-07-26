@@ -6,3 +6,6 @@
 **/__pycache__/
 .release-test-*/
 release-assets/
+
+# Local podcast preparation notes; not part of the public repository.
+OpenDrift/docs/Podcast-Brief.md
