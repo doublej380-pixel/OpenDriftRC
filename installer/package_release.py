@@ -114,6 +114,10 @@ def main() -> int:
 
     firmware_dir.mkdir(parents=True, exist_ok=True)
     release_dir.mkdir(parents=True, exist_ok=True)
+
+    for stale_factory in firmware_dir.glob("OpenDrift-*.factory.bin"):
+        stale_factory.unlink()
+
     boot_app0 = find_boot_app0()
     esptool = esptool_command()
     checksums: list[str] = []

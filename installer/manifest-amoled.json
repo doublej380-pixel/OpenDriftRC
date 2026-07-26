@@ -1,6 +1,6 @@
 {
   "name": "OpenDrift AMOLED 1.64",
-  "version": "2026.07.23-dev",
+  "version": "v1.0.0-rc1",
   "new_install_prompt_erase": true,
   "new_install_improv_wait_time": 0,
   "builds": [
@@ -9,7 +9,7 @@
       "improv": false,
       "parts": [
         {
-          "path": "firmware/OpenDrift-AMOLED-2026.07.23-dev.factory.bin",
+          "path": "firmware/OpenDrift-AMOLED-v1.0.0-rc1.factory.bin",
           "offset": 0
         }
       ]

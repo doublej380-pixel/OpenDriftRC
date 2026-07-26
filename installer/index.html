@@ -45,11 +45,11 @@
       <div class="hero-copy">
         <div class="eyebrow">
           <span class="status-dot" aria-hidden="true"></span>
-          Development release · <span data-release-version>2026.07.23-dev</span>
+          Public test build &middot; <span data-release-version>v1.0.0-rc1</span>
         </div>
         <h1>Flash the gyro.<br><em>Skip the toolchain.</em></h1>
         <p class="lede">
-          Install OpenDrift directly over USB. No VS Code, PlatformIO,
+          Install OpenDrift directly over USB. No account, VS Code, PlatformIO,
           compilation, or command line required.
         </p>
         <div class="hero-actions">
@@ -89,9 +89,9 @@
           />
         </svg>
         <div class="signal-stats">
-          <span><small>PHASE</small> SETTLED</span>
-          <span><small>HUNT</small> DAMPED</span>
-          <span><small>TERRAIN</small> READY</span>
+          <span><small>CONTROL</small> 250 HZ</span>
+          <span><small>ASSIST</small> COUNTERSTEER</span>
+          <span><small>THROTTLE</small> PREDICTIVE</span>
         </div>
       </div>
     </section>
@@ -134,7 +134,7 @@
         <article class="board-card recommended">
           <div class="board-topline">
             <span class="board-badge">Recommended</span>
-            <span class="board-code">AMOLED // 280×456</span>
+            <span class="board-code">AMOLED // 280&times;456</span>
           </div>
           <div class="board-visual amoled-visual" aria-hidden="true">
             <div class="amoled-screen">
@@ -152,7 +152,7 @@
             <esp-web-install-button manifest="./manifest-amoled.json">
               <button class="install-button" slot="activate">
                 Install AMOLED firmware
-                <span aria-hidden="true">→</span>
+                <span aria-hidden="true">&rarr;</span>
               </button>
               <p class="browser-warning" slot="unsupported">
                 Open this page in Chrome or Edge on a desktop computer to install.
@@ -161,14 +161,14 @@
                 Browser access to USB was blocked. Reload the page over HTTPS.
               </p>
             </esp-web-install-button>
-            <small>Factory image · 1.24 MiB · build <span data-release-version>2026.07.23-dev</span></small>
+            <small>Factory image &middot; build <span data-release-version>v1.0.0-rc1</span></small>
           </div>
         </article>
 
         <article class="board-card legacy">
           <div class="board-topline">
             <span class="board-badge">Legacy</span>
-            <span class="board-code">ROUND // 240×240</span>
+            <span class="board-code">ROUND // 240&times;240</span>
           </div>
           <div class="board-visual round-visual" aria-hidden="true">
             <div class="round-screen">
@@ -185,7 +185,7 @@
             <esp-web-install-button manifest="./manifest-round.json">
               <button class="install-button secondary" slot="activate">
                 Install round firmware
-                <span aria-hidden="true">→</span>
+                <span aria-hidden="true">&rarr;</span>
               </button>
               <p class="browser-warning" slot="unsupported">
                 Open this page in Chrome or Edge on a desktop computer to install.
@@ -194,7 +194,7 @@
                 Browser access to USB was blocked. Reload the page over HTTPS.
               </p>
             </esp-web-install-button>
-            <small>Factory image · 1.25 MiB · build <span data-release-version>2026.07.23-dev</span></small>
+            <small>Factory image &middot; build <span data-release-version>v1.0.0-rc1</span></small>
           </div>
         </article>
       </div>

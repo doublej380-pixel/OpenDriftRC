@@ -11,6 +11,13 @@ The installer must be served over HTTPS for Web Serial access. Opening
 `index.html` directly from disk is sufficient for visual review, but not for
 flashing hardware.
 
+The public account-free installer is deployed through GitHub Pages at:
+
+`https://doublej380-pixel.github.io/OpenDrift/`
+
+Firmware flashing runs through the browser's local Web Serial connection. The
+site has no sign-in, analytics, or firmware-upload service.
+
 Factory images include the bootloader, partition table, OTA boot data, and
 application. Do not replace them with PlatformIO's application-only
 `firmware.bin`.
