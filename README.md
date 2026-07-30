@@ -1,4 +1,6 @@
-# OpenDrift
+<p align="center">
+  <img src="assets/opendrift-wordmark.png" alt="OpenDrift" width="760">
+</p>
 
 OpenDrift is an open source drift gyro for RC drift cars, built around the Waveshare ESP32-S3 Touch AMOLED 1.64 board. It reads steering, throttle, and optional gain channels from a receiver, mixes driver steering with gyro correction, outputs steering and optional throttle signals, and exposes tuning through both the onboard touch UI and a WiFi web configurator.
 
