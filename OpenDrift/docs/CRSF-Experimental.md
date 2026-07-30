@@ -1,0 +1,112 @@
+# CRSF experimental builds
+
+These are separate firmware targets for testing direct CRSF control. They do
+not replace either RC1 PWM build.
+
+## Build target
+
+- `waveshare_amoled_164_crsf`: AMOLED RX-only/input-only validation target
+- `waveshare_128_crsf`: full-duplex round-display validation target
+
+CRSF settings are stored in the separate `OpenDriftCRSF` NVS namespace, so
+they do not overwrite the corresponding RC1 PWM tune.
+
+Both targets decode steering, throttle, gain, and link statistics into the same
+interfaces used by the PWM controller. The AMOLED target deliberately defines
+`OPENDRIFT_CRSF_INPUT_ONLY` and `OPENDRIFT_CRSF_RX_ONLY`; GPIO 15 output and
+GPIO 18 return telemetry remain disabled until replacement AMOLED hardware is
+available for validation.
+
+The round target enables the complete path: bounded CRSF receive processing,
+GPIO 18 parameter telemetry, GPIO 15 ESC PWM, deterministic neutral behavior,
+and the EdgeTX tuning tool. It proved stable with a SpeedyBee SB Nano at the
+MT12's F1000 packet rate after the receive loop was given an explicit byte
+budget.
+
+## SpeedyBee SB Nano wiring
+
+Wire the receiver signals crossed, as required by a UART:
+
+| SpeedyBee SB Nano | OpenDrift board | Purpose |
+|---|---|---|
+| TX | GPIO 17 | CRSF data into OpenDrift |
+| RX | GPIO 18 | CRSF data/parameter telemetry from OpenDrift; full-duplex target only |
+| GND | GND | Common signal ground |
+| 5V | Vehicle BEC 5V | Receiver power |
+
+OpenDrift outputs are:
+
+| OpenDrift board | Connect to | Signal |
+|---|---|---|
+| GPIO 16 | Steering servo signal | 250 Hz PWM |
+| GPIO 15 | ESC throttle signal | 50 Hz PWM; full-duplex target only |
+
+Do not assume the round board's expansion connector supplies receiver-safe 5V,
+and do not power the servo or ESC motor from the display board. Feed the
+receiver from the vehicle's regulated 5V BEC, use the vehicle's normal power
+wiring, and make sure every device shares ground. Verify the labels on the
+board connector rather than relying on wire colour or connector position.
+
+## Initial channel map
+
+- CRSF channel 1: steering
+- CRSF channel 2: throttle
+- CRSF channel 3: gyro gain
+
+Channel values are decoded from native 11-bit CRSF frames. Existing steering
+calibration, travel, gyro processing, web status, and blackbox logging consume
+those decoded values through the same interfaces used by the PWM build.
+
+## Failsafes
+
+- A CRSF channel frame older than 50 ms is treated as signal loss.
+- Steering centers when the link is lost.
+- GPIO 15 emits no throttle PWM until a valid link has held throttle within
+  50 microseconds of center for 500 ms.
+- If the link is lost, the full build commands neutral throttle immediately.
+  Reconnection requires another neutral hold before live throttle passes.
+
+## EdgeTX parameter tool
+
+Copy `radio/edgetx/SCRIPTS/TOOLS/OpenDrift.lua` to the same path on the radio SD
+card, then open **OpenDrift** from the EdgeTX Tools menu. The current tool reads
+and writes sixteen settings over full-duplex CRSF:
+
+- saved gain, deadband, max correction, and smoothing;
+- Drift Memory, memory limit, Hold Assist, and Countersteer Assist;
+- Tail Slide Speed, legacy Anti Wobble, Hunt Damping, Attack, Return, and Input
+  Damping;
+- Terrain Assist and Gyro Reverse.
+
+Writes are acknowledged over CRSF, applied live, saved through the normal
+delayed settings writer, and request an immediate redraw of the current gyro
+screen.
+
+## Problems found during validation
+
+- An F1000 receiver can keep the UART continuously non-empty. CRSF receive work
+  is bounded per update so it cannot starve the 250 Hz controller.
+- Using the general servo allocator for simultaneous 250 Hz steering and 50 Hz
+  throttle exhausted or cross-routed ESP32 timing resources. `EscOutput` now
+  owns a dedicated 14-bit LEDC channel for throttle.
+- CRSF settings use the `OpenDriftCRSF` NVS namespace so experimental testing
+  cannot overwrite a proven PWM profile.
+
+## First bench test
+
+1. Remove the motor pinion or disconnect the motor from the ESC.
+2. Flash the CRSF environment matching the connected display board with only
+   that board connected by USB.
+3. Wire and power the receiver, then bind it to the MT12.
+4. Open the USB serial monitor at 115200 baud. The five-second CRSF report
+   should show increasing frame counts, low CRC errors, link quality, and
+   `throttle=LOCKED`.
+5. Confirm steering, throttle, and gain move in the web configurator.
+6. Hold throttle neutral for 500 ms and confirm the report changes to
+   `throttle=ARMED`.
+7. Turn the transmitter off. Steering and throttle must return to neutral and
+   the report must return to `throttle=LOCKED`.
+8. In the full-duplex round build, open the EdgeTX tool, change one harmless
+   value, and confirm both the radio acknowledgement and gyro-screen refresh.
+
+Only reconnect the motor after every applicable check passes.

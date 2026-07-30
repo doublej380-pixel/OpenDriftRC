@@ -7,18 +7,19 @@ static constexpr uint8_t PAGE_DRIVE = 0;
 static constexpr uint8_t PAGE_CORE = 1;
 static constexpr uint8_t PAGE_RESPONSE = 2;
 static constexpr uint8_t PAGE_DRIFT_ASSIST = 3;
-static constexpr uint8_t PAGE_PROFILES = 4;
-static constexpr uint8_t PAGE_RADIO = 5;
-static constexpr uint8_t PAGE_STEERING = 6;
+static constexpr uint8_t PAGE_EXPERIMENTAL = 4;
+static constexpr uint8_t PAGE_PROFILES = 5;
+static constexpr uint8_t PAGE_RADIO = 6;
+static constexpr uint8_t PAGE_STEERING = 7;
 
 #if defined(OPENDRIFT_BOARD_AMOLED_164)
 static constexpr uint8_t PAGE_STEERING_CAL = 0xFF;
-static constexpr uint8_t PAGE_WIFI = 7;
-static constexpr uint8_t PAGE_SYSTEM = 8;
-#else
-static constexpr uint8_t PAGE_STEERING_CAL = 7;
 static constexpr uint8_t PAGE_WIFI = 8;
 static constexpr uint8_t PAGE_SYSTEM = 9;
+#else
+static constexpr uint8_t PAGE_STEERING_CAL = 8;
+static constexpr uint8_t PAGE_WIFI = 9;
+static constexpr uint8_t PAGE_SYSTEM = 10;
 #endif
 
 
@@ -759,6 +760,12 @@ void UI::drawPage(
             );
             break;
 
+        case PAGE_EXPERIMENTAL:
+            drawExperimentalPage(
+                settings
+            );
+            break;
+
         case PAGE_PROFILES:
             drawProfilesPage(
                 settings
@@ -810,6 +817,20 @@ void UI::drawPage(
             );
             break;
     }
+}
+
+
+void UI::setThrottleRadio(
+    RadioInput& throttleRadio
+)
+{
+    throttleRadioInput = &throttleRadio;
+}
+
+
+void UI::requestRefresh()
+{
+    refreshRequested = true;
 }
 
 
@@ -2155,7 +2176,11 @@ void UI::drawSystemPage(
     );
 
     lcd->drawString(
+        #if defined(OPENDRIFT_INPUT_CRSF)
+        "CRSF",
+        #else
         "GPIO 18",
+        #endif
         22,
         212
     );
@@ -2173,7 +2198,11 @@ void UI::drawSystemPage(
     );
 
     lcd->drawString(
-        "AMOLED",
+        #if defined(OPENDRIFT_INPUT_CRSF)
+        "CRSF INPUT",
+        #else
+        "RC1 EXP",
+        #endif
         150,
         108
     );
@@ -2190,12 +2219,21 @@ void UI::drawSystemPage(
         202,
         240,
         38,
+        #if defined(OPENDRIFT_INPUT_CRSF)
+        #if defined(OPENDRIFT_CRSF_RX_ONLY)
+        "RX17 ONLY",
+        #else
+        "RX17 / TX18",
+        #endif
+        OD_CYAN,
+        #else
         settings.getThrottleOutputEnabled()
         ? "THROTTLE OUT"
         : "GAIN INPUT",
         settings.getThrottleOutputEnabled()
         ? OD_AMBER
         : OD_CYAN,
+        #endif
         2
     );
 
@@ -2216,7 +2254,11 @@ void UI::drawSystemPage(
     lcd->setTextSize(2);
     lcd->setTextColor(TFT_WHITE);
     lcd->drawCenterString(
-        "OpenDrift round",
+        #if defined(OPENDRIFT_INPUT_CRSF)
+        "OpenDrift CRSF EXP",
+        #else
+        "OpenDrift RC1 EXP",
+        #endif
         120,
         57
     );
@@ -2242,7 +2284,11 @@ void UI::drawSystemPage(
 
     lcd->setTextColor(0xBDF7);
     lcd->drawCenterString(
+        #if defined(OPENDRIFT_INPUT_CRSF)
+        "CRSF UART",
+        #else
         "GPIO 18",
+        #endif
         120,
         119
     );
@@ -2258,7 +2304,15 @@ void UI::drawSystemPage(
     lcd->setTextSize(2);
     lcd->setTextColor(TFT_WHITE);
     lcd->drawCenterString(
+        #if defined(OPENDRIFT_INPUT_CRSF)
+        #if defined(OPENDRIFT_CRSF_RX_ONLY)
+        "17 RX ONLY",
+        #else
+        "17 RX / 18 TX",
+        #endif
+        #else
         "THROTTLE INPUT",
+        #endif
         120,
         148
     );
@@ -2266,7 +2320,11 @@ void UI::drawSystemPage(
     lcd->setTextSize(1);
     lcd->setTextColor(0xBDF7);
     lcd->drawCenterString(
+        #if defined(OPENDRIFT_INPUT_CRSF)
+        "gain on CRSF channel 3",
+        #else
         "gain controlled by setting",
+        #endif
         120,
         184
     );
@@ -2961,6 +3019,58 @@ bool UI::isProfilesPage()
 }
 
 
+void UI::drawExperimentalPage(
+    Settings& settings
+)
+{
+    drawUiBackground(lcd);
+
+    #if defined(OPENDRIFT_BOARD_AMOLED_164)
+    drawAmoledHeader(
+        lcd,
+        "RC1 Experimental",
+        OD_MAGENTA
+    );
+
+    lcd->setTextSize(2);
+    lcd->setTextColor(OD_MUTED);
+    lcd->drawString("TAIL SPEED", 22, 58);
+
+    lcd->setTextSize(3);
+    lcd->setTextColor(OD_TEXT);
+    lcd->drawNumber(settings.getGyroTailSlideSpeed(), 146, 48);
+
+    drawAmoledButton(lcd, 276, 48, 70, 48, "-", OD_MAGENTA);
+    drawAmoledButton(lcd, 364, 48, 70, 48, "+", OD_MAGENTA);
+
+    lcd->setTextSize(2);
+    lcd->setTextColor(OD_MUTED);
+    lcd->drawString("50 = PROVEN RC1 RESPONSE", 22, 132);
+    lcd->drawString("LOWER SLOW / HIGHER FAST", 22, 166);
+    #else
+    lcd->setTextSize(3);
+    lcd->setTextColor(TFT_MAGENTA);
+    lcd->drawCenterString("Experimental", 120, 14);
+
+    drawRoundAdjustRow(
+        lcd,
+        "TAIL SPEED",
+        String(settings.getGyroTailSlideSpeed()),
+        0,
+        TFT_MAGENTA
+    );
+
+    lcd->setTextSize(1);
+    lcd->setTextColor(ROUND_DIM);
+    lcd->drawCenterString("50 = PROVEN RC1", 120, 125);
+    lcd->drawCenterString("LOWER = SLOWER", 120, 148);
+    lcd->drawCenterString("HIGHER = FASTER", 120, 163);
+    #endif
+
+    drawPageDots();
+}
+
+
 void UI::drawProfilesPage(
     Settings& settings
 )
@@ -3477,6 +3587,11 @@ void UI::drawRoundRadioPage(
     GyroController& gyro
 )
 {
+    RadioInput& throttleRadio =
+        throttleRadioInput != nullptr
+        ? *throttleRadioInput
+        : gainRadio;
+
     drawUiBackground(lcd);
 
     lcd->setTextColor(TFT_WHITE);
@@ -3530,12 +3645,12 @@ void UI::drawRoundRadioPage(
         lcd->setTextSize(2);
         lcd->setTextColor(TFT_WHITE);
         lcd->drawString("THR", 24, 106);
-        lcd->drawNumber(gainRadio.getPulseWidth(), 96, 106);
+        lcd->drawNumber(throttleRadio.getPulseWidth(), 96, 106);
         lcd->setTextColor(
-            gainRadio.hasSignal() ? TFT_GREEN : TFT_RED
+            throttleRadio.hasSignal() ? TFT_GREEN : TFT_RED
         );
         lcd->drawString(
-            gainRadio.hasSignal() ? "OK" : "NO",
+            throttleRadio.hasSignal() ? "OK" : "NO",
             178,
             106
         );
@@ -3547,7 +3662,7 @@ void UI::drawRoundRadioPage(
         lcd->drawFloat(gyro.getGain(), 2, 136, 157);
         lcd->setTextSize(1);
         lcd->setTextColor(0xBDF7);
-        lcd->drawCenterString("radio inputs / saved gain", 120, 188);
+        lcd->drawCenterString("CH1 steer / CH2 throttle / CH3 gain", 120, 188);
     }
     else if(radioSection == 1)
     {
@@ -5364,6 +5479,15 @@ int8_t UI::repeatButtonAt(
             return 16;
     }
 
+    if(page == PAGE_EXPERIMENTAL)
+    {
+        if(buttonPressed(x, y, 276, 48, 70, 48))
+            return 29;
+
+        if(buttonPressed(x, y, 364, 48, 70, 48))
+            return 30;
+    }
+
     return 0;
     #endif
 
@@ -5433,6 +5557,15 @@ int8_t UI::repeatButtonAt(
             return 16;
     }
 
+    if(page == PAGE_EXPERIMENTAL)
+    {
+        if(buttonPressed(x, y, 26, 61, 44, 30))
+            return 29;
+
+        if(buttonPressed(x, y, 170, 61, 44, 30))
+            return 30;
+    }
+
     return 0;
 }
 
@@ -5468,7 +5601,12 @@ bool UI::actionButtonAt(
     if(page == PAGE_WIFI)
         return buttonPressed(x, y, 296, 70, 130, 92);
 
-    if(page == PAGE_SYSTEM)
+    if(
+        page == PAGE_SYSTEM
+        #if defined(OPENDRIFT_INPUT_CRSF)
+        && false
+        #endif
+    )
         return buttonPressed(x, y, 150, 202, 240, 38);
     #else
     if(page == PAGE_DRIVE)
@@ -5702,6 +5840,26 @@ bool UI::applyRepeatButton(
             );
             break;
 
+        case 29:
+            settings.setGyroTailSlideSpeed(
+                settings.getGyroTailSlideSpeed() - 1
+            );
+
+            gyro.setTailSlideSpeed(
+                settings.getGyroTailSlideSpeed()
+            );
+            break;
+
+        case 30:
+            settings.setGyroTailSlideSpeed(
+                settings.getGyroTailSlideSpeed() + 1
+            );
+
+            gyro.setTailSlideSpeed(
+                settings.getGyroTailSlideSpeed()
+            );
+            break;
+
         default:
             return false;
     }
@@ -5716,6 +5874,12 @@ bool UI::applyRepeatButton(
     else if(page == PAGE_DRIFT_ASSIST)
     {
         drawDriftAssistPage(
+            settings
+        );
+    }
+    else if(page == PAGE_EXPERIMENTAL)
+    {
+        drawExperimentalPage(
             settings
         );
     }
@@ -5753,6 +5917,28 @@ void UI::update(
 
     uint8_t gesture =
         touch.getGesture();
+
+    if(
+        refreshRequested &&
+        !touched &&
+        !trackingSwipe
+        #if defined(OPENDRIFT_BOARD_AMOLED_164)
+        && !swipePreviewActive
+        #endif
+    )
+    {
+        refreshRequested = false;
+
+        drawPage(
+            gyro,
+            wifi,
+            settings,
+            steeringRadio,
+            gainRadio
+        );
+
+        return;
+    }
 
     #if !defined(OPENDRIFT_BOARD_AMOLED_164)
     if(
@@ -6483,6 +6669,9 @@ void UI::update(
 
         if(
             page == PAGE_SYSTEM &&
+            #if defined(OPENDRIFT_INPUT_CRSF)
+            false &&
+            #endif
             buttonPressed(
                 x,
                 y,

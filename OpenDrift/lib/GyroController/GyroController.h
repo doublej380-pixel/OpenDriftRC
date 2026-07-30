@@ -54,6 +54,13 @@ public:
     int getCounterSteerAssist();
     int getCounterSteerCorrection();
 
+    // Experimental RC1 rotation-speed trim. While the driver is actively
+    // moving the steering, lower values add damping and higher values let
+    // commanded chassis rotation pass more freely. 50 preserves RC1 exactly.
+    void setTailSlideSpeed(int value);
+    int getTailSlideSpeed();
+    float getTailSlideBlend();
+
     // Retained for profile/UI compatibility. V2 does not use a dead-zone
     // output holder in the primary feedback path.
     void setAntiWobble(int value);
@@ -106,6 +113,7 @@ private:
     int integralLimit = 120;
     int holdBoost = 0;
     int counterSteerAssist = 0;
+    int tailSlideSpeed = 50;
     int antiWobble = 50;
     int huntDamping = 0;
 
@@ -123,6 +131,7 @@ private:
     int counterSteerCorrection = 0;
 
     float steeringActivity = 0.0f;
+    float tailSlideBlend = 0.0f;
     int lastSteeringCommand = 1500;
     bool steeringReady = false;
 

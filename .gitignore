@@ -7,5 +7,15 @@
 .release-test-*/
 release-assets/
 
+# Deployment infrastructure is maintained locally and in the separate
+# production Sites repository, not in the public firmware repository.
+/.github/workflows/
+/.openai/
+/installer/
+
+# Local design references and convenience archives.
+/.tmp-*.jpg
+/Pcb/OpenDrift Pdb.zip
+
 # Local podcast preparation notes; not part of the public repository.
 OpenDrift/docs/Podcast-Brief.md

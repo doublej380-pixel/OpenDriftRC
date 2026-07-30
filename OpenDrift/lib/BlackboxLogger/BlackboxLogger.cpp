@@ -112,7 +112,9 @@ void BlackboxLogger::log(
     bool steeringSignal,
     bool throttleSignal,
     bool gainSignal,
-    bool throttleOutputMode
+    bool throttleOutputMode,
+    int tailSlideSpeed,
+    float tailSlideBlend
 )
 {
     if(
@@ -135,7 +137,7 @@ void BlackboxLogger::log(
     snprintf(
         line,
         sizeof(line),
-        "%lu,%.3f,%.3f,%.3f,%.3f,%.4f,%.4f,%.4f,%.4f,%.4f,%.3f,%.3f,%d,%d,%d,%d,%d,%d,%d,%d,%.3f,%.2f,%d,%.3f,%.3f,%d,%d,%d,%d,%d,%d,%.3f,%.3f,%.3f,%.3f,%.3f,%.3f,%d,%.3f,%.3f,%.3f,%.3f,%d,%.3f,%.3f,%d,%.3f,%d,%.3f,%d,%d,%d,%d,%d,%d\n",
+        "%lu,%.3f,%.3f,%.3f,%.3f,%.4f,%.4f,%.4f,%.4f,%.4f,%.3f,%.3f,%d,%d,%d,%d,%d,%d,%d,%d,%.3f,%.2f,%d,%.3f,%.3f,%d,%d,%d,%d,%d,%d,%.3f,%.3f,%.3f,%.3f,%.3f,%.3f,%d,%.3f,%.3f,%.3f,%.3f,%d,%.3f,%.3f,%d,%.3f,%d,%.3f,%d,%d,%d,%d,%d,%d,%d,%.3f\n",
         timeMs,
         yaw,
         filteredYaw,
@@ -190,7 +192,9 @@ void BlackboxLogger::log(
         steeringSignal ? 1 : 0,
         throttleSignal ? 1 : 0,
         gainSignal ? 1 : 0,
-        throttleOutputMode ? 1 : 0
+        throttleOutputMode ? 1 : 0,
+        tailSlideSpeed,
+        tailSlideBlend
     );
 
     buffer += line;
@@ -321,7 +325,7 @@ bool BlackboxLogger::writeHeader()
     }
 
     file.println(
-        "time_ms,yaw,filtered_yaw,gyro_x_dps,gyro_y_dps,accel_x_g,accel_y_g,accel_z_g,accel_mag_g,accel_delta_g,tilt_rate_dps,surface_disturbance,gyro_raw_us,gyro_v2_us,steering_raw_us,steering_cmd_us,servo_us,servo_quiet,throttle_raw_us,gain_raw_us,gain,deadband,max_corr,smooth,drift_memory,memory_limit,memory_feedback_us,hold_assist,countersteer_assist,anti_wobble_legacy,prediction_strength,predicted_yaw,drift_reference_yaw,reference_error,reference_lock,throttle_prediction,direct_correction_us,countersteer_us,memory_feedback_copy_us,driver_activity_blend,throttle_prediction_blend,steering_activity_us_s,control_phase,settled_blend,throttle_transient,terrain_active_legacy,terrain_assist_legacy,terrain_enabled_legacy,hold_factor_legacy,attack_legacy,return_legacy,steering_signal,throttle_signal,gain_signal,pin18_throttle_out"
+        "time_ms,yaw,filtered_yaw,gyro_x_dps,gyro_y_dps,accel_x_g,accel_y_g,accel_z_g,accel_mag_g,accel_delta_g,tilt_rate_dps,surface_disturbance,gyro_raw_us,gyro_v2_us,steering_raw_us,steering_cmd_us,servo_us,servo_quiet,throttle_raw_us,gain_raw_us,gain,deadband,max_corr,smooth,drift_memory,memory_limit,memory_feedback_us,hold_assist,countersteer_assist,anti_wobble_legacy,prediction_strength,predicted_yaw,drift_reference_yaw,reference_error,reference_lock,throttle_prediction,direct_correction_us,countersteer_us,memory_feedback_copy_us,driver_activity_blend,throttle_prediction_blend,steering_activity_us_s,control_phase,settled_blend,throttle_transient,terrain_active_legacy,terrain_assist_legacy,terrain_enabled_legacy,hold_factor_legacy,attack_legacy,return_legacy,steering_signal,throttle_signal,gain_signal,pin18_throttle_out,tail_slide_speed,tail_slide_blend"
     );
 
     file.close();

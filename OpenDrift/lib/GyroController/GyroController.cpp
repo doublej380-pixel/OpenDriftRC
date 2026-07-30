@@ -32,6 +32,7 @@ void GyroController::resetDynamicState()
     counterSteerCorrection = 0;
 
     steeringActivity = 0.0f;
+    tailSlideBlend = 0.0f;
     lastSteeringCommand = 1500;
     steeringReady = false;
 
@@ -518,10 +519,34 @@ int GyroController::update(
             integralLimit
         );
 
+    // Experimental Tail Slide Speed is centered at 50. It changes only the
+    // fast damping path while deliberate steering movement is present:
+    // lower values add damping, 50 preserves the proven RC1 response, and
+    // higher values release damping. The 40% floor at 100 means it cannot
+    // reverse or remove gyro correction, and settled drifts receive a
+    // substantially smaller change in either direction.
+    tailSlideBlend =
+        ((tailSlideSpeed - 50) / 50.0f)
+        *
+        driverActivityBlend
+        *
+        (1.0f - 0.65f * settledBlend);
+
+    tailSlideBlend = constrain(
+        tailSlideBlend,
+        -1.0f,
+        1.0f
+    );
+
+    float directDampingScale =
+        1.0f - 0.60f * tailSlideBlend;
+
     float directCorrection =
         predictedYaw
         *
-        gyroGain;
+        gyroGain
+        *
+        directDampingScale;
 
     // Countersteer Assist is deliberately sourced from the slow learned
     // drift reference. It increases how much of a settled drift OpenDrift
@@ -755,6 +780,26 @@ int GyroController::getCounterSteerAssist()
 int GyroController::getCounterSteerCorrection()
 {
     return counterSteerCorrection;
+}
+
+void GyroController::setTailSlideSpeed(int value)
+{
+    tailSlideSpeed = constrain(value, 0, 100);
+
+    if(tailSlideSpeed == 50)
+    {
+        tailSlideBlend = 0.0f;
+    }
+}
+
+int GyroController::getTailSlideSpeed()
+{
+    return tailSlideSpeed;
+}
+
+float GyroController::getTailSlideBlend()
+{
+    return tailSlideBlend;
 }
 
 

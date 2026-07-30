@@ -193,7 +193,7 @@ void WebConfigurator::handleRoot()
     html += F("<div class='pill'>Steering: ");
     html += String(steeringRadio->getPulseWidth());
     html += steeringRadio->hasSignal() ? F(" OK") : F(" NO SIGNAL");
-    #if defined(OPENDRIFT_BOARD_AMOLED_164)
+    #if defined(OPENDRIFT_BOARD_AMOLED_164) || defined(OPENDRIFT_INPUT_CRSF)
     html += F("</div><div class='pill'>Gain: ");
     html += String(gainRadio->getPulseWidth());
     html += gainRadio->hasSignal() ? F(" OK") : F(" NO SIGNAL");
@@ -201,6 +201,13 @@ void WebConfigurator::handleRoot()
     html += F("</div><div class='pill'>Throttle: ");
     html += String(throttleRadio->getPulseWidth());
     html += throttleRadio->hasSignal() ? F(" OK") : F(" NO SIGNAL");
+    #if defined(OPENDRIFT_INPUT_CRSF)
+    #if defined(OPENDRIFT_CRSF_RX_ONLY)
+    html += F("</div><div class='pill'>CRSF: GPIO 17 RX only");
+    #else
+    html += F("</div><div class='pill'>CRSF: GPIO 17 RX / 18 TX");
+    #endif
+    #else
     html += F("</div><div class='pill'>GPIO 18: ");
     #if defined(OPENDRIFT_BOARD_AMOLED_164)
     html += settings->getThrottleOutputEnabled()
@@ -208,6 +215,7 @@ void WebConfigurator::handleRoot()
         : F("GAIN INPUT");
     #else
     html += F("THROTTLE INPUT");
+    #endif
     #endif
     html += F("</div></div></div>");
 
@@ -242,6 +250,8 @@ void WebConfigurator::handleRoot()
         html += String(profile->gyroHoldBoost);
         html += F(" &middot; Countersteer ");
         html += String(profile->gyroCounterSteerAssist);
+        html += F(" &middot; Tail speed ");
+        html += String(profile->gyroTailSlideSpeed);
         html += F("</small></div>");
 
         html += F("<form method='post' action='/activate-profile'><input type='hidden' name='profile' value='");
@@ -279,6 +289,10 @@ void WebConfigurator::handleRoot()
     html += input("Prediction strength (0-100)", "gyroHuntDamping", String(settings->getGyroHuntDamping()), "number", "1");
     html += F("</div></div>");
 
+    html += F("<div class='card'><h2>RC1 Experimental</h2><p class='sub'>Tail Slide Speed adjusts fast gyro damping while steering is moving. 50 is the proven RC1 response; lower values slow rotation and higher values speed it up. Compare transitions at the same tune.</p><div class='row'>");
+    html += input("Tail slide speed (0-100)", "tailSlideSpeed", String(settings->getGyroTailSlideSpeed()), "number", "1");
+    html += F("</div></div>");
+
     html += F("<div class='card'><h2>Drift Assist</h2><p class='sub'>Countersteer Assist changes only the steady steering workload. Zero preserves the base v1.0 response; higher values let OpenDrift carry more of a settled drift.</p><div class='row'>");
     html += input("Countersteer assist (0-100)", "counterSteerAssist", String(settings->getGyroCounterSteerAssist()), "number", "1");
     html += input("Hold assist (0-100)", "gyroHoldBoost", String(settings->getGyroHoldBoost()), "number", "1");
@@ -302,7 +316,14 @@ void WebConfigurator::handleRoot()
     html += F("</div></div>");
 
     html += F("<div class='card'><h2>Gain Channel Calibration</h2><div class='row'>");
-    #if defined(OPENDRIFT_BOARD_AMOLED_164)
+    #if defined(OPENDRIFT_INPUT_CRSF)
+    #if defined(OPENDRIFT_CRSF_INPUT_ONLY)
+    html += F("CRSF channel 3 controls gyro gain. GPIO 15 ESC output is disabled in this input-diagnostic build.");
+    #else
+    html += F("CRSF channel 3 controls gyro gain. GPIO 15 actively outputs neutral during failsafe and passes throttle only after a valid neutral hold.");
+    #endif
+    html += F("</div>");
+    #elif defined(OPENDRIFT_BOARD_AMOLED_164)
     html += input("Gain low", "gainMin", String(settings->getGainMin()));
     html += input("Gain high", "gainMax", String(settings->getGainMax()));
     html += F("</div>");
@@ -482,6 +503,13 @@ void WebConfigurator::handleSave()
         )
     );
 
+    settings->setGyroTailSlideSpeed(
+        getIntArg(
+            "tailSlideSpeed",
+            settings->getGyroTailSlideSpeed()
+        )
+    );
+
     settings->setGyroAntiWobble(
         getIntArg(
             "gyroAntiWobble",
@@ -623,6 +651,10 @@ void WebConfigurator::handleSave()
 
         gyro->setCounterSteerAssist(
             settings->getGyroCounterSteerAssist()
+        );
+
+        gyro->setTailSlideSpeed(
+            settings->getGyroTailSlideSpeed()
         );
 
         gyro->setAntiWobble(

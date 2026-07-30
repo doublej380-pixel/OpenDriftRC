@@ -68,7 +68,9 @@ public:
         bool steeringSignal,
         bool throttleSignal,
         bool gainSignal,
-        bool throttleOutputMode
+        bool throttleOutputMode,
+        int tailSlideSpeed,
+        float tailSlideBlend
     );
 
     bool clear();

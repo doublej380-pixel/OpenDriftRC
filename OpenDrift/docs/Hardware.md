@@ -36,6 +36,27 @@ The current board orientation reports clockwise rotation as positive Z and count
 
 The round board does not have a spare gain-channel input in the current routing. Its Gain comes from the saved setting/profile.
 
+## Experimental CRSF routing
+
+Both boards have isolated CRSF build targets. They share this logical routing:
+
+| Signal | GPIO | Direction |
+| --- | ---: | --- |
+| CRSF RX from receiver TX | 17 | Input |
+| CRSF TX to receiver RX | 18 | Output |
+| Steering servo PWM | 16 | Output at 250 Hz |
+| ESC throttle PWM | 15 | Output at 50 Hz |
+
+The round `waveshare_128_crsf` target currently enables the complete full-duplex
+path. The AMOLED `waveshare_amoled_164_crsf` target is deliberately compiled
+RX-only/input-only until replacement AMOLED hardware is available for sustained
+validation. Neither target replaces the normal PWM environments.
+
+CRSF channel mapping is channel 1 steering, channel 2 throttle, and channel 3
+gain. A stale channel frame centers steering and commands neutral throttle in
+the full build. Throttle output requires a valid link and a 500 ms neutral hold
+before arming.
+
 ## Throttle sensing
 
 Throttle sensing is electrically optional and automatically falls back when no valid PWM signal exists. It is strongly recommended for OpenDrift v1.0 because it announces power and chassis-load changes, temporarily extends yaw prediction, and makes the slow drift reference yield before stale feedback can fight the transition.

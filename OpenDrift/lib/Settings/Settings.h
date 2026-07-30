@@ -12,7 +12,7 @@ public:
 
     struct DrivingProfile
     {
-        uint32_t version = 2;
+        uint32_t version = 4;
         char name[PROFILE_NAME_LENGTH] = {0};
 
         float gain = 1.5f;
@@ -30,6 +30,7 @@ public:
         int32_t steeringDamper = 0;
         int32_t radioSteeringTravel = 100;
         int32_t gyroCounterSteerAssist = 0;
+        int32_t gyroTailSlideSpeed = 50;
     };
 
     bool begin();
@@ -69,6 +70,9 @@ public:
 
     int getGyroCounterSteerAssist();
     void setGyroCounterSteerAssist(int value);
+
+    int getGyroTailSlideSpeed();
+    void setGyroTailSlideSpeed(int value);
 
     int getGyroAntiWobble();
     void setGyroAntiWobble(int value);
@@ -169,6 +173,8 @@ private:
     int gyroHoldBoost = 0;
 
     int gyroCounterSteerAssist = 0;
+
+    int gyroTailSlideSpeed = 50;
 
     int gyroAntiWobble = 50;
 

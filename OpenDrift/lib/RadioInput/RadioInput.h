@@ -11,6 +11,15 @@ public:
         uint8_t inputPin
     );
 
+    bool beginExternal();
+
+    void updateExternalPulse(
+        uint16_t width,
+        bool valid = true
+    );
+
+    void invalidateExternal();
+
     void end();
 
     bool hasSignal(
@@ -38,6 +47,8 @@ private:
     volatile uint32_t lastPulseMicros = 0;
 
     bool active = false;
+
+    bool external = false;
 
     static void IRAM_ATTR handleInterrupt(
         void* arg

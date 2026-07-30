@@ -7,6 +7,8 @@ bool RadioInput::begin(
 {
     end();
 
+    external = false;
+
     pin =
         inputPin;
 
@@ -32,6 +34,52 @@ bool RadioInput::begin(
 }
 
 
+bool RadioInput::beginExternal()
+{
+    end();
+
+    external = true;
+    active = true;
+    riseTime = 0;
+    pulseWidth = 1500;
+    lastPulseMicros = 0;
+
+    return true;
+}
+
+
+void RadioInput::updateExternalPulse(
+    uint16_t width,
+    bool valid
+)
+{
+    if(
+        !active ||
+        !external ||
+        !valid ||
+        width < 800 ||
+        width > 2200
+    )
+    {
+        return;
+    }
+
+    pulseWidth = width;
+    lastPulseMicros = micros();
+}
+
+
+void RadioInput::invalidateExternal()
+{
+    if(!external)
+    {
+        return;
+    }
+
+    lastPulseMicros = 0;
+}
+
+
 
 void RadioInput::end()
 {
@@ -40,11 +88,15 @@ void RadioInput::end()
         return;
     }
 
-    detachInterrupt(
-        digitalPinToInterrupt(pin)
-    );
+    if(!external)
+    {
+        detachInterrupt(
+            digitalPinToInterrupt(pin)
+        );
+    }
 
     active = false;
+    external = false;
     riseTime = 0;
     lastPulseMicros = 0;
 }

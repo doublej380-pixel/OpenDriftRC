@@ -7,12 +7,17 @@
 #include "LGFX_OpenDrift.hpp"
 #include "IMU.h"
 #include "Servo.h"
+#include "EscOutput.h"
 #include "GyroController.h"
 #include "Touch.h"
 #include "UI.h"
 #include "WiFiManager.h"
 #include "Settings.h"
 #include "RadioInput.h"
+#if defined(OPENDRIFT_INPUT_CRSF)
+#include "CrsfInput.h"
+#include "CrsfParameterDevice.h"
+#endif
 #include "WebConfigurator.h"
 #include "BlackboxLogger.h"
 
@@ -22,7 +27,7 @@ IMU imu;
 
 ServoOutput steeringServo;
 
-ServoOutput throttleOutput;
+EscOutput throttleOutput;
 
 GyroController gyro;
 
@@ -41,6 +46,11 @@ RadioInput steeringRadio;
 RadioInput gainRadio;
 
 RadioInput throttleRadio;
+
+#if defined(OPENDRIFT_INPUT_CRSF)
+CrsfInput crsf;
+CrsfParameterDevice crsfParameters;
+#endif
 
 BlackboxLogger blackbox;
 
@@ -76,9 +86,27 @@ SemaphoreHandle_t i2cBusMutex = nullptr;
 
 TaskHandle_t controlTaskHandle = nullptr;
 
+#if defined(OPENDRIFT_INPUT_CRSF)
+TaskHandle_t crsfTaskHandle = nullptr;
+#endif
+
 #define SERVO_OUTPUT_PIN 16
 #define RADIO_STEERING_PIN 17
-#if defined(OPENDRIFT_BOARD_AMOLED_164)
+#if defined(OPENDRIFT_INPUT_CRSF)
+#define CRSF_RX_PIN 17
+#if defined(OPENDRIFT_CRSF_RX_ONLY)
+#define CRSF_TX_PIN -1
+#else
+#define CRSF_TX_PIN 18
+#endif
+#define CRSF_THROTTLE_OUTPUT_PIN 15
+static constexpr uint8_t CRSF_STEERING_CHANNEL = 0;
+static constexpr uint8_t CRSF_THROTTLE_CHANNEL = 1;
+static constexpr uint8_t CRSF_GAIN_CHANNEL = 2;
+static constexpr uint32_t CRSF_SIGNAL_TIMEOUT_MS = 50;
+static constexpr uint32_t CRSF_THROTTLE_NEUTRAL_MS = 500;
+static constexpr int CRSF_THROTTLE_NEUTRAL_BAND_US = 50;
+#elif defined(OPENDRIFT_BOARD_AMOLED_164)
 #define RADIO_THROTTLE_PIN 15
 #else
 // The round board does not have a spare input. Its former GPIO 18 gain
@@ -92,6 +120,14 @@ bool pin18ModeConfigured = false;
 bool pin18ThrottleOutputMode = false;
 
 bool throttleOutputActive = false;
+
+#if defined(OPENDRIFT_INPUT_CRSF)
+bool crsfThrottleArmed = false;
+bool lastCrsfSignal = false;
+uint32_t crsfThrottleNeutralSinceMs = 0;
+volatile bool crsfThrottleSignalSnapshot = false;
+volatile int crsfThrottlePulseSnapshot = 1500;
+#endif
 
 const float radioGainMin = 0.5f;
 const float radioGainMax = 3.0f;
@@ -148,7 +184,11 @@ public:
         canvas.setTextColor(TFT_WHITE);
         canvas.setTextSize(2);
         canvas.drawString(
+            #if defined(OPENDRIFT_INPUT_CRSF)
+            "OpenDrift CRSF verbose boot",
+            #else
             "OpenDrift verbose boot",
+            #endif
             8,
             7
         );
@@ -156,7 +196,11 @@ public:
         canvas.setTextSize(AMOLED_BOOT_LOG_TEXT_SIZE);
         canvas.setTextColor(0x7BEF);
         canvas.drawString(
-            "control kernel 2.0.0-amoled  ttyOD0",
+            #if defined(OPENDRIFT_INPUT_CRSF)
+            "control kernel crsf-amoled-input  ttyOD0",
+            #else
+            "control kernel 2.0.0-rc1-exp  ttyOD0",
+            #endif
             8,
             27
         );
@@ -171,7 +215,11 @@ public:
         display->setTextColor(TFT_WHITE);
         display->setTextSize(2);
         display->drawCenterString(
-            "OpenDrift boot",
+            #if defined(OPENDRIFT_INPUT_CRSF)
+            "OpenDrift CRSF EXP",
+            #else
+            "OpenDrift RC1 EXP",
+            #endif
             120,
             12
         );
@@ -347,7 +395,13 @@ BootConsole bootConsole;
 
 bool configurePin18Mode()
 {
-    #if !defined(OPENDRIFT_BOARD_AMOLED_164)
+    #if defined(OPENDRIFT_INPUT_CRSF)
+    // GPIO 18 belongs to the full-duplex CRSF UART once device telemetry is
+    // enabled. The input-only diagnostic build leaves it disconnected.
+    pin18ThrottleOutputMode = false;
+    pin18ModeConfigured = true;
+    return true;
+    #elif !defined(OPENDRIFT_BOARD_AMOLED_164)
     // throttleRadio owns GPIO 18 for the lifetime of the round build.
     pin18ThrottleOutputMode = false;
     pin18ModeConfigured = true;
@@ -412,6 +466,118 @@ bool configurePin18Mode()
     return configured;
     #endif
 }
+
+
+#if defined(OPENDRIFT_INPUT_CRSF)
+void updateCrsfThrottleOutput(
+    int throttlePulse,
+    bool signalValid
+)
+{
+    #if defined(OPENDRIFT_CRSF_INPUT_ONLY)
+    // Diagnostic stage: prove sustained CRSF reception before allocating a
+    // second ESP32Servo/LEDC output. Throttle remains visible to the UI,
+    // gyro, web configurator, and blackbox, but GPIO 15 emits no PWM.
+    (void)throttlePulse;
+    (void)signalValid;
+
+    if(throttleOutputActive)
+    {
+        throttleOutput.end();
+        throttleOutputActive = false;
+    }
+
+    crsfThrottleArmed = false;
+    crsfThrottleNeutralSinceMs = 0;
+
+    return;
+    #else
+    if(!signalValid)
+    {
+        if(throttleOutputActive)
+        {
+            // Active neutral is deterministic and does not depend on the
+            // receiver or ESC having matching failsafe configuration.
+            throttleOutput.writeMicroseconds(1500);
+        }
+
+        crsfThrottleArmed = false;
+        crsfThrottleNeutralSinceMs = 0;
+
+        return;
+    }
+
+    bool throttleNeutral =
+        abs(throttlePulse - 1500) <=
+        CRSF_THROTTLE_NEUTRAL_BAND_US;
+
+    if(!crsfThrottleArmed)
+    {
+        if(!throttleNeutral)
+        {
+            crsfThrottleNeutralSinceMs = 0;
+
+            if(throttleOutputActive)
+            {
+                throttleOutput.writeMicroseconds(1500);
+            }
+
+            return;
+        }
+
+        if(crsfThrottleNeutralSinceMs == 0)
+        {
+            crsfThrottleNeutralSinceMs = millis();
+            return;
+        }
+
+        if(
+            millis() - crsfThrottleNeutralSinceMs <
+            CRSF_THROTTLE_NEUTRAL_MS
+        )
+        {
+            return;
+        }
+
+        if(!throttleOutputActive)
+        {
+            throttleOutput.configure(
+                1500,
+                false,
+                100,
+                0
+            );
+
+            throttleOutputActive =
+                throttleOutput.begin(
+                    CRSF_THROTTLE_OUTPUT_PIN,
+                    50
+                );
+        }
+
+        crsfThrottleArmed = throttleOutputActive;
+
+        if(!crsfThrottleArmed)
+        {
+            crsfThrottleNeutralSinceMs = 0;
+            return;
+        }
+
+        Serial.println(
+            "CRSF throttle output armed after neutral hold"
+        );
+    }
+
+    throttleOutput.writeMicroseconds(
+        constrain(
+            throttlePulse,
+            1000,
+            2000
+        )
+    );
+    #endif
+}
+#endif
 
 int mapSteeringPulse(
     int pulse,
@@ -559,6 +725,40 @@ float mapGainPulse(
 
 void runControlIteration()
 {
+    #if defined(OPENDRIFT_INPUT_CRSF)
+    bool crsfSignal =
+        crsf.hasSignal(
+            CRSF_SIGNAL_TIMEOUT_MS
+        );
+
+    if(crsfSignal)
+    {
+        steeringRadio.updateExternalPulse(
+            crsf.getChannelMicroseconds(
+                CRSF_STEERING_CHANNEL
+            )
+        );
+
+        throttleRadio.updateExternalPulse(
+            crsf.getChannelMicroseconds(
+                CRSF_THROTTLE_CHANNEL
+            )
+        );
+
+        gainRadio.updateExternalPulse(
+            crsf.getChannelMicroseconds(
+                CRSF_GAIN_CHANNEL
+            )
+        );
+    }
+    else
+    {
+        steeringRadio.invalidateExternal();
+        throttleRadio.invalidateExternal();
+        gainRadio.invalidateExternal();
+    }
+    #endif
+
     if(
         !pin18ThrottleOutputMode &&
         gainRadio.hasSignal()
@@ -606,6 +806,10 @@ void runControlIteration()
         settings.getGyroCounterSteerAssist()
     );
 
+    gyro.setTailSlideSpeed(
+        settings.getGyroTailSlideSpeed()
+    );
+
     gyro.setAntiWobble(
         settings.getGyroAntiWobble()
     );
@@ -631,11 +835,18 @@ void runControlIteration()
         );
     }
 
-    bool steeringSignal =
-        steeringRadio.hasSignal();
+    #if defined(OPENDRIFT_INPUT_CRSF)
+    bool steeringSignal = crsfSignal;
+    bool throttleSignal = crsfSignal;
+    #else
+    bool steeringSignal = steeringRadio.hasSignal();
+    bool throttleSignal = throttleRadio.hasSignal();
+    #endif
 
-    bool throttleSignal =
-        throttleRadio.hasSignal();
+    int throttlePulse =
+        throttleSignal
+        ? throttleRadio.getPulseWidth()
+        : 1500;
 
     int steeringCommand = 1500;
 
@@ -661,7 +872,7 @@ void runControlIteration()
             yaw,
             steeringCommand,
             steeringSignal,
-            throttleRadio.getPulseWidth(),
+            throttlePulse,
             throttleSignal,
             imu.getSurfaceDisturbanceScore(),
             settings.getTerrainAssistEnabled()
@@ -702,6 +913,22 @@ void runControlIteration()
         );
     }
 
+    #if defined(OPENDRIFT_INPUT_CRSF)
+    else if(lastCrsfSignal)
+    {
+        // Do not hold the last steering command after a receiver loss.
+        steeringServo.center();
+        servoCommand = steeringServo.getPosition();
+    }
+
+    lastCrsfSignal = steeringSignal;
+
+    // The main loop owns throttle PWM attachment and removal. ESP32Servo's
+    // dynamic LEDC allocation must not run inside this high-priority task.
+    crsfThrottlePulseSnapshot = throttlePulse;
+    crsfThrottleSignalSnapshot = throttleSignal;
+    #endif
+
     ControlTelemetry nextTelemetry;
 
     nextTelemetry.yaw = yaw;
@@ -729,6 +956,23 @@ void runControlIteration()
         &controlTelemetryMux
     );
 }
+
+
+#if defined(OPENDRIFT_INPUT_CRSF)
+void crsfTask(void* parameter)
+{
+    (void)parameter;
+
+    while(true)
+    {
+        crsf.update();
+
+        // F1000 supplies about one channel frame per millisecond. Keep the
+        // UART drained independently from IMU, UI, storage, and WiFi work.
+        vTaskDelay(pdMS_TO_TICKS(1));
+    }
+}
+#endif
 
 
 void controlTask(void* parameter)
@@ -942,6 +1186,68 @@ void setup()
     // RADIO
     //-------------------
 
+    #if defined(OPENDRIFT_INPUT_CRSF)
+    bool crsfOk =
+        crsf.begin(
+            CRSF_RX_PIN,
+            CRSF_TX_PIN
+        );
+
+    BaseType_t crsfTaskStarted =
+        crsfOk
+        ? xTaskCreatePinnedToCore(
+            crsfTask,
+            "OpenDriftCRSF",
+            4096,
+            nullptr,
+            3,
+            &crsfTaskHandle,
+            0
+        )
+        : pdFAIL;
+
+    bool crsfReaderOk =
+        crsfTaskStarted == pdPASS;
+
+    crsfParameters.begin(
+        crsf,
+        settings
+    );
+
+    bool steeringRadioOk = steeringRadio.beginExternal();
+    bool throttleRadioOk = throttleRadio.beginExternal();
+    bool gainRadioOk = gainRadio.beginExternal();
+    bool sharedPinOk = configurePin18Mode();
+
+    #if defined(OPENDRIFT_CRSF_INPUT_ONLY)
+    pinMode(
+        CRSF_THROTTLE_OUTPUT_PIN,
+        INPUT_PULLDOWN
+    );
+
+    bool throttleOutputOk = true;
+    #else
+    throttleOutput.configure(
+        1500,
+        false,
+        100,
+        0
+    );
+
+    throttleOutputActive =
+        throttleOutput.begin(
+            CRSF_THROTTLE_OUTPUT_PIN,
+            50
+        );
+
+    if(throttleOutputActive)
+    {
+        throttleOutput.writeMicroseconds(1500);
+    }
+
+    bool throttleOutputOk = throttleOutputActive;
+    #endif
+    #else
     bool steeringRadioOk =
         steeringRadio.begin(
             RADIO_STEERING_PIN
@@ -954,20 +1260,58 @@ void setup()
 
     bool sharedPinOk =
         configurePin18Mode();
+    #endif
 
     bool radioOk =
         steeringRadioOk &&
         throttleRadioOk &&
-        sharedPinOk;
+        sharedPinOk
+        #if defined(OPENDRIFT_INPUT_CRSF)
+        && gainRadioOk && crsfOk && crsfReaderOk && throttleOutputOk
+        #endif
+        ;
 
     bootConsole.log(
+        #if defined(OPENDRIFT_INPUT_CRSF)
+        "crsf: uart 420k channel decoder online",
+        #else
         "rc-input: steering and throttle channels armed",
+        #endif
+        #if defined(OPENDRIFT_INPUT_CRSF)
+        crsfOk && crsfReaderOk ? "[ OK ]" : "[FAIL]",
+        crsfOk && crsfReaderOk ? TFT_GREEN : TFT_RED
+        #else
+        radioOk ? "[ OK ]" : "[FAIL]",
+        radioOk ? TFT_GREEN : TFT_RED
+        #endif
+    );
+
+    #if defined(OPENDRIFT_INPUT_CRSF) && !defined(OPENDRIFT_CRSF_INPUT_ONLY)
+    bootConsole.log(
+        "ledc: esc neutral output attached on gpio15",
+        throttleOutputOk ? "[ OK ]" : "[FAIL]",
+        throttleOutputOk ? TFT_GREEN : TFT_RED
+    );
+    #endif
+
+    #if defined(OPENDRIFT_INPUT_CRSF)
+    bootConsole.log(
+        "crsf: channel adapters and pin routing ready",
         radioOk ? "[ OK ]" : "[FAIL]",
         radioOk ? TFT_GREEN : TFT_RED
     );
+    #endif
 
     bootConsole.log(
-        #if defined(OPENDRIFT_BOARD_AMOLED_164)
+        #if defined(OPENDRIFT_INPUT_CRSF)
+        #if defined(OPENDRIFT_CRSF_INPUT_ONLY)
+        "gpio17: crsf rx only; gpio18/15 disconnected"
+        #elif defined(OPENDRIFT_CRSF_RX_ONLY)
+        "gpio17: crsf rx only; gpio15: esc output"
+        #else
+        "gpio17/18: crsf rx/tx; gpio15: esc out locked"
+        #endif
+        #elif defined(OPENDRIFT_BOARD_AMOLED_164)
         pin18ThrottleOutputMode
         ? "gpio18: throttle passthrough output"
         : "gpio18: gyro gain adjustment input"
@@ -976,7 +1320,11 @@ void setup()
         #endif
     );
 
+    #if defined(OPENDRIFT_INPUT_CRSF)
+    Serial.println("CRSF input initialized; ESC output awaiting neutral");
+    #else
     Serial.println("Radio inputs initialized");
+    #endif
 
     //-------------------
     // GYRO CONTROLLER
@@ -1021,6 +1369,10 @@ void setup()
 
     gyro.setCounterSteerAssist(
         settings.getGyroCounterSteerAssist()
+    );
+
+    gyro.setTailSlideSpeed(
+        settings.getGyroTailSlideSpeed()
     );
 
     gyro.setAntiWobble(
@@ -1196,6 +1548,12 @@ void setup()
         gainRadio
     );
 
+    #if defined(OPENDRIFT_INPUT_CRSF)
+    ui.setThrottleRadio(
+        throttleRadio
+    );
+    #endif
+
     touch.update();
 
     i2cBusMutex =
@@ -1225,12 +1583,35 @@ void loop()
 {
     static unsigned long lastHeartbeatMs = 0;
 
+    #if defined(OPENDRIFT_INPUT_CRSF)
+    crsfParameters.update();
+
+    if(crsfParameters.consumeSettingsChanged())
+    {
+        ui.requestRefresh();
+    }
+    #endif
+
     if(millis() - lastHeartbeatMs > 5000)
     {
         lastHeartbeatMs =
             millis();
 
         Serial.println("OpenDrift heartbeat");
+
+        #if defined(OPENDRIFT_INPUT_CRSF)
+        Serial.printf(
+            "CRSF bytes=%lu frames=%lu channels=%lu crc=%lu age=%lu ms LQ=%u SNR=%d throttle=%s\n",
+            (unsigned long)crsf.getReceivedByteCount(),
+            (unsigned long)crsf.getValidFrameCount(),
+            (unsigned long)crsf.getChannelFrameCount(),
+            (unsigned long)crsf.getCrcErrorCount(),
+            (unsigned long)crsf.getFrameAgeMs(),
+            crsf.getUplinkLinkQuality(),
+            crsf.getUplinkSnr(),
+            crsfThrottleArmed ? "ARMED" : "LOCKED"
+        );
+        #endif
     }
 
     if(i2cBusMutex != nullptr)
@@ -1290,6 +1671,18 @@ void loop()
 
     configurePin18Mode();
 
+    #if defined(OPENDRIFT_INPUT_CRSF)
+    bool crsfThrottleSignal =
+        crsfThrottleSignalSnapshot;
+
+    int crsfThrottlePulse =
+        crsfThrottlePulseSnapshot;
+
+    updateCrsfThrottleOutput(
+        crsfThrottlePulse,
+        crsfThrottleSignal
+    );
+    #else
     if(
         pin18ThrottleOutputMode &&
         throttleRadio.hasSignal()
@@ -1332,6 +1725,7 @@ void loop()
             INPUT_PULLDOWN
         );
     }
+    #endif
 
     //-------------------
     // UI
@@ -1344,7 +1738,7 @@ void loop()
         wifi,
         settings,
         steeringRadio,
-        #if defined(OPENDRIFT_BOARD_AMOLED_164)
+        #if defined(OPENDRIFT_BOARD_AMOLED_164) || defined(OPENDRIFT_INPUT_CRSF)
         gainRadio
         #else
         throttleRadio
@@ -1433,7 +1827,9 @@ void loop()
             telemetry.steeringSignal,
             telemetry.throttleSignal,
             gainRadio.hasSignal(),
-            pin18ThrottleOutputMode
+            pin18ThrottleOutputMode,
+            settings.getGyroTailSlideSpeed(),
+            gyro.getTailSlideBlend()
         );
     }
 

@@ -20,11 +20,58 @@ namespace
         int32_t steeringDamper;
         int32_t radioSteeringTravel;
     };
+
+    struct DrivingProfileV2
+    {
+        uint32_t version;
+        char name[Settings::PROFILE_NAME_LENGTH];
+        float gain;
+        float deadband;
+        float gyroSmoothing;
+        float gyroIntegralGain;
+        int32_t gyroMaxCorrection;
+        int32_t gyroAttackSpeed;
+        int32_t gyroReturnSpeed;
+        int32_t gyroIntegralLimit;
+        int32_t gyroHoldBoost;
+        int32_t gyroAntiWobble;
+        int32_t gyroHuntDamping;
+        int32_t steeringDamper;
+        int32_t radioSteeringTravel;
+        int32_t gyroCounterSteerAssist;
+    };
+
+    struct DrivingProfileV3
+    {
+        uint32_t version;
+        char name[Settings::PROFILE_NAME_LENGTH];
+        float gain;
+        float deadband;
+        float gyroSmoothing;
+        float gyroIntegralGain;
+        int32_t gyroMaxCorrection;
+        int32_t gyroAttackSpeed;
+        int32_t gyroReturnSpeed;
+        int32_t gyroIntegralLimit;
+        int32_t gyroHoldBoost;
+        int32_t gyroAntiWobble;
+        int32_t gyroHuntDamping;
+        int32_t steeringDamper;
+        int32_t radioSteeringTravel;
+        int32_t gyroCounterSteerAssist;
+        int32_t gyroTailSlideSpeed;
+    };
 }
 
 bool Settings::begin()
 {
+    #if defined(OPENDRIFT_INPUT_CRSF)
+    // Keep experimental CRSF tuning completely separate from the RC1 PWM
+    // build, even when both firmwares are flashed onto the same board.
+    prefs.begin("OpenDriftCRSF", false);
+    #else
     prefs.begin("OpenDrift", false);
+    #endif
 
     gain = prefs.getFloat(
         "gain",
@@ -80,6 +127,30 @@ bool Settings::begin()
         "counterAssist",
         0
     );
+
+    if(prefs.isKey("tailSpeedC"))
+    {
+        gyroTailSlideSpeed = constrain(
+            prefs.getInt("tailSpeedC", 50),
+            0,
+            100
+        );
+    }
+    else
+    {
+        int legacyTailSlideSpeed = prefs.getInt("tailSpeed", 0);
+
+        // Experimental v3 used 0 as the proven response and 100 as the
+        // maximum release. Preserve that exact behavior in the centered
+        // scale, where old 0 -> new 50 and old 100 -> new 100.
+        gyroTailSlideSpeed = constrain(
+            50 + legacyTailSlideSpeed / 2,
+            50,
+            100
+        );
+
+        prefs.putInt("tailSpeedC", gyroTailSlideSpeed);
+    }
 
     gyroAntiWobble = prefs.getInt(
         "gyroWob",
@@ -242,6 +313,11 @@ void Settings::save()
     prefs.putInt(
         "counterAssist",
         gyroCounterSteerAssist
+    );
+
+    prefs.putInt(
+        "tailSpeedC",
+        gyroTailSlideSpeed
     );
 
     prefs.putInt(
@@ -515,6 +591,17 @@ int Settings::getGyroCounterSteerAssist()
 void Settings::setGyroCounterSteerAssist(int value)
 {
     gyroCounterSteerAssist = constrain(value, 0, 100);
+    dirty = true;
+}
+
+int Settings::getGyroTailSlideSpeed()
+{
+    return gyroTailSlideSpeed;
+}
+
+void Settings::setGyroTailSlideSpeed(int value)
+{
+    gyroTailSlideSpeed = constrain(value, 0, 100);
     dirty = true;
 }
 
@@ -999,12 +1086,80 @@ void Settings::loadProfiles()
                 &profiles[loadedCount],
                 sizeof(DrivingProfile)
             ) == sizeof(DrivingProfile) &&
-            profiles[loadedCount].version == 2 &&
+            profiles[loadedCount].version == 4 &&
             profiles[loadedCount].name[0] != '\0'
         )
         {
             profiles[loadedCount].name[PROFILE_NAME_LENGTH - 1] = '\0';
             loadedCount++;
+        }
+        else if(storedSize == sizeof(DrivingProfileV3))
+        {
+            DrivingProfileV3 legacy = {};
+
+            if(
+                prefs.getBytes(key, &legacy, sizeof(legacy)) == sizeof(legacy) &&
+                legacy.version == 3 &&
+                legacy.name[0] != '\0'
+            )
+            {
+                DrivingProfile& profile = profiles[loadedCount];
+                profile = DrivingProfile();
+                memcpy(profile.name, legacy.name, PROFILE_NAME_LENGTH);
+                profile.name[PROFILE_NAME_LENGTH - 1] = '\0';
+                profile.gain = legacy.gain;
+                profile.deadband = legacy.deadband;
+                profile.gyroSmoothing = legacy.gyroSmoothing;
+                profile.gyroIntegralGain = legacy.gyroIntegralGain;
+                profile.gyroMaxCorrection = legacy.gyroMaxCorrection;
+                profile.gyroAttackSpeed = legacy.gyroAttackSpeed;
+                profile.gyroReturnSpeed = legacy.gyroReturnSpeed;
+                profile.gyroIntegralLimit = legacy.gyroIntegralLimit;
+                profile.gyroHoldBoost = legacy.gyroHoldBoost;
+                profile.gyroAntiWobble = legacy.gyroAntiWobble;
+                profile.gyroHuntDamping = legacy.gyroHuntDamping;
+                profile.steeringDamper = legacy.steeringDamper;
+                profile.radioSteeringTravel = legacy.radioSteeringTravel;
+                profile.gyroCounterSteerAssist = legacy.gyroCounterSteerAssist;
+                profile.gyroTailSlideSpeed = constrain(
+                    50 + legacy.gyroTailSlideSpeed / 2,
+                    50,
+                    100
+                );
+                loadedCount++;
+            }
+        }
+        else if(storedSize == sizeof(DrivingProfileV2))
+        {
+            DrivingProfileV2 legacy = {};
+
+            if(
+                prefs.getBytes(key, &legacy, sizeof(legacy)) == sizeof(legacy) &&
+                legacy.version == 2 &&
+                legacy.name[0] != '\0'
+            )
+            {
+                DrivingProfile& profile = profiles[loadedCount];
+                profile = DrivingProfile();
+                memcpy(profile.name, legacy.name, PROFILE_NAME_LENGTH);
+                profile.name[PROFILE_NAME_LENGTH - 1] = '\0';
+                profile.gain = legacy.gain;
+                profile.deadband = legacy.deadband;
+                profile.gyroSmoothing = legacy.gyroSmoothing;
+                profile.gyroIntegralGain = legacy.gyroIntegralGain;
+                profile.gyroMaxCorrection = legacy.gyroMaxCorrection;
+                profile.gyroAttackSpeed = legacy.gyroAttackSpeed;
+                profile.gyroReturnSpeed = legacy.gyroReturnSpeed;
+                profile.gyroIntegralLimit = legacy.gyroIntegralLimit;
+                profile.gyroHoldBoost = legacy.gyroHoldBoost;
+                profile.gyroAntiWobble = legacy.gyroAntiWobble;
+                profile.gyroHuntDamping = legacy.gyroHuntDamping;
+                profile.steeringDamper = legacy.steeringDamper;
+                profile.radioSteeringTravel = legacy.radioSteeringTravel;
+                profile.gyroCounterSteerAssist = legacy.gyroCounterSteerAssist;
+                profile.gyroTailSlideSpeed = 50;
+                loadedCount++;
+            }
         }
         else if(storedSize == sizeof(DrivingProfileV1))
         {
@@ -1034,6 +1189,7 @@ void Settings::loadProfiles()
                 profile.steeringDamper = legacy.steeringDamper;
                 profile.radioSteeringTravel = legacy.radioSteeringTravel;
                 profile.gyroCounterSteerAssist = 0;
+                profile.gyroTailSlideSpeed = 50;
                 loadedCount++;
             }
         }
@@ -1062,7 +1218,7 @@ void Settings::captureProfile(
     DrivingProfile& profile
 )
 {
-    profile.version = 2;
+    profile.version = 4;
     profile.gain = gain;
     profile.deadband = deadband;
     profile.gyroSmoothing = gyroSmoothing;
@@ -1077,6 +1233,7 @@ void Settings::captureProfile(
     profile.steeringDamper = steeringDamper;
     profile.radioSteeringTravel = radioSteeringTravel;
     profile.gyroCounterSteerAssist = gyroCounterSteerAssist;
+    profile.gyroTailSlideSpeed = gyroTailSlideSpeed;
 }
 
 void Settings::applyProfile(
@@ -1097,6 +1254,7 @@ void Settings::applyProfile(
     steeringDamper = profile.steeringDamper;
     radioSteeringTravel = profile.radioSteeringTravel;
     gyroCounterSteerAssist = profile.gyroCounterSteerAssist;
+    gyroTailSlideSpeed = profile.gyroTailSlideSpeed;
 }
 
 bool Settings::persistProfile(

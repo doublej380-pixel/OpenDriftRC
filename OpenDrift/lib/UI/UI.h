@@ -25,6 +25,12 @@ public:
         RadioInput& gainRadio
     );
 
+    void setThrottleRadio(
+        RadioInput& throttleRadio
+    );
+
+    void requestRefresh();
+
 
     void update(
         Touch& touch,
@@ -56,6 +62,8 @@ private:
 
     LGFX* display = nullptr;
 
+    RadioInput* throttleRadioInput = nullptr;
+
     LGFX_Sprite canvas;
 
     LGFX_Sprite transitionCanvas;
@@ -72,6 +80,7 @@ private:
     bool canvasReady = false;
 
     bool suppressFlush = false;
+    bool refreshRequested = false;
 
     void flushDisplay();
 
@@ -89,16 +98,16 @@ private:
     bool canUseRawAmoledBuffers();
 
     // Pages
-    // Shared order: Drive, Core, Response, Drift Assist, Profiles, Radio,
-    // Steering. Round adds Steering Cal before WiFi and System.
+    // Shared order: Drive, Core, Response, Drift Assist, Experimental,
+    // Profiles, Radio, Steering. Round adds Steering Cal before WiFi/System.
 
     uint8_t page = 0;
 
 
     #if defined(OPENDRIFT_BOARD_AMOLED_164)
-    const uint8_t totalPages = 9;
-    #else
     const uint8_t totalPages = 10;
+    #else
+    const uint8_t totalPages = 11;
     #endif
 
 
@@ -192,6 +201,10 @@ private:
     );
 
     void drawDriftAssistPage(
+        Settings& settings
+    );
+
+    void drawExperimentalPage(
         Settings& settings
     );
 

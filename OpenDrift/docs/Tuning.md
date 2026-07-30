@@ -69,6 +69,15 @@ even with Prediction set to zero. The Prediction setting adds general
 yaw-acceleration look-ahead; throttle temporarily extends that horizon before
 the chassis response develops.
 
+### RC1 Experimental: Tail Slide Speed
+
+Tail Slide Speed is not part of the proven v1.0 tuning sequence. Keep it at
+`50` for the exact RC1 response. Lower values add entry/transition damping;
+higher values release some damping for faster rotation. Its influence follows
+deliberate steering activity, fades substantially in a settled drift, and
+retains at least 40% of the normal fast correction. Test it only after the base
+tune is stable and use matched A/B logs.
+
 ## Safe first test
 
 Use a stand or hold the chassis with the wheels clear before driving.
@@ -139,6 +148,8 @@ compatibility from development and do not represent the public release name:
 | `memory_feedback_us` | Drift Memory correction after its limit |
 | `driver_activity_blend` | Driver steering-change activity |
 | `steering_activity_us_s` | Filtered receiver steering rate |
+| `tail_slide_speed` | Saved centered experimental setting; `50` is the RC1 baseline |
+| `tail_slide_blend` | Instantaneous signed rotation-speed adjustment from -1 to 1 |
 
 This CSV logger is temporary. The planned SD binary logger will replace
 runtime float formatting and internal-flash flushing.
