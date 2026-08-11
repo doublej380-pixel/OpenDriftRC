@@ -128,7 +128,10 @@ public:
             cfg.spi_host = SPI2_HOST;
             cfg.spi_mode = 0;
 
-            cfg.freq_write = 20000000;
+            // Waveshare's factory firmware drives this SH8601 QSPI panel at
+            // 40 MHz. Matching that proven clock cuts full-frame transfer
+            // time without changing the UI or controller execution paths.
+            cfg.freq_write = 40000000;
             cfg.freq_read = 16000000;
 
             cfg.spi_3wire = true;

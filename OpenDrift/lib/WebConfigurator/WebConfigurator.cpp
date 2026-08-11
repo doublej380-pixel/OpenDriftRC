@@ -58,15 +58,6 @@ void WebConfigurator::begin(
     );
 
     server.on(
-        "/toggle-terrain",
-        HTTP_POST,
-        [this]()
-        {
-            handleTerrainToggle();
-        }
-    );
-
-    server.on(
         "/create-profile",
         HTTP_POST,
         [this]()
@@ -202,11 +193,7 @@ void WebConfigurator::handleRoot()
     html += String(throttleRadio->getPulseWidth());
     html += throttleRadio->hasSignal() ? F(" OK") : F(" NO SIGNAL");
     #if defined(OPENDRIFT_INPUT_CRSF)
-    #if defined(OPENDRIFT_CRSF_RX_ONLY)
-    html += F("</div><div class='pill'>CRSF: GPIO 17 RX only");
-    #else
     html += F("</div><div class='pill'>CRSF: GPIO 17 RX / 18 TX");
-    #endif
     #else
     html += F("</div><div class='pill'>GPIO 18: ");
     #if defined(OPENDRIFT_BOARD_AMOLED_164)
@@ -245,7 +232,7 @@ void WebConfigurator::handleRoot()
         html += F("</strong><small>Gain ");
         html += String(profile->gain, 2);
         html += F(" &middot; Prediction ");
-        html += String(profile->gyroHuntDamping);
+        html += String(profile->predictionStrength);
         html += F(" &middot; Hold ");
         html += String(profile->gyroHoldBoost);
         html += F(" &middot; Countersteer ");
@@ -286,10 +273,10 @@ void WebConfigurator::handleRoot()
 
     html += F("<div class='card'><h2>OpenDrift v1.0 Response</h2><div class='row'>");
     html += input("Smoothing", "gyroSmoothing", String(settings->getGyroSmoothing(), 2), "number", "0.01");
-    html += input("Prediction strength (0-100)", "gyroHuntDamping", String(settings->getGyroHuntDamping()), "number", "1");
+    html += input("Prediction strength (0-100)", "predictionStrength", String(settings->getPredictionStrength()), "number", "1");
     html += F("</div></div>");
 
-    html += F("<div class='card'><h2>RC1 Experimental</h2><p class='sub'>Tail Slide Speed adjusts fast gyro damping while steering is moving. 50 is the proven RC1 response; lower values slow rotation and higher values speed it up. Compare transitions at the same tune.</p><div class='row'>");
+    html += F("<div class='card'><h2>Tail Response</h2><p class='sub'>Tail Slide Speed adjusts fast gyro damping while steering is moving. 50 is the Open Beta baseline; lower values slow rotation and higher values speed it up. Compare transitions at the same tune.</p><div class='row'>");
     html += input("Tail slide speed (0-100)", "tailSlideSpeed", String(settings->getGyroTailSlideSpeed()), "number", "1");
     html += F("</div></div>");
 
@@ -317,11 +304,7 @@ void WebConfigurator::handleRoot()
 
     html += F("<div class='card'><h2>Gain Channel Calibration</h2><div class='row'>");
     #if defined(OPENDRIFT_INPUT_CRSF)
-    #if defined(OPENDRIFT_CRSF_INPUT_ONLY)
-    html += F("CRSF channel 3 controls gyro gain. GPIO 15 ESC output is disabled in this input-diagnostic build.");
-    #else
     html += F("CRSF channel 3 controls gyro gain. GPIO 15 actively outputs neutral during failsafe and passes throttle only after a valid neutral hold.");
-    #endif
     html += F("</div>");
     #elif defined(OPENDRIFT_BOARD_AMOLED_164)
     html += input("Gain low", "gainMin", String(settings->getGainMin()));
@@ -387,35 +370,6 @@ void WebConfigurator::handleRoot()
 }
 
 
-void WebConfigurator::handleTerrainToggle()
-{
-    if(settings == nullptr)
-    {
-        server.send(
-            503,
-            "text/plain",
-            "Settings unavailable"
-        );
-
-        return;
-    }
-
-    settings->setTerrainAssistEnabled(
-        !settings->getTerrainAssistEnabled()
-    );
-
-    server.sendHeader(
-        "Location",
-        "/"
-    );
-
-    server.send(
-        303
-    );
-}
-
-
-
 void WebConfigurator::handleSave()
 {
     if(settings == nullptr)
@@ -461,20 +415,6 @@ void WebConfigurator::handleSave()
         )
     );
 
-    settings->setGyroAttackSpeed(
-        getIntArg(
-            "gyroAttack",
-            settings->getGyroAttackSpeed()
-        )
-    );
-
-    settings->setGyroReturnSpeed(
-        getIntArg(
-            "gyroReturn",
-            settings->getGyroReturnSpeed()
-        )
-    );
-
     settings->setGyroIntegralGain(
         getFloatArg(
             "gyroIGain",
@@ -510,24 +450,10 @@ void WebConfigurator::handleSave()
         )
     );
 
-    settings->setGyroAntiWobble(
+    settings->setPredictionStrength(
         getIntArg(
-            "gyroAntiWobble",
-            settings->getGyroAntiWobble()
-        )
-    );
-
-    settings->setGyroHuntDamping(
-        getIntArg(
-            "gyroHuntDamping",
-            settings->getGyroHuntDamping()
-        )
-    );
-
-    settings->setSteeringDamper(
-        getIntArg(
-            "steeringDamper",
-            settings->getSteeringDamper()
+            "predictionStrength",
+            settings->getPredictionStrength()
         )
     );
 
@@ -657,12 +583,8 @@ void WebConfigurator::handleSave()
             settings->getGyroTailSlideSpeed()
         );
 
-        gyro->setAntiWobble(
-            settings->getGyroAntiWobble()
-        );
-
-        gyro->setHuntDamping(
-            settings->getGyroHuntDamping()
+        gyro->setPredictionStrength(
+            settings->getPredictionStrength()
         );
     }
 

@@ -43,28 +43,21 @@ public:
         int integralCorrection,
         int holdBoost,
         int counterSteerAssist,
-        int antiWobble,
-        int huntDamping,
-        float huntControlYaw,
-        float huntSlowYaw,
-        float huntFastYaw,
-        float huntBlend,
-        float huntScore,
-        float outputChatterSlow,
+        int predictionStrength,
+        float predictedYaw,
+        float driftReferenceYaw,
+        float referenceError,
+        float referenceLock,
+        float throttlePrediction,
+        float directCorrection,
         int counterSteerCorrection,
-        float outputChatterFast,
-        float outputChatterBlend,
-        float outputChatterScore,
+        float memoryFeedback,
+        float driverActivityBlend,
+        float throttlePredictionBlend,
         float steeringActivity,
         int controlPhase,
         float settledBlend,
         float throttleTransient,
-        bool terrainActive,
-        float terrainAssist,
-        bool terrainAssistEnabled,
-        float holdFactor,
-        int attack,
-        int returnSpeed,
         bool steeringSignal,
         bool throttleSignal,
         bool gainSignal,
@@ -93,7 +86,7 @@ private:
 
     static const unsigned long flushIntervalMs = 1000;
 
-    const char* path = "/blackbox-v10.csv";
+    const char* path = "/blackbox-v11.csv";
 
     String buffer;
 

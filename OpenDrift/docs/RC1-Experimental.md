@@ -1,7 +1,7 @@
-# RC1 Experimental: Tail Slide Speed
+# Tail Slide Speed
 
-This build keeps the proven RC1 controller as its baseline and adds one
-experimental adjustment. `Tail Slide Speed = 50` preserves RC1 behavior.
+Tail Slide Speed is a secondary response adjustment. A value of `50` preserves
+the Open Beta baseline behavior.
 
 Tail Slide Speed is a centered rotation-speed trim. While the driver is
 actively moving the steering, values below 50 increase fast yaw damping to slow
@@ -16,7 +16,7 @@ the experiment on entries and transitions instead of sustained cornering.
 ## First test
 
 1. Keep the proven track profile unchanged and set Tail Slide Speed to `50`.
-2. Confirm that the car still behaves like RC1.
+2. Confirm that the car still matches the Open Beta baseline.
 3. Test `40` for slower rotation and `60` for faster rotation using the same
    entries and transitions.
 4. Continue in steps of `10`; stop if the tail begins to overshoot or
@@ -27,10 +27,10 @@ Compare transition duration, peak yaw rate, overshoot after the direction
 change, steering activity, and the new `tail_slide_blend` field. Avoid changing
 Gain, Prediction, Hold Assist, or Countersteer Assist during the comparison.
 
-Initial testing confirmed that the centered revision now changes rotation in
-the intended direction without disturbing the `50` baseline. It remains
-experimental until matched track logs show whether a non-center value improves
-repeatability rather than only changing driver feel.
+Initial testing confirmed that the centered revision changes rotation in the
+intended direction without disturbing the `50` baseline. Use matched track
+logs to determine whether a non-center value improves repeatability rather
+than only changing driver feel.
 
 ## Blackbox fields
 

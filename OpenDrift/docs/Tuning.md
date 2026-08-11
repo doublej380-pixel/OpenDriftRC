@@ -1,8 +1,8 @@
 # OpenDrift v1.0 Tuning
 
 > **Technical reference:** This document records the complete tuning behavior
-> and current test workflow. A shorter beginner guide with plain-language
-> setup steps and visual examples is being prepared for the v1.0 release.
+> and current test workflow. The shorter public guide is available at
+> [opendriftrc.com/tuning](https://opendriftrc.com/tuning/).
 
 OpenDrift v1.0 is a clean-sheet controller built from extensive track testing.
 It uses a deliberately short control path so each adjustment has a clear job.
@@ -69,10 +69,10 @@ even with Prediction set to zero. The Prediction setting adds general
 yaw-acceleration look-ahead; throttle temporarily extends that horizon before
 the chassis response develops.
 
-### RC1 Experimental: Tail Slide Speed
+### Tail Slide Speed
 
-Tail Slide Speed is not part of the proven v1.0 tuning sequence. Keep it at
-`50` for the exact RC1 response. Lower values add entry/transition damping;
+Tail Slide Speed is tuned after the core v1.0 settings. Keep it at `50` for the
+Open Beta baseline. Lower values add entry/transition damping;
 higher values release some damping for faster rotation. Its influence follows
 deliberate steering activity, fades substantially in a settled drift, and
 retains at least 40% of the normal fast correction. Test it only after the base
@@ -130,13 +130,12 @@ Change one setting at a time.
 
 ## Current v1.0 CSV fields
 
-The temporary `blackbox-v10.csv` logger retains the old wide CSV transport but
-uses the current controller channels. Some field names retain `v2` for log-tool
-compatibility from development and do not represent the public release name:
+The `blackbox-v11.csv` logger records the current controller channels without
+the retired alpha-era tuning fields:
 
 | Field | Meaning |
 |---|---|
-| `gyro_raw_us`, `gyro_v2_us` | v1.0 correction before final steering mix; `gyro_v2_us` is a compatibility field name |
+| `gyro_raw_us`, `gyro_correction_us` | Controller correction before final steering mix |
 | `predicted_yaw` | Filtered yaw plus short-horizon prediction |
 | `drift_reference_yaw` | Learned quiet-drift yaw reference |
 | `reference_error` | Filtered yaw minus drift reference |

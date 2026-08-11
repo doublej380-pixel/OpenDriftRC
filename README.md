@@ -6,11 +6,11 @@ OpenDrift is an open source drift gyro for RC drift cars, built around the Waves
 
 OpenDrift v1.0 uses a dedicated 250 Hz control task, a single gyro filter, continuous yaw prediction, throttle-informed load-change prediction, and non-accumulating quiet-drift reference feedback. The goal is to make gyro setup less of a black box while keeping the active control path small enough to reason about.
 
-See the current [Technical Tuning Reference](OpenDrift/docs/Tuning.md) for the setup order, symptom table, surface-profile workflow, and findings from real track testing. A simpler beginner guide is being prepared for the v1.0 release.
+See the current [Technical Tuning Reference](OpenDrift/docs/Tuning.md) for the setup order, symptom table, surface-profile workflow, and findings from real track testing. The public [tuning guide](https://opendriftrc.com/tuning/) provides the shorter trackside workflow.
 
 ## Install Firmware
 
-Visit [opendriftrc.com](https://opendriftrc.com) for the project overview and hardware information. The [browser installer](https://opendriftrc.com/flash/) is visible but public flashing is temporarily paused while the v1.0 firmware and final PCB complete release validation. When opened, it will flash a supported board over USB without an account, source compilation, or command-line tools.
+Visit [opendriftrc.com](https://opendriftrc.com) for the project overview, [wiring reference](https://opendriftrc.com/wiring/), and Open Beta firmware. The [browser installer](https://opendriftrc.com/flash/) provides AMOLED and round-display images with either PWM or CRSF receiver support, without an account, source compilation, or command-line tools.
 
 ## Current Features
 
@@ -44,12 +44,10 @@ Visit [opendriftrc.com](https://opendriftrc.com) for the project overview and ha
 - Browser-based web configurator.
 - Temporary blackbox v10 CSV logging with OpenDrift v1.0 reference, prediction, throttle, and correction telemetry.
 - Persistent settings stored in ESP32 preferences.
-- Isolated RC1 Experimental Tail Slide Speed adjustment centered at the proven
-  v1.0 response.
-- Separate experimental CRSF targets for the AMOLED and round boards.
+- Tail Slide Speed adjustment centered at the Open Beta baseline of `50`.
+- Separate PWM and full-duplex CRSF targets for both display boards.
 - Full-duplex CRSF steering, throttle, gain, link statistics, parameter
-  telemetry, neutral failsafes, and EdgeTX tuning on the round-board validation
-  target.
+  telemetry, neutral failsafes, and EdgeTX tuning on AMOLED and round builds.
 
 ## Hardware Routing
 
@@ -70,19 +68,17 @@ Current default pinout:
 
 Make sure the receiver, ESP32 board, and servo power system share ground.
 
-Experimental CRSF targets repurpose the receiver pins:
+CRSF targets repurpose the receiver pins:
 
 | Signal | GPIO | Direction | Notes |
 | --- | ---: | --- | --- |
 | CRSF receiver TX | 17 | Input | Native CRSF channel and link frames |
-| CRSF receiver RX | 18 | Output | Full-duplex parameter telemetry where enabled |
+| CRSF receiver RX | 18 | Output | Full-duplex parameter telemetry |
 | Steering servo | 16 | Output | Standard 250 Hz servo PWM |
-| ESC throttle | 15 | Output | Standard 50 Hz ESC PWM where enabled |
+| ESC throttle | 15 | Output | Standard 50 Hz ESC PWM with active-neutral failsafe |
 
-The AMOLED CRSF target currently remains RX-only/input-only until replacement
-hardware is validated. The round CRSF target is the full-duplex bench-validated
-implementation. Both use the separate `OpenDriftCRSF` settings namespace and do
-not overwrite a proven PWM tune.
+Both CRSF targets use the same full-duplex implementation. They use the
+separate `OpenDriftCRSF` settings namespace and do not overwrite a PWM tune.
 
 Throttle sensing is not required for basic stabilization, but it is strongly recommended. With the throttle signal connected, OpenDrift can release settled-drift features during power changes instead of inferring those events from yaw alone. Treat it like a sensored-motor cable: the fallback works without it, while Performance Mode has substantially better phase awareness.
 
@@ -115,17 +111,15 @@ The deprecated round-board environment remains available for experimentation:
 pio run -e waveshare_128
 ```
 
-Experimental CRSF builds are intentionally separate:
+CRSF builds are intentionally separate:
 
 ```sh
 pio run -e waveshare_amoled_164_crsf
 pio run -e waveshare_128_crsf
 ```
 
-The AMOLED target currently validates CRSF input without ESC output or return
-telemetry. The round target enables full-duplex CRSF and GPIO 15 ESC output.
-
-The `waveshare_amoled_164_rescue` environment is a fallback recovery build using the generic ESP32-S3 DevKit definition. It is not the normal release target.
+Both targets enable full-duplex CRSF, GPIO 15 ESC output, neutral-hold arming,
+and radio parameter telemetry on GPIO 18.
 
 Main dependencies are managed in `OpenDrift/platformio.ini`:
 
@@ -189,11 +183,11 @@ Slow quiet-drift behavior:
 
 The Drift Memory limit remains available in the web configurator as an advanced limit.
 
-### RC1 Experimental
+### Tail Response
 
-`TAIL SPEED` is isolated from the proven v1.0 controls:
+`TAIL SPEED` is tuned separately from the core v1.0 controls:
 
-- `50` preserves the exact RC1 fast-response behavior.
+- `50` is the Open Beta baseline response.
 - Below `50` adds damping during deliberate entries and transitions.
 - Above `50` releases some damping so the chassis can rotate faster.
 - The effect is reduced in a settled drift and cannot reverse gyro correction.
@@ -315,7 +309,7 @@ Current web settings:
 - Max correction
 - Smoothing
 - Prediction strength
-- RC1 Experimental Tail Slide Speed
+- Tail Slide Speed
 - Drift memory
 - Memory limit
 - Hold Assist
@@ -330,7 +324,7 @@ Current web settings:
 - WiFi enabled on boot
 - WiFi auto-off timeout
 - Blackbox logging enabled
-- Dedicated Slope / Terrain Assist A/B toggle; raw disturbance telemetry remains active in both modes
+- Raw pitch, roll, acceleration, and surface-disturbance telemetry for chassis analysis
 
 The web page also shows the active profile, live receiver pulse values for steering, throttle, and gain, plus the active GPIO 18 mode.
 
@@ -456,8 +450,8 @@ Important folders:
 - `OpenDrift/lib/WebConfigurator`: web settings page.
 - `OpenDrift/lib/WIFIManager`: WiFi access point control.
 - `OpenDrift/docs/Tuning.md`: complete tuning and blackbox interpretation guide.
-- `OpenDrift/docs/CRSF-Experimental.md`: experimental wiring, failsafes, and
-  validation boundaries.
+- `OpenDrift/docs/CRSF-Experimental.md`: CRSF wiring, failsafes, and validation
+  workflow.
 - `OpenDrift/radio/edgetx`: the OpenDrift EdgeTX tuning tool.
 - `OpenDrift/assets/backgrounds`: flash-resident AMOLED UI background data.
 - `OpenDrift/boards`: custom PlatformIO board definitions.

@@ -1,27 +1,21 @@
-# CRSF experimental builds
+# CRSF Open Beta builds
 
-These are separate firmware targets for testing direct CRSF control. They do
-not replace either RC1 PWM build.
+These are separate firmware targets for direct CRSF control. Choose the CRSF
+variant only when the receiver is wired through OpenDrift.
 
 ## Build target
 
-- `waveshare_amoled_164_crsf`: AMOLED RX-only/input-only validation target
-- `waveshare_128_crsf`: full-duplex round-display validation target
+- `waveshare_amoled_164_crsf`: full-duplex AMOLED target
+- `waveshare_128_crsf`: full-duplex round-display target
 
 CRSF settings are stored in the separate `OpenDriftCRSF` NVS namespace, so
-they do not overwrite the corresponding RC1 PWM tune.
+they do not overwrite the corresponding PWM tune.
 
-Both targets decode steering, throttle, gain, and link statistics into the same
-interfaces used by the PWM controller. The AMOLED target deliberately defines
-`OPENDRIFT_CRSF_INPUT_ONLY` and `OPENDRIFT_CRSF_RX_ONLY`; GPIO 15 output and
-GPIO 18 return telemetry remain disabled until replacement AMOLED hardware is
-available for validation.
-
-The round target enables the complete path: bounded CRSF receive processing,
-GPIO 18 parameter telemetry, GPIO 15 ESC PWM, deterministic neutral behavior,
-and the EdgeTX tuning tool. It proved stable with a SpeedyBee SB Nano at the
-MT12's F1000 packet rate after the receive loop was given an explicit byte
-budget.
+Both targets use the complete path: bounded CRSF receive processing, GPIO 18
+parameter telemetry, GPIO 15 ESC PWM, deterministic neutral behavior, and the
+EdgeTX tuning tool. The round target proved stable with a SpeedyBee SB Nano at
+the MT12's F1000 packet rate after the receive loop was given an explicit byte
+budget; the AMOLED target now uses the same CRSF implementation.
 
 ## SpeedyBee SB Nano wiring
 
@@ -30,7 +24,7 @@ Wire the receiver signals crossed, as required by a UART:
 | SpeedyBee SB Nano | OpenDrift board | Purpose |
 |---|---|---|
 | TX | GPIO 17 | CRSF data into OpenDrift |
-| RX | GPIO 18 | CRSF data/parameter telemetry from OpenDrift; full-duplex target only |
+| RX | GPIO 18 | CRSF data/parameter telemetry from OpenDrift |
 | GND | GND | Common signal ground |
 | 5V | Vehicle BEC 5V | Receiver power |
 
@@ -39,7 +33,7 @@ OpenDrift outputs are:
 | OpenDrift board | Connect to | Signal |
 |---|---|---|
 | GPIO 16 | Steering servo signal | 250 Hz PWM |
-| GPIO 15 | ESC throttle signal | 50 Hz PWM; full-duplex target only |
+| GPIO 15 | ESC throttle signal | 50 Hz PWM |
 
 Do not assume the round board's expansion connector supplies receiver-safe 5V,
 and do not power the servo or ESC motor from the display board. Feed the
@@ -74,9 +68,9 @@ and writes sixteen settings over full-duplex CRSF:
 
 - saved gain, deadband, max correction, and smoothing;
 - Drift Memory, memory limit, Hold Assist, and Countersteer Assist;
-- Tail Slide Speed, legacy Anti Wobble, Hunt Damping, Attack, Return, and Input
-  Damping;
-- Terrain Assist and Gyro Reverse.
+- Tail Slide Speed, Prediction, Servo Quiet, Steering Travel, Servo Travel,
+  and Servo Center;
+- Servo Reverse and Gyro Reverse.
 
 Writes are acknowledged over CRSF, applied live, saved through the normal
 delayed settings writer, and request an immediate redraw of the current gyro
@@ -89,8 +83,8 @@ screen.
 - Using the general servo allocator for simultaneous 250 Hz steering and 50 Hz
   throttle exhausted or cross-routed ESP32 timing resources. `EscOutput` now
   owns a dedicated 14-bit LEDC channel for throttle.
-- CRSF settings use the `OpenDriftCRSF` NVS namespace so experimental testing
-  cannot overwrite a proven PWM profile.
+- CRSF settings use the `OpenDriftCRSF` NVS namespace so switching firmware
+  variants cannot overwrite a PWM profile.
 
 ## First bench test
 
@@ -106,7 +100,7 @@ screen.
    `throttle=ARMED`.
 7. Turn the transmitter off. Steering and throttle must return to neutral and
    the report must return to `throttle=LOCKED`.
-8. In the full-duplex round build, open the EdgeTX tool, change one harmless
-   value, and confirm both the radio acknowledgement and gyro-screen refresh.
+8. Open the EdgeTX tool, change one harmless value, and confirm both the radio
+   acknowledgement and gyro-screen refresh.
 
 Only reconnect the motor after every applicable check passes.

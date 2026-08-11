@@ -94,11 +94,7 @@ TaskHandle_t crsfTaskHandle = nullptr;
 #define RADIO_STEERING_PIN 17
 #if defined(OPENDRIFT_INPUT_CRSF)
 #define CRSF_RX_PIN 17
-#if defined(OPENDRIFT_CRSF_RX_ONLY)
-#define CRSF_TX_PIN -1
-#else
 #define CRSF_TX_PIN 18
-#endif
 #define CRSF_THROTTLE_OUTPUT_PIN 15
 static constexpr uint8_t CRSF_STEERING_CHANNEL = 0;
 static constexpr uint8_t CRSF_THROTTLE_CHANNEL = 1;
@@ -197,9 +193,9 @@ public:
         canvas.setTextColor(0x7BEF);
         canvas.drawString(
             #if defined(OPENDRIFT_INPUT_CRSF)
-            "control kernel crsf-amoled-input  ttyOD0",
+            "control kernel 1.0.0-beta.1 crsf  ttyOD0",
             #else
-            "control kernel 2.0.0-rc1-exp  ttyOD0",
+            "control kernel 1.0.0-beta.1 pwm  ttyOD0",
             #endif
             8,
             27
@@ -216,9 +212,9 @@ public:
         display->setTextSize(2);
         display->drawCenterString(
             #if defined(OPENDRIFT_INPUT_CRSF)
-            "OpenDrift CRSF EXP",
+            "OpenDrift CRSF BETA",
             #else
-            "OpenDrift RC1 EXP",
+            "OpenDrift OPEN BETA",
             #endif
             120,
             12
@@ -396,8 +392,7 @@ BootConsole bootConsole;
 bool configurePin18Mode()
 {
     #if defined(OPENDRIFT_INPUT_CRSF)
-    // GPIO 18 belongs to the full-duplex CRSF UART once device telemetry is
-    // enabled. The input-only diagnostic build leaves it disconnected.
+    // GPIO 18 belongs to the full-duplex CRSF UART for parameter telemetry.
     pin18ThrottleOutputMode = false;
     pin18ModeConfigured = true;
     return true;
@@ -474,24 +469,6 @@ void updateCrsfThrottleOutput(
     bool signalValid
 )
 {
-    #if defined(OPENDRIFT_CRSF_INPUT_ONLY)
-    // Diagnostic stage: prove sustained CRSF reception before allocating a
-    // second ESP32Servo/LEDC output. Throttle remains visible to the UI,
-    // gyro, web configurator, and blackbox, but GPIO 15 emits no PWM.
-    (void)throttlePulse;
-    (void)signalValid;
-
-    if(throttleOutputActive)
-    {
-        throttleOutput.end();
-        throttleOutputActive = false;
-    }
-
-    crsfThrottleArmed = false;
-    crsfThrottleNeutralSinceMs = 0;
-
-    return;
-    #else
     if(!signalValid)
     {
         if(throttleOutputActive)
@@ -575,7 +552,6 @@ void updateCrsfThrottleOutput(
             2000
         )
     );
-    #endif
 }
 #endif
 
@@ -810,12 +786,8 @@ void runControlIteration()
         settings.getGyroTailSlideSpeed()
     );
 
-    gyro.setAntiWobble(
-        settings.getGyroAntiWobble()
-    );
-
-    gyro.setHuntDamping(
-        settings.getGyroHuntDamping()
+    gyro.setPredictionStrength(
+        settings.getPredictionStrength()
     );
 
     if(i2cBusMutex != nullptr)
@@ -873,9 +845,7 @@ void runControlIteration()
             steeringCommand,
             steeringSignal,
             throttlePulse,
-            throttleSignal,
-            imu.getSurfaceDisturbanceScore(),
-            settings.getTerrainAssistEnabled()
+            throttleSignal
         );
 
     int gyroCorrection =
@@ -1219,14 +1189,6 @@ void setup()
     bool gainRadioOk = gainRadio.beginExternal();
     bool sharedPinOk = configurePin18Mode();
 
-    #if defined(OPENDRIFT_CRSF_INPUT_ONLY)
-    pinMode(
-        CRSF_THROTTLE_OUTPUT_PIN,
-        INPUT_PULLDOWN
-    );
-
-    bool throttleOutputOk = true;
-    #else
     throttleOutput.configure(
         1500,
         false,
@@ -1246,7 +1208,6 @@ void setup()
     }
 
     bool throttleOutputOk = throttleOutputActive;
-    #endif
     #else
     bool steeringRadioOk =
         steeringRadio.begin(
@@ -1286,7 +1247,7 @@ void setup()
         #endif
     );
 
-    #if defined(OPENDRIFT_INPUT_CRSF) && !defined(OPENDRIFT_CRSF_INPUT_ONLY)
+    #if defined(OPENDRIFT_INPUT_CRSF)
     bootConsole.log(
         "ledc: esc neutral output attached on gpio15",
         throttleOutputOk ? "[ OK ]" : "[FAIL]",
@@ -1304,13 +1265,7 @@ void setup()
 
     bootConsole.log(
         #if defined(OPENDRIFT_INPUT_CRSF)
-        #if defined(OPENDRIFT_CRSF_INPUT_ONLY)
-        "gpio17: crsf rx only; gpio18/15 disconnected"
-        #elif defined(OPENDRIFT_CRSF_RX_ONLY)
-        "gpio17: crsf rx only; gpio15: esc output"
-        #else
         "gpio17/18: crsf rx/tx; gpio15: esc out locked"
-        #endif
         #elif defined(OPENDRIFT_BOARD_AMOLED_164)
         pin18ThrottleOutputMode
         ? "gpio18: throttle passthrough output"
@@ -1375,12 +1330,8 @@ void setup()
         settings.getGyroTailSlideSpeed()
     );
 
-    gyro.setAntiWobble(
-        settings.getGyroAntiWobble()
-    );
-
-    gyro.setHuntDamping(
-        settings.getGyroHuntDamping()
+    gyro.setPredictionStrength(
+        settings.getPredictionStrength()
     );
 
     //-------------------
@@ -1573,9 +1524,9 @@ void setup()
     Serial.println(
         taskStarted == pdPASS
         ?
-        "Controller V2: 250 Hz task online"
+        "Controller: 250 Hz task online"
         :
-        "Controller V2: task start failed"
+        "Controller: task start failed"
     );
 }
 
@@ -1802,28 +1753,21 @@ void loop()
             gyro.getIntegralCorrection(),
             settings.getGyroHoldBoost(),
             settings.getGyroCounterSteerAssist(),
-            settings.getGyroAntiWobble(),
-            settings.getGyroHuntDamping(),
-            gyro.getHuntControlYaw(),
-            gyro.getHuntSlowYaw(),
-            gyro.getHuntFastYaw(),
-            gyro.getHuntBlend(),
-            gyro.getHuntScore(),
-            gyro.getOutputChatterSlow(),
+            settings.getPredictionStrength(),
+            gyro.getPredictedYaw(),
+            gyro.getDriftReferenceYaw(),
+            gyro.getReferenceError(),
+            gyro.getReferenceLock(),
+            gyro.getThrottlePrediction(),
+            gyro.getDirectCorrection(),
             gyro.getCounterSteerCorrection(),
-            gyro.getOutputChatterFast(),
-            gyro.getOutputChatterBlend(),
-            gyro.getOutputChatterScore(),
+            gyro.getMemoryFeedback(),
+            gyro.getDriverActivityBlend(),
+            gyro.getThrottlePredictionBlend(),
             gyro.getSteeringActivity(),
             gyro.getControlPhase(),
             gyro.getSettledBlend(),
             gyro.getThrottleTransient(),
-            gyro.getTerrainActive(),
-            gyro.getTerrainAssist(),
-            settings.getTerrainAssistEnabled(),
-            gyro.getActiveHoldFactor(),
-            settings.getGyroAttackSpeed(),
-            settings.getGyroReturnSpeed(),
             telemetry.steeringSignal,
             telemetry.throttleSignal,
             gainRadio.hasSignal(),

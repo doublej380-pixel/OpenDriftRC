@@ -1,8 +1,7 @@
 # OpenDrift EdgeTX tool
 
-This tool is for the experimental **full-duplex** CRSF firmware. The current
-bench-validated target is `waveshare_128_crsf`; the AMOLED CRSF target remains
-RX-only until replacement hardware is validated.
+This tool supports both Open Beta **full-duplex** CRSF firmware targets:
+`waveshare_amoled_164_crsf` and `waveshare_128_crsf`.
 
 Copy `SCRIPTS/TOOLS/OpenDrift.lua` to the same path on the radio SD card,
 then launch **OpenDrift** from the EdgeTX Tools menu.
@@ -23,5 +22,5 @@ valid, channel 3 remains the active live gain control.
 
 The tool exposes sixteen values: Saved Gain, Deadband, Max Correction,
 Smoothing, Drift Memory, Memory Limit, Hold Assist, Countersteer, Tail Slide
-Speed, Anti Wobble, Hunt Damping, Attack, Return, Input Damping, Terrain
-Assist, and Gyro Reverse.
+Speed, Prediction, Servo Quiet, Steering Travel, Servo Travel, Servo Center,
+Servo Reverse, and Gyro Reverse.

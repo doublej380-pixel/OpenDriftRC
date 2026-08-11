@@ -2201,7 +2201,7 @@ void UI::drawSystemPage(
         #if defined(OPENDRIFT_INPUT_CRSF)
         "CRSF INPUT",
         #else
-        "RC1 EXP",
+        "PWM INPUT",
         #endif
         150,
         108
@@ -2220,11 +2220,7 @@ void UI::drawSystemPage(
         240,
         38,
         #if defined(OPENDRIFT_INPUT_CRSF)
-        #if defined(OPENDRIFT_CRSF_RX_ONLY)
-        "RX17 ONLY",
-        #else
         "RX17 / TX18",
-        #endif
         OD_CYAN,
         #else
         settings.getThrottleOutputEnabled()
@@ -2255,9 +2251,9 @@ void UI::drawSystemPage(
     lcd->setTextColor(TFT_WHITE);
     lcd->drawCenterString(
         #if defined(OPENDRIFT_INPUT_CRSF)
-        "OpenDrift CRSF EXP",
+        "OpenDrift CRSF BETA",
         #else
-        "OpenDrift RC1 EXP",
+        "OpenDrift OPEN BETA",
         #endif
         120,
         57
@@ -2305,11 +2301,7 @@ void UI::drawSystemPage(
     lcd->setTextColor(TFT_WHITE);
     lcd->drawCenterString(
         #if defined(OPENDRIFT_INPUT_CRSF)
-        #if defined(OPENDRIFT_CRSF_RX_ONLY)
-        "17 RX ONLY",
-        #else
         "17 RX / 18 TX",
-        #endif
         #else
         "THROTTLE INPUT",
         #endif
@@ -2346,9 +2338,30 @@ void UI::drawResponsePage(
     Settings& settings
 )
 {
-    #if !defined(OPENDRIFT_BOARD_AMOLED_164)
     drawUiBackground(lcd);
 
+    #if defined(OPENDRIFT_BOARD_AMOLED_164)
+    drawAmoledHeader(lcd, "Response", OD_AMBER);
+
+    lcd->setTextSize(2);
+    lcd->setTextColor(OD_MUTED);
+    lcd->drawString("SMOOTH", 22, 58);
+    lcd->drawString("PREDICT", 22, 120);
+    lcd->drawString("SERVO QUIET", 22, 182);
+
+    lcd->setTextSize(3);
+    lcd->setTextColor(OD_TEXT);
+    lcd->drawFloat(settings.getGyroSmoothing(), 2, 146, 48);
+    lcd->drawNumber(settings.getPredictionStrength(), 146, 110);
+    lcd->drawNumber(settings.getServoQuiet(), 146, 172);
+
+    for(int row = 0; row < 3; row++)
+    {
+        int y = 48 + (row * 62);
+        drawAmoledButton(lcd, 276, y, 70, 48, "-", OD_AMBER);
+        drawAmoledButton(lcd, 364, y, 70, 48, "+", OD_AMBER);
+    }
+    #else
     lcd->setTextSize(3);
     lcd->setTextColor(TFT_YELLOW);
     lcd->drawCenterString("Response", 120, 14);
@@ -2363,7 +2376,7 @@ void UI::drawResponsePage(
     drawRoundAdjustRow(
         lcd,
         "PREDICTION",
-        String(settings.getGyroHuntDamping()),
+        String(settings.getPredictionStrength()),
         1,
         TFT_YELLOW
     );
@@ -2374,327 +2387,9 @@ void UI::drawResponsePage(
         2,
         TFT_YELLOW
     );
-
-    drawPageDots();
-    return;
     #endif
 
-    drawUiBackground(lcd);
-
-    lcd->setTextColor(
-        TFT_WHITE
-    );
-
-    #if defined(OPENDRIFT_BOARD_AMOLED_164)
-    drawAmoledHeader(
-        lcd,
-        "Response",
-        OD_AMBER
-    );
-
-    lcd->setTextSize(2);
-
-    lcd->setTextColor(
-        OD_MUTED
-    );
-
-    lcd->drawString(
-        "SMOOTH",
-        22,
-        58
-    );
-
-    lcd->drawString(
-        "PREDICT",
-        22,
-        120
-    );
-
-    lcd->drawString(
-        "SERVO QUIET",
-        22,
-        182
-    );
-
-    lcd->setTextSize(3);
-
-    lcd->setTextColor(
-        OD_TEXT
-    );
-
-    lcd->drawFloat(
-        settings.getGyroSmoothing(),
-        2,
-        146,
-        48
-    );
-
-    lcd->drawNumber(
-        settings.getGyroHuntDamping(),
-        146,
-        110
-    );
-
-    lcd->drawNumber(
-        settings.getServoQuiet(),
-        146,
-        172
-    );
-
-    for(
-        int row = 0;
-        row < 3;
-        row++
-    )
-    {
-        int y =
-            48 + (row * 62);
-
-        drawAmoledButton(
-            lcd,
-            276,
-            y,
-            70,
-            48,
-            "-",
-            OD_AMBER
-        );
-
-        drawAmoledButton(
-            lcd,
-            364,
-            y,
-            70,
-            48,
-            "+",
-            OD_AMBER
-        );
-    }
-
     drawPageDots();
-
-    return;
-    #endif
-
-    lcd->setTextSize(3);
-    lcd->setTextColor(TFT_YELLOW);
-
-    lcd->drawCenterString(
-        "Gyro Tune",
-        120,
-        20
-    );
-
-    lcd->setTextColor(TFT_WHITE);
-
-    lcd->setTextSize(1);
-
-    lcd->drawString(
-        "MAX CORR",
-        70,
-        36
-    );
-
-    lcd->drawString(
-        "SMOOTH",
-        78,
-        67
-    );
-
-    lcd->drawString(
-        "DRIFT MEMORY",
-        78,
-        98
-    );
-
-    lcd->drawString(
-        "MEM LIMIT",
-        84,
-        129
-    );
-
-    lcd->drawString(
-        "HOLD",
-        86,
-        160
-    );
-
-    lcd->setTextSize(2);
-
-    lcd->drawRect(
-        20,
-        47,
-        44,
-        28,
-        TFT_WHITE
-    );
-
-    lcd->drawCenterString(
-        "-",
-        42,
-        52
-    );
-
-    lcd->drawNumber(
-        settings.getGyroMaxCorrection(),
-        90,
-        52
-    );
-
-    lcd->drawRect(
-        176,
-        47,
-        44,
-        28,
-        TFT_WHITE
-    );
-
-    lcd->drawCenterString(
-        "+",
-        198,
-        52
-    );
-
-    lcd->drawRect(
-        20,
-        78,
-        44,
-        28,
-        TFT_WHITE
-    );
-
-    lcd->drawCenterString(
-        "-",
-        42,
-        83
-    );
-
-    lcd->drawFloat(
-        settings.getGyroSmoothing(),
-        2,
-        90,
-        83
-    );
-
-    lcd->drawRect(
-        176,
-        78,
-        44,
-        28,
-        TFT_WHITE
-    );
-
-    lcd->drawCenterString(
-        "+",
-        198,
-        83
-    );
-
-    lcd->drawRect(
-        20,
-        109,
-        44,
-        28,
-        TFT_WHITE
-    );
-
-    lcd->drawCenterString(
-        "-",
-        42,
-        114
-    );
-
-    lcd->drawFloat(
-        settings.getGyroIntegralGain(),
-        2,
-        90,
-        114
-    );
-
-    lcd->drawRect(
-        176,
-        109,
-        44,
-        28,
-        TFT_WHITE
-    );
-
-    lcd->drawCenterString(
-        "+",
-        198,
-        114
-    );
-
-    lcd->drawRect(
-        20,
-        140,
-        44,
-        28,
-        TFT_WHITE
-    );
-
-    lcd->drawCenterString(
-        "-",
-        42,
-        145
-    );
-
-    lcd->drawNumber(
-        settings.getGyroIntegralLimit(),
-        90,
-        145
-    );
-
-    lcd->drawRect(
-        176,
-        140,
-        44,
-        28,
-        TFT_WHITE
-    );
-
-    lcd->drawCenterString(
-        "+",
-        198,
-        145
-    );
-
-    lcd->drawRect(
-        20,
-        171,
-        44,
-        28,
-        TFT_WHITE
-    );
-
-    lcd->drawCenterString(
-        "-",
-        42,
-        176
-    );
-
-    lcd->drawNumber(
-        settings.getGyroHoldBoost(),
-        90,
-        176
-    );
-
-    lcd->drawRect(
-        176,
-        171,
-        44,
-        28,
-        TFT_WHITE
-    );
-
-    lcd->drawCenterString(
-        "+",
-        198,
-        176
-    );
-
-    drawPageDots();
-
 }
 
 
@@ -2702,9 +2397,30 @@ void UI::drawDriftAssistPage(
     Settings& settings
 )
 {
-    #if !defined(OPENDRIFT_BOARD_AMOLED_164)
     drawUiBackground(lcd);
 
+    #if defined(OPENDRIFT_BOARD_AMOLED_164)
+    drawAmoledHeader(lcd, "Assistance", OD_BLUE);
+
+    lcd->setTextSize(2);
+    lcd->setTextColor(OD_MUTED);
+    lcd->drawString("COUNTERSTEER", 22, 58);
+    lcd->drawString("HOLD ASSIST", 22, 120);
+    lcd->drawString("DRIFT MEM", 22, 182);
+
+    lcd->setTextSize(3);
+    lcd->setTextColor(OD_TEXT);
+    lcd->drawNumber(settings.getGyroCounterSteerAssist(), 146, 48);
+    lcd->drawNumber(settings.getGyroHoldBoost(), 146, 110);
+    lcd->drawFloat(settings.getGyroIntegralGain(), 2, 146, 172);
+
+    for(int row = 0; row < 3; row++)
+    {
+        int y = 48 + (row * 62);
+        drawAmoledButton(lcd, 276, y, 70, 48, "-", OD_BLUE);
+        drawAmoledButton(lcd, 364, y, 70, 48, "+", OD_BLUE);
+    }
+    #else
     lcd->setTextSize(3);
     lcd->setTextColor(ROUND_CYAN);
     lcd->drawCenterString("Assistance", 120, 14);
@@ -2730,287 +2446,10 @@ void UI::drawDriftAssistPage(
         2,
         ROUND_CYAN
     );
-
-    drawPageDots();
-    return;
     #endif
 
-    drawUiBackground(lcd);
-
-    lcd->setTextColor(
-        TFT_WHITE
-    );
-
-    #if defined(OPENDRIFT_BOARD_AMOLED_164)
-    drawAmoledHeader(
-        lcd,
-        "Assistance",
-        OD_BLUE
-    );
-
-    lcd->setTextSize(2);
-
-    lcd->setTextColor(
-        OD_MUTED
-    );
-
-    lcd->drawString(
-        "COUNTERSTEER",
-        22,
-        58
-    );
-
-    lcd->drawString(
-        "HOLD ASSIST",
-        22,
-        120
-    );
-
-    lcd->drawString(
-        "DRIFT MEM",
-        22,
-        182
-    );
-
-    lcd->setTextSize(3);
-
-    lcd->setTextColor(
-        OD_TEXT
-    );
-
-    lcd->drawNumber(
-        settings.getGyroCounterSteerAssist(),
-        146,
-        48
-    );
-
-    lcd->drawNumber(
-        settings.getGyroHoldBoost(),
-        146,
-        110
-    );
-
-    lcd->drawFloat(
-        settings.getGyroIntegralGain(),
-        2,
-        146,
-        172
-    );
-
-    for(
-        int row = 0;
-        row < 3;
-        row++
-    )
-    {
-        int y =
-            48 + (row * 62);
-
-        drawAmoledButton(
-            lcd,
-            276,
-            y,
-            70,
-            48,
-            "-",
-            OD_BLUE
-        );
-
-        drawAmoledButton(
-            lcd,
-            364,
-            y,
-            70,
-            48,
-            "+",
-            OD_BLUE
-        );
-    }
-
     drawPageDots();
-
-    return;
-    #endif
-
-    lcd->setTextSize(3);
-    lcd->setTextColor(ROUND_CYAN);
-
-    lcd->drawCenterString(
-        "Response",
-        120,
-        20
-    );
-
-    lcd->setTextColor(TFT_WHITE);
-
-    lcd->setTextSize(1);
-
-    lcd->drawString(
-        "ATTACK",
-        78,
-        43
-    );
-
-    lcd->drawString(
-        "RETURN",
-        76,
-        77
-    );
-
-    lcd->drawString(
-        "DAMP",
-        86,
-        111
-    );
-
-    lcd->drawString(
-        "WOBBLE",
-        78,
-        145
-    );
-
-    lcd->setTextSize(2);
-
-    lcd->drawRect(
-        20,
-        54,
-        44,
-        28,
-        TFT_WHITE
-    );
-
-    lcd->drawCenterString(
-        "-",
-        42,
-        59
-    );
-
-    lcd->drawNumber(
-        settings.getGyroAttackSpeed(),
-        90,
-        59
-    );
-
-    lcd->drawRect(
-        176,
-        54,
-        44,
-        28,
-        TFT_WHITE
-    );
-
-    lcd->drawCenterString(
-        "+",
-        198,
-        59
-    );
-
-    lcd->drawRect(
-        20,
-        88,
-        44,
-        28,
-        TFT_WHITE
-    );
-
-    lcd->drawCenterString(
-        "-",
-        42,
-        93
-    );
-
-    lcd->drawNumber(
-        settings.getGyroReturnSpeed(),
-        90,
-        93
-    );
-
-    lcd->drawRect(
-        176,
-        88,
-        44,
-        28,
-        TFT_WHITE
-    );
-
-    lcd->drawCenterString(
-        "+",
-        198,
-        93
-    );
-
-    lcd->drawRect(
-        20,
-        122,
-        44,
-        28,
-        TFT_WHITE
-    );
-
-    lcd->drawCenterString(
-        "-",
-        42,
-        127
-    );
-
-    lcd->drawNumber(
-        settings.getSteeringDamper(),
-        90,
-        127
-    );
-
-    lcd->drawRect(
-        176,
-        122,
-        44,
-        28,
-        TFT_WHITE
-    );
-
-    lcd->drawCenterString(
-        "+",
-        198,
-        127
-    );
-
-    lcd->drawRect(
-        20,
-        156,
-        44,
-        28,
-        TFT_WHITE
-    );
-
-    lcd->drawCenterString(
-        "-",
-        42,
-        161
-    );
-
-    lcd->drawNumber(
-        settings.getGyroAntiWobble(),
-        90,
-        161
-    );
-
-    lcd->drawRect(
-        176,
-        156,
-        44,
-        28,
-        TFT_WHITE
-    );
-
-    lcd->drawCenterString(
-        "+",
-        198,
-        161
-    );
-
-    drawPageDots();
-
 }
-
 
 
 bool UI::isProfilesPage()
@@ -3028,7 +2467,7 @@ void UI::drawExperimentalPage(
     #if defined(OPENDRIFT_BOARD_AMOLED_164)
     drawAmoledHeader(
         lcd,
-        "RC1 Experimental",
+        "Tail Response",
         OD_MAGENTA
     );
 
@@ -3045,12 +2484,12 @@ void UI::drawExperimentalPage(
 
     lcd->setTextSize(2);
     lcd->setTextColor(OD_MUTED);
-    lcd->drawString("50 = PROVEN RC1 RESPONSE", 22, 132);
+    lcd->drawString("50 = BASELINE RESPONSE", 22, 132);
     lcd->drawString("LOWER SLOW / HIGHER FAST", 22, 166);
     #else
     lcd->setTextSize(3);
     lcd->setTextColor(TFT_MAGENTA);
-    lcd->drawCenterString("Experimental", 120, 14);
+    lcd->drawCenterString("Tail Response", 120, 14);
 
     drawRoundAdjustRow(
         lcd,
@@ -3062,7 +2501,7 @@ void UI::drawExperimentalPage(
 
     lcd->setTextSize(1);
     lcd->setTextColor(ROUND_DIM);
-    lcd->drawCenterString("50 = PROVEN RC1", 120, 125);
+    lcd->drawCenterString("50 = BASELINE", 120, 125);
     lcd->drawCenterString("LOWER = SLOWER", 120, 148);
     lcd->drawCenterString("HIGHER = FASTER", 120, 163);
     #endif
@@ -3174,7 +2613,7 @@ void UI::drawProfilesPage(
 
             String summary =
                 "G " + String(profile->gain, 2) +
-                "   PRED " + String(profile->gyroHuntDamping) +
+                "   PRED " + String(profile->predictionStrength) +
                 "   HOLD " + String(profile->gyroHoldBoost);
 
             lcd->drawRightString(
@@ -3274,7 +2713,7 @@ void UI::drawProfilesPage(
 
             String summary =
                 "G" + String(profile->gain, 2) +
-                " P" + String(profile->gyroHuntDamping);
+                " P" + String(profile->predictionStrength);
 
             lcd->drawRightString(
                 summary.c_str(),
@@ -5789,22 +5228,22 @@ bool UI::applyRepeatButton(
             break;
 
         case 23:
-            settings.setGyroHuntDamping(
-                settings.getGyroHuntDamping() - 1
+            settings.setPredictionStrength(
+                settings.getPredictionStrength() - 1
             );
 
-            gyro.setHuntDamping(
-                settings.getGyroHuntDamping()
+            gyro.setPredictionStrength(
+                settings.getPredictionStrength()
             );
             break;
 
         case 24:
-            settings.setGyroHuntDamping(
-                settings.getGyroHuntDamping() + 1
+            settings.setPredictionStrength(
+                settings.getPredictionStrength() + 1
             );
 
-            gyro.setHuntDamping(
-                settings.getGyroHuntDamping()
+            gyro.setPredictionStrength(
+                settings.getPredictionStrength()
             );
             break;
 
@@ -6839,294 +6278,8 @@ void UI::update(
 
             }
 
-            if(false && buttonPressed(x, y, 26, 171, 44, 30))
-            {
-                settings.setGyroAntiWobble(
-                    settings.getGyroAntiWobble() - 1
-                );
-
-                gyro.setAntiWobble(
-                    settings.getGyroAntiWobble()
-                );
-            }
-
-            if(false && buttonPressed(x, y, 170, 171, 44, 30))
-            {
-                settings.setGyroAntiWobble(
-                    settings.getGyroAntiWobble() + 1
-                );
-
-                gyro.setAntiWobble(
-                    settings.getGyroAntiWobble()
-                );
-            }
-
-
             drawCorePage(
                 gyro,
-                settings
-            );
-
-        }
-
-
-
-
-
-
-
-        // TUNE PAGE BUTTONS
-
-        if(false && page == PAGE_RESPONSE)
-        {
-
-            if(buttonPressed(
-                x,y,
-                26,61,
-                44,30
-            ))
-            {
-
-                settings.setGyroMaxCorrection(
-                    settings.getGyroMaxCorrection() - 1
-                );
-
-            }
-
-
-            if(buttonPressed(
-                x,y,
-                170,61,
-                44,30
-            ))
-            {
-
-                settings.setGyroMaxCorrection(
-                    settings.getGyroMaxCorrection() + 1
-                );
-
-            }
-
-
-            if(buttonPressed(
-                x,y,
-                26,116,
-                44,30
-            ))
-            {
-
-                settings.setGyroSmoothing(
-                    settings.getGyroSmoothing() - 0.01f
-                );
-
-            }
-
-
-            if(buttonPressed(
-                x,y,
-                170,116,
-                44,30
-            ))
-            {
-
-                settings.setGyroSmoothing(
-                    settings.getGyroSmoothing() + 0.01f
-                );
-
-            }
-
-            if(buttonPressed(
-                x,y,
-                26,171,
-                44,30
-            ))
-            {
-
-                settings.setGyroIntegralGain(
-                    settings.getGyroIntegralGain() - 0.01f
-                );
-
-            }
-
-
-            if(buttonPressed(
-                x,y,
-                170,171,
-                44,30
-            ))
-            {
-
-                settings.setGyroIntegralGain(
-                    settings.getGyroIntegralGain() + 0.01f
-                );
-
-            }
-
-
-            if(false && buttonPressed(
-                x,y,
-                20,156,
-                44,28
-            ))
-            {
-
-                settings.setGyroIntegralLimit(
-                    settings.getGyroIntegralLimit() - 1
-                );
-
-            }
-
-
-            if(false && buttonPressed(
-                x,y,
-                176,156,
-                44,28
-            ))
-            {
-
-                settings.setGyroIntegralLimit(
-                    settings.getGyroIntegralLimit() + 1
-                );
-
-            }
-
-            drawResponsePage(
-                settings
-            );
-
-        }
-
-
-
-
-
-
-
-        // RESPONSE PAGE BUTTONS
-
-        if(false && page == PAGE_DRIFT_ASSIST)
-        {
-
-            if(buttonPressed(
-                x,y,
-                26,50,
-                44,28
-            ))
-            {
-
-                settings.setGyroAttackSpeed(
-                    settings.getGyroAttackSpeed() - 1
-                );
-
-            }
-
-
-            if(buttonPressed(
-                x,y,
-                170,50,
-                44,28
-            ))
-            {
-
-                settings.setGyroAttackSpeed(
-                    settings.getGyroAttackSpeed() + 1
-                );
-
-            }
-
-
-            if(buttonPressed(
-                x,y,
-                26,91,
-                44,28
-            ))
-            {
-
-                settings.setGyroReturnSpeed(
-                    settings.getGyroReturnSpeed() - 1
-                );
-
-            }
-
-
-            if(buttonPressed(
-                x,y,
-                170,91,
-                44,28
-            ))
-            {
-
-                settings.setGyroReturnSpeed(
-                    settings.getGyroReturnSpeed() + 1
-                );
-
-            }
-
-            if(buttonPressed(
-                x,y,
-                26,132,
-                44,28
-            ))
-            {
-
-                settings.setGyroHoldBoost(
-                    settings.getGyroHoldBoost() - 1
-                );
-
-                gyro.setHoldBoost(
-                    settings.getGyroHoldBoost()
-                );
-
-            }
-
-
-            if(buttonPressed(
-                x,y,
-                170,132,
-                44,28
-            ))
-            {
-
-                settings.setGyroHoldBoost(
-                    settings.getGyroHoldBoost() + 1
-                );
-
-                gyro.setHoldBoost(
-                    settings.getGyroHoldBoost()
-                );
-
-            }
-
-
-            if(buttonPressed(
-                x,y,
-                26,173,
-                44,28
-            ))
-            {
-
-                settings.setSteeringDamper(
-                    settings.getSteeringDamper() - 1
-                );
-
-            }
-
-
-            if(buttonPressed(
-                x,y,
-                170,173,
-                44,28
-            ))
-            {
-
-                settings.setSteeringDamper(
-                    settings.getSteeringDamper() + 1
-                );
-
-            }
-
-
-            drawDriftAssistPage(
                 settings
             );
 

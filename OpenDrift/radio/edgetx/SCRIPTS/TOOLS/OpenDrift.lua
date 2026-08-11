@@ -13,12 +13,12 @@ local fields = {
   { 7, "Hold Assist",      0,  100,   1, 0 },
   { 8, "Countersteer",     0,  100,   1, 0 },
   { 9, "Tail Slide Speed", 0,  100,   1, 0 },
-  {10, "Anti Wobble",      0,  200,   5, 0 },
-  {11, "Hunt Damping",     0,  100,   1, 0 },
-  {12, "Attack",           1,  500,   5, 0 },
-  {13, "Return",           1,  500,   5, 0 },
-  {14, "Input Damping",    0, 1000,   5, 0 },
-  {15, "Terrain Assist",   0,    1,   1, 0, true},
+  {10, "Prediction",       0,  100,   1, 0 },
+  {11, "Servo Quiet",      0,   50,   1, 0 },
+  {12, "Steering Travel",  0,  100,   1, 0 },
+  {13, "Servo Travel",    10,  150,   1, 0 },
+  {14, "Servo Center",  1000, 2000,   1, 0 },
+  {15, "Servo Reverse",    0,    1,   1, 0, true},
   {16, "Gyro Reverse",     0,    1,   1, 0, true}
 }
 

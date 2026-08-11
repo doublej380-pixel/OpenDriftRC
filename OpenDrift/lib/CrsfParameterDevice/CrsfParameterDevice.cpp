@@ -16,11 +16,11 @@ namespace
         {"Hold Assist",       0,  100,   0, 0,   1, "%"},
         {"Countersteer",      0,  100,   0, 0,   1, "%"},
         {"Tail Slide Speed",  0,  100,  50, 0,   1, "%"},
-        {"Anti Wobble",       0,  200,  50, 0,   5, ""},
-        {"Hunt Damping",      0,  100,   0, 0,   1, "%"},
-        {"Attack",            1,  500,  80, 0,   5, "%"},
-        {"Return",            1,  500,  30, 0,   5, "%"},
-        {"Input Damping",     0, 1000,   0, 0,   5, ""}
+        {"Prediction",        0,  100,   0, 0,   1, "%"},
+        {"Servo Quiet",       0,   50,   0, 0,   1, "us"},
+        {"Steering Travel",   0,  100, 100, 0,   1, "%"},
+        {"Servo Travel",     10,  150, 100, 0,   1, "%"},
+        {"Servo Center",   1000, 2000,1500, 0,   1, "us"}
     };
 }
 
@@ -176,13 +176,13 @@ void CrsfParameterDevice::sendParameter(
         appendString(
             payload,
             length,
-            parameter == 15 ? "Terrain Assist" : "Gyro Reverse"
+            parameter == 15 ? "Servo Reverse" : "Gyro Reverse"
         );
         appendString(payload, length, "Off;On");
         appendByte(payload, length, getScaledValue(parameter));
         appendByte(payload, length, 0);
         appendByte(payload, length, 1);
-        appendByte(payload, length, parameter == 15 ? 1 : 0);
+        appendByte(payload, length, 0);
         appendString(payload, length, "");
     }
     else
@@ -270,12 +270,12 @@ int32_t CrsfParameterDevice::getScaledValue(
         case 7: return settings->getGyroHoldBoost();
         case 8: return settings->getGyroCounterSteerAssist();
         case 9: return settings->getGyroTailSlideSpeed();
-        case 10: return settings->getGyroAntiWobble();
-        case 11: return settings->getGyroHuntDamping();
-        case 12: return settings->getGyroAttackSpeed();
-        case 13: return settings->getGyroReturnSpeed();
-        case 14: return settings->getSteeringDamper();
-        case 15: return settings->getTerrainAssistEnabled() ? 1 : 0;
+        case 10: return settings->getPredictionStrength();
+        case 11: return settings->getServoQuiet();
+        case 12: return settings->getRadioSteeringTravel();
+        case 13: return settings->getServoTravel();
+        case 14: return settings->getServoCenter();
+        case 15: return settings->getServoReverse() ? 1 : 0;
         case 16: return settings->getGyroReverse() ? 1 : 0;
         default: return 0;
     }
@@ -310,12 +310,12 @@ void CrsfParameterDevice::setScaledValue(
         case 7: settings->setGyroHoldBoost(value); break;
         case 8: settings->setGyroCounterSteerAssist(value); break;
         case 9: settings->setGyroTailSlideSpeed(value); break;
-        case 10: settings->setGyroAntiWobble(value); break;
-        case 11: settings->setGyroHuntDamping(value); break;
-        case 12: settings->setGyroAttackSpeed(value); break;
-        case 13: settings->setGyroReturnSpeed(value); break;
-        case 14: settings->setSteeringDamper(value); break;
-        case 15: settings->setTerrainAssistEnabled(value != 0); break;
+        case 10: settings->setPredictionStrength(value); break;
+        case 11: settings->setServoQuiet(value); break;
+        case 12: settings->setRadioSteeringTravel(value); break;
+        case 13: settings->setServoTravel(value); break;
+        case 14: settings->setServoCenter(value); break;
+        case 15: settings->setServoReverse(value != 0); break;
         case 16: settings->setGyroReverse(value != 0); break;
     }
 }

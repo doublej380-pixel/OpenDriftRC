@@ -36,7 +36,7 @@ The current board orientation reports clockwise rotation as positive Z and count
 
 The round board does not have a spare gain-channel input in the current routing. Its Gain comes from the saved setting/profile.
 
-## Experimental CRSF routing
+## CRSF routing
 
 Both boards have isolated CRSF build targets. They share this logical routing:
 
@@ -47,14 +47,13 @@ Both boards have isolated CRSF build targets. They share this logical routing:
 | Steering servo PWM | 16 | Output at 250 Hz |
 | ESC throttle PWM | 15 | Output at 50 Hz |
 
-The round `waveshare_128_crsf` target currently enables the complete full-duplex
-path. The AMOLED `waveshare_amoled_164_crsf` target is deliberately compiled
-RX-only/input-only until replacement AMOLED hardware is available for sustained
-validation. Neither target replaces the normal PWM environments.
+Both `waveshare_128_crsf` and `waveshare_amoled_164_crsf` enable the complete
+full-duplex path. They remain separate from the normal PWM environments because
+the GPIO routing and settings namespace differ.
 
 CRSF channel mapping is channel 1 steering, channel 2 throttle, and channel 3
-gain. A stale channel frame centers steering and commands neutral throttle in
-the full build. Throttle output requires a valid link and a 500 ms neutral hold
+gain. A stale channel frame centers steering and commands neutral throttle.
+Throttle output requires a valid link and a 500 ms neutral hold
 before arming.
 
 ## Throttle sensing

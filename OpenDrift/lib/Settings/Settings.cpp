@@ -61,6 +61,27 @@ namespace
         int32_t gyroCounterSteerAssist;
         int32_t gyroTailSlideSpeed;
     };
+
+    struct DrivingProfileV4
+    {
+        uint32_t version;
+        char name[Settings::PROFILE_NAME_LENGTH];
+        float gain;
+        float deadband;
+        float gyroSmoothing;
+        float gyroIntegralGain;
+        int32_t gyroMaxCorrection;
+        int32_t gyroAttackSpeed;
+        int32_t gyroReturnSpeed;
+        int32_t gyroIntegralLimit;
+        int32_t gyroHoldBoost;
+        int32_t gyroAntiWobble;
+        int32_t gyroHuntDamping;
+        int32_t steeringDamper;
+        int32_t radioSteeringTravel;
+        int32_t gyroCounterSteerAssist;
+        int32_t gyroTailSlideSpeed;
+    };
 }
 
 bool Settings::begin()
@@ -96,16 +117,6 @@ bool Settings::begin()
     gyroSmoothing = prefs.getFloat(
         "gyroSmooth",
         0.10f
-    );
-
-    gyroAttackSpeed = prefs.getInt(
-        "gyroAttack",
-        80
-    );
-
-    gyroReturnSpeed = prefs.getInt(
-        "gyroReturn",
-        30
     );
 
     gyroIntegralGain = prefs.getFloat(
@@ -152,25 +163,25 @@ bool Settings::begin()
         prefs.putInt("tailSpeedC", gyroTailSlideSpeed);
     }
 
-    gyroAntiWobble = prefs.getInt(
-        "gyroWob",
-        50
-    );
+    if(prefs.isKey("prediction"))
+    {
+        predictionStrength = prefs.getInt("prediction", 0);
+    }
+    else
+    {
+        predictionStrength = prefs.getInt("gyroHunt", 0);
+        prefs.putInt("prediction", predictionStrength);
+    }
 
-    gyroHuntDamping = prefs.getInt(
-        "gyroHunt",
-        0
-    );
+    const char* retiredKeys[] = {
+        "gyroAttack", "gyroReturn", "gyroWob", "gyroHunt",
+        "strDamp", "terrainAssist"
+    };
 
-    steeringDamper = prefs.getInt(
-        "strDamp",
-        0
-    );
-
-    terrainAssistEnabled = prefs.getBool(
-        "terrainAssist",
-        true
-    );
+    for(const char* key : retiredKeys)
+    {
+        if(prefs.isKey(key)) prefs.remove(key);
+    }
 
     servoCenter = prefs.getInt(
         "center",
@@ -285,16 +296,6 @@ void Settings::save()
         gyroSmoothing
     );
 
-    prefs.putInt(
-        "gyroAttack",
-        gyroAttackSpeed
-    );
-
-    prefs.putInt(
-        "gyroReturn",
-        gyroReturnSpeed
-    );
-
     prefs.putFloat(
         "gyroIGain",
         gyroIntegralGain
@@ -321,23 +322,8 @@ void Settings::save()
     );
 
     prefs.putInt(
-        "gyroWob",
-        gyroAntiWobble
-    );
-
-    prefs.putInt(
-        "gyroHunt",
-        gyroHuntDamping
-    );
-
-    prefs.putInt(
-        "strDamp",
-        steeringDamper
-    );
-
-    prefs.putBool(
-        "terrainAssist",
-        terrainAssistEnabled
+        "prediction",
+        predictionStrength
     );
 
     prefs.putInt(
@@ -510,40 +496,6 @@ void Settings::setGyroSmoothing(float value)
     dirty = true;
 }
 
-int Settings::getGyroAttackSpeed()
-{
-    return gyroAttackSpeed;
-}
-
-void Settings::setGyroAttackSpeed(int value)
-{
-    gyroAttackSpeed =
-        constrain(
-            value,
-            1,
-            500
-        );
-
-    dirty = true;
-}
-
-int Settings::getGyroReturnSpeed()
-{
-    return gyroReturnSpeed;
-}
-
-void Settings::setGyroReturnSpeed(int value)
-{
-    gyroReturnSpeed =
-        constrain(
-            value,
-            1,
-            500
-        );
-
-    dirty = true;
-}
-
 float Settings::getGyroIntegralGain()
 {
     return gyroIntegralGain;
@@ -617,67 +569,20 @@ void Settings::setGyroHoldBoost(int value)
     dirty = true;
 }
 
-int Settings::getGyroAntiWobble()
+int Settings::getPredictionStrength()
 {
-    return gyroAntiWobble;
+    return predictionStrength;
 }
 
-void Settings::setGyroAntiWobble(int value)
+void Settings::setPredictionStrength(int value)
 {
-    gyroAntiWobble =
-        constrain(
-            value,
-            0,
-            200
-        );
-
-    dirty = true;
-}
-
-int Settings::getGyroHuntDamping()
-{
-    return gyroHuntDamping;
-}
-
-void Settings::setGyroHuntDamping(int value)
-{
-    gyroHuntDamping =
+    predictionStrength =
         constrain(
             value,
             0,
             100
         );
 
-    dirty = true;
-}
-
-int Settings::getSteeringDamper()
-{
-    return steeringDamper;
-}
-
-void Settings::setSteeringDamper(int value)
-{
-    steeringDamper =
-        constrain(
-            value,
-            0,
-            1000
-        );
-
-    dirty = true;
-}
-
-
-bool Settings::getTerrainAssistEnabled()
-{
-    return terrainAssistEnabled;
-}
-
-
-void Settings::setTerrainAssistEnabled(bool value)
-{
-    terrainAssistEnabled = value;
     dirty = true;
 }
 
@@ -1086,12 +991,40 @@ void Settings::loadProfiles()
                 &profiles[loadedCount],
                 sizeof(DrivingProfile)
             ) == sizeof(DrivingProfile) &&
-            profiles[loadedCount].version == 4 &&
+            profiles[loadedCount].version == 5 &&
             profiles[loadedCount].name[0] != '\0'
         )
         {
             profiles[loadedCount].name[PROFILE_NAME_LENGTH - 1] = '\0';
             loadedCount++;
+        }
+        else if(storedSize == sizeof(DrivingProfileV4))
+        {
+            DrivingProfileV4 legacy = {};
+
+            if(
+                prefs.getBytes(key, &legacy, sizeof(legacy)) == sizeof(legacy) &&
+                legacy.version == 4 &&
+                legacy.name[0] != '\0'
+            )
+            {
+                DrivingProfile& profile = profiles[loadedCount];
+                profile = DrivingProfile();
+                memcpy(profile.name, legacy.name, PROFILE_NAME_LENGTH);
+                profile.name[PROFILE_NAME_LENGTH - 1] = '\0';
+                profile.gain = legacy.gain;
+                profile.deadband = legacy.deadband;
+                profile.gyroSmoothing = legacy.gyroSmoothing;
+                profile.gyroIntegralGain = legacy.gyroIntegralGain;
+                profile.gyroMaxCorrection = legacy.gyroMaxCorrection;
+                profile.gyroIntegralLimit = legacy.gyroIntegralLimit;
+                profile.gyroHoldBoost = legacy.gyroHoldBoost;
+                profile.predictionStrength = legacy.gyroHuntDamping;
+                profile.radioSteeringTravel = legacy.radioSteeringTravel;
+                profile.gyroCounterSteerAssist = legacy.gyroCounterSteerAssist;
+                profile.gyroTailSlideSpeed = legacy.gyroTailSlideSpeed;
+                loadedCount++;
+            }
         }
         else if(storedSize == sizeof(DrivingProfileV3))
         {
@@ -1112,13 +1045,9 @@ void Settings::loadProfiles()
                 profile.gyroSmoothing = legacy.gyroSmoothing;
                 profile.gyroIntegralGain = legacy.gyroIntegralGain;
                 profile.gyroMaxCorrection = legacy.gyroMaxCorrection;
-                profile.gyroAttackSpeed = legacy.gyroAttackSpeed;
-                profile.gyroReturnSpeed = legacy.gyroReturnSpeed;
                 profile.gyroIntegralLimit = legacy.gyroIntegralLimit;
                 profile.gyroHoldBoost = legacy.gyroHoldBoost;
-                profile.gyroAntiWobble = legacy.gyroAntiWobble;
-                profile.gyroHuntDamping = legacy.gyroHuntDamping;
-                profile.steeringDamper = legacy.steeringDamper;
+                profile.predictionStrength = legacy.gyroHuntDamping;
                 profile.radioSteeringTravel = legacy.radioSteeringTravel;
                 profile.gyroCounterSteerAssist = legacy.gyroCounterSteerAssist;
                 profile.gyroTailSlideSpeed = constrain(
@@ -1148,13 +1077,9 @@ void Settings::loadProfiles()
                 profile.gyroSmoothing = legacy.gyroSmoothing;
                 profile.gyroIntegralGain = legacy.gyroIntegralGain;
                 profile.gyroMaxCorrection = legacy.gyroMaxCorrection;
-                profile.gyroAttackSpeed = legacy.gyroAttackSpeed;
-                profile.gyroReturnSpeed = legacy.gyroReturnSpeed;
                 profile.gyroIntegralLimit = legacy.gyroIntegralLimit;
                 profile.gyroHoldBoost = legacy.gyroHoldBoost;
-                profile.gyroAntiWobble = legacy.gyroAntiWobble;
-                profile.gyroHuntDamping = legacy.gyroHuntDamping;
-                profile.steeringDamper = legacy.steeringDamper;
+                profile.predictionStrength = legacy.gyroHuntDamping;
                 profile.radioSteeringTravel = legacy.radioSteeringTravel;
                 profile.gyroCounterSteerAssist = legacy.gyroCounterSteerAssist;
                 profile.gyroTailSlideSpeed = 50;
@@ -1180,13 +1105,9 @@ void Settings::loadProfiles()
                 profile.gyroSmoothing = legacy.gyroSmoothing;
                 profile.gyroIntegralGain = legacy.gyroIntegralGain;
                 profile.gyroMaxCorrection = legacy.gyroMaxCorrection;
-                profile.gyroAttackSpeed = legacy.gyroAttackSpeed;
-                profile.gyroReturnSpeed = legacy.gyroReturnSpeed;
                 profile.gyroIntegralLimit = legacy.gyroIntegralLimit;
                 profile.gyroHoldBoost = legacy.gyroHoldBoost;
-                profile.gyroAntiWobble = legacy.gyroAntiWobble;
-                profile.gyroHuntDamping = legacy.gyroHuntDamping;
-                profile.steeringDamper = legacy.steeringDamper;
+                profile.predictionStrength = legacy.gyroHuntDamping;
                 profile.radioSteeringTravel = legacy.radioSteeringTravel;
                 profile.gyroCounterSteerAssist = 0;
                 profile.gyroTailSlideSpeed = 50;
@@ -1218,19 +1139,15 @@ void Settings::captureProfile(
     DrivingProfile& profile
 )
 {
-    profile.version = 4;
+    profile.version = 5;
     profile.gain = gain;
     profile.deadband = deadband;
     profile.gyroSmoothing = gyroSmoothing;
     profile.gyroIntegralGain = gyroIntegralGain;
     profile.gyroMaxCorrection = gyroMaxCorrection;
-    profile.gyroAttackSpeed = gyroAttackSpeed;
-    profile.gyroReturnSpeed = gyroReturnSpeed;
     profile.gyroIntegralLimit = gyroIntegralLimit;
     profile.gyroHoldBoost = gyroHoldBoost;
-    profile.gyroAntiWobble = gyroAntiWobble;
-    profile.gyroHuntDamping = gyroHuntDamping;
-    profile.steeringDamper = steeringDamper;
+    profile.predictionStrength = predictionStrength;
     profile.radioSteeringTravel = radioSteeringTravel;
     profile.gyroCounterSteerAssist = gyroCounterSteerAssist;
     profile.gyroTailSlideSpeed = gyroTailSlideSpeed;
@@ -1245,13 +1162,9 @@ void Settings::applyProfile(
     gyroSmoothing = profile.gyroSmoothing;
     gyroIntegralGain = profile.gyroIntegralGain;
     gyroMaxCorrection = profile.gyroMaxCorrection;
-    gyroAttackSpeed = profile.gyroAttackSpeed;
-    gyroReturnSpeed = profile.gyroReturnSpeed;
     gyroIntegralLimit = profile.gyroIntegralLimit;
     gyroHoldBoost = profile.gyroHoldBoost;
-    gyroAntiWobble = profile.gyroAntiWobble;
-    gyroHuntDamping = profile.gyroHuntDamping;
-    steeringDamper = profile.steeringDamper;
+    predictionStrength = profile.predictionStrength;
     radioSteeringTravel = profile.radioSteeringTravel;
     gyroCounterSteerAssist = profile.gyroCounterSteerAssist;
     gyroTailSlideSpeed = profile.gyroTailSlideSpeed;

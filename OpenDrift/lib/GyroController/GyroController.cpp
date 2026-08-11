@@ -44,19 +44,15 @@ void GyroController::resetDynamicState()
     controlPhase = PHASE_IDLE;
     settledBlend = 0.0f;
 
-    huntControlYaw = 0.0f;
-    huntSlowYaw = 0.0f;
-    huntFastYaw = 0.0f;
-    huntBlend = 0.0f;
-    huntScore = 0.0f;
-
-    outputChatterSlow = 0.0f;
-    outputChatterFast = 0.0f;
-    outputChatterBlend = 0.0f;
-    outputChatterScore = 0.0f;
-
-    terrainAssistBlend = 0.0f;
-    activeHoldFactor = 1.0f;
+    predictedYawTelemetry = 0.0f;
+    driftReferenceTelemetry = 0.0f;
+    referenceErrorTelemetry = 0.0f;
+    referenceLockTelemetry = 0.0f;
+    throttlePredictionTelemetry = 0.0f;
+    directCorrectionTelemetry = 0.0f;
+    memoryFeedbackTelemetry = 0.0f;
+    driverActivityTelemetry = 0.0f;
+    throttlePredictionBlendTelemetry = 0.0f;
 
     servoOutput = 1500;
     correctionOutput = 0;
@@ -91,14 +87,9 @@ int GyroController::update(
     int steeringCommand,
     bool steeringSignal,
     int throttlePulse,
-    bool throttleSignal,
-    float surfaceDisturbance,
-    bool terrainAssistEnabled
+    bool throttleSignal
 )
 {
-    (void)surfaceDisturbance;
-    (void)terrainAssistEnabled;
-
     uint32_t now = micros();
     float dt = 0.004f;
 
@@ -263,7 +254,7 @@ int GyroController::update(
             (yawMagnitude - deadband);
     }
 
-    // One time-based gyro low-pass is the entire V2 filtering chain.
+    // One time-based gyro low-pass is the entire filtering chain.
     float baseFilterAmount =
         1.0f -
         constrain(
@@ -318,7 +309,7 @@ int GyroController::update(
         0.003f
         +
         (
-            huntDamping
+            predictionStrength
             /
             100.0f
         )
@@ -521,7 +512,7 @@ int GyroController::update(
 
     // Experimental Tail Slide Speed is centered at 50. It changes only the
     // fast damping path while deliberate steering movement is present:
-    // lower values add damping, 50 preserves the proven RC1 response, and
+    // lower values add damping, 50 preserves the Open Beta baseline, and
     // higher values release damping. The 40% floor at 100 means it cannot
     // reverse or remove gyro correction, and settled drifts receive a
     // substantially smaller change in either direction.
@@ -608,21 +599,15 @@ int GyroController::update(
         2000
     );
 
-    // Map V2 internals onto the existing diagnostics until the binary logger
-    // replaces the legacy CSV schema.
-    huntControlYaw = predictedYaw;
-    huntSlowYaw = driftReferenceYaw;
-    huntFastYaw = referenceError;
-    huntBlend = settledBlend;
-    huntScore = throttlePredictionBlend;
-
-    outputChatterSlow = directCorrection;
-    outputChatterFast = integralCorrection;
-    outputChatterBlend = driverActivityBlend;
-    outputChatterScore = throttlePredictionBlend;
-
-    terrainAssistBlend = 0.0f;
-    activeHoldFactor = 1.0f;
+    predictedYawTelemetry = predictedYaw;
+    driftReferenceTelemetry = driftReferenceYaw;
+    referenceErrorTelemetry = referenceError;
+    referenceLockTelemetry = settledBlend;
+    throttlePredictionTelemetry = throttlePredictionBlend;
+    directCorrectionTelemetry = directCorrection;
+    memoryFeedbackTelemetry = integralCorrection;
+    driverActivityTelemetry = driverActivityBlend;
+    throttlePredictionBlendTelemetry = throttlePredictionBlend;
 
     return servoOutput;
 }
@@ -803,25 +788,9 @@ float GyroController::getTailSlideBlend()
 }
 
 
-void GyroController::setAntiWobble(int value)
+void GyroController::setPredictionStrength(int value)
 {
-    antiWobble = constrain(
-        value,
-        0,
-        200
-    );
-}
-
-
-int GyroController::getAntiWobble()
-{
-    return antiWobble;
-}
-
-
-void GyroController::setHuntDamping(int value)
-{
-    huntDamping = constrain(
+    predictionStrength = constrain(
         value,
         0,
         100
@@ -829,82 +798,63 @@ void GyroController::setHuntDamping(int value)
 }
 
 
-int GyroController::getHuntDamping()
+int GyroController::getPredictionStrength()
 {
-    return huntDamping;
+    return predictionStrength;
 }
 
 
-int GyroController::applyOutputChatterDamping(
-    int correction,
-    int steeringCommand,
-    bool steeringSignal,
-    float dt
-)
+float GyroController::getPredictedYaw()
 {
-    (void)steeringCommand;
-    (void)steeringSignal;
-    (void)dt;
-
-    return constrain(
-        correction,
-        -maxCorrection,
-        maxCorrection
-    );
+    return predictedYawTelemetry;
 }
 
 
-float GyroController::getHuntControlYaw()
+float GyroController::getDriftReferenceYaw()
 {
-    return huntControlYaw;
+    return driftReferenceTelemetry;
 }
 
 
-float GyroController::getHuntSlowYaw()
+float GyroController::getReferenceError()
 {
-    return huntSlowYaw;
+    return referenceErrorTelemetry;
 }
 
 
-float GyroController::getHuntFastYaw()
+float GyroController::getReferenceLock()
 {
-    return huntFastYaw;
+    return referenceLockTelemetry;
 }
 
 
-float GyroController::getHuntBlend()
+float GyroController::getThrottlePrediction()
 {
-    return huntBlend;
+    return throttlePredictionTelemetry;
 }
 
 
-float GyroController::getHuntScore()
+float GyroController::getDirectCorrection()
 {
-    return huntScore;
+    return directCorrectionTelemetry;
 }
 
 
-float GyroController::getOutputChatterSlow()
+float GyroController::getMemoryFeedback()
 {
-    return outputChatterSlow;
+    return memoryFeedbackTelemetry;
 }
 
 
-float GyroController::getOutputChatterFast()
+float GyroController::getDriverActivityBlend()
 {
-    return outputChatterFast;
+    return driverActivityTelemetry;
 }
 
 
-float GyroController::getOutputChatterBlend()
+float GyroController::getThrottlePredictionBlend()
 {
-    return outputChatterBlend;
-}
-
-
-float GyroController::getOutputChatterScore()
-{
-    return outputChatterScore;
+    return throttlePredictionBlendTelemetry;
 }
 
 
@@ -929,24 +879,6 @@ float GyroController::getSettledBlend()
 float GyroController::getThrottleTransient()
 {
     return throttleTransientTime;
-}
-
-
-bool GyroController::getTerrainActive()
-{
-    return false;
-}
-
-
-float GyroController::getTerrainAssist()
-{
-    return terrainAssistBlend;
-}
-
-
-float GyroController::getActiveHoldFactor()
-{
-    return activeHoldFactor;
 }
 
 

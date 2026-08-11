@@ -12,7 +12,7 @@ public:
 
     struct DrivingProfile
     {
-        uint32_t version = 4;
+        uint32_t version = 5;
         char name[PROFILE_NAME_LENGTH] = {0};
 
         float gain = 1.5f;
@@ -21,13 +21,9 @@ public:
         float gyroIntegralGain = 0.0f;
 
         int32_t gyroMaxCorrection = 250;
-        int32_t gyroAttackSpeed = 80;
-        int32_t gyroReturnSpeed = 30;
         int32_t gyroIntegralLimit = 120;
         int32_t gyroHoldBoost = 0;
-        int32_t gyroAntiWobble = 50;
-        int32_t gyroHuntDamping = 0;
-        int32_t steeringDamper = 0;
+        int32_t predictionStrength = 0;
         int32_t radioSteeringTravel = 100;
         int32_t gyroCounterSteerAssist = 0;
         int32_t gyroTailSlideSpeed = 50;
@@ -53,12 +49,6 @@ public:
     float getGyroSmoothing();
     void setGyroSmoothing(float value);
 
-    int getGyroAttackSpeed();
-    void setGyroAttackSpeed(int value);
-
-    int getGyroReturnSpeed();
-    void setGyroReturnSpeed(int value);
-
     float getGyroIntegralGain();
     void setGyroIntegralGain(float value);
 
@@ -74,17 +64,8 @@ public:
     int getGyroTailSlideSpeed();
     void setGyroTailSlideSpeed(int value);
 
-    int getGyroAntiWobble();
-    void setGyroAntiWobble(int value);
-
-    int getGyroHuntDamping();
-    void setGyroHuntDamping(int value);
-
-    int getSteeringDamper();
-    void setSteeringDamper(int value);
-
-    bool getTerrainAssistEnabled();
-    void setTerrainAssistEnabled(bool value);
+    int getPredictionStrength();
+    void setPredictionStrength(int value);
 
     // Servo
     int getServoCenter();
@@ -162,10 +143,6 @@ private:
 
     float gyroSmoothing = 0.10f;
 
-    int gyroAttackSpeed = 80;
-
-    int gyroReturnSpeed = 30;
-
     float gyroIntegralGain = 0.0f;
 
     int gyroIntegralLimit = 120;
@@ -176,13 +153,7 @@ private:
 
     int gyroTailSlideSpeed = 50;
 
-    int gyroAntiWobble = 50;
-
-    int gyroHuntDamping = 0;
-
-    int steeringDamper = 0;
-
-    bool terrainAssistEnabled = true;
+    int predictionStrength = 0;
 
     int servoCenter = 1500;
 
