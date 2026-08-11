@@ -2303,7 +2303,9 @@ void UI::drawSystemPage(
         #if defined(OPENDRIFT_INPUT_CRSF)
         "17 RX / 18 TX",
         #else
-        "THROTTLE INPUT",
+        settings.getThrottleOutputEnabled()
+        ? "THROTTLE OUT"
+        : "GAIN INPUT",
         #endif
         120,
         148
@@ -2315,7 +2317,7 @@ void UI::drawSystemPage(
         #if defined(OPENDRIFT_INPUT_CRSF)
         "gain on CRSF channel 3",
         #else
-        "gain controlled by setting",
+        "15 steer / 16 throttle / 17 servo",
         #endif
         120,
         184
@@ -5073,6 +5075,14 @@ bool UI::actionButtonAt(
     if(page == PAGE_WIFI)
         return buttonPressed(x, y, 50, 145, 140, 42);
 
+    if(
+        page == PAGE_SYSTEM
+        #if defined(OPENDRIFT_INPUT_CRSF)
+        && false
+        #endif
+    )
+        return buttonPressed(x, y, 43, 137, 154, 40);
+
     #endif
 
     return false;
@@ -6523,6 +6533,21 @@ void UI::update(
 
             }
 
+        }
+
+        if(
+            page == PAGE_SYSTEM &&
+            #if defined(OPENDRIFT_INPUT_CRSF)
+            false &&
+            #endif
+            buttonPressed(x, y, 43, 137, 154, 40)
+        )
+        {
+            settings.setThrottleOutputEnabled(
+                !settings.getThrottleOutputEnabled()
+            );
+
+            drawSystemPage(settings);
         }
 
 

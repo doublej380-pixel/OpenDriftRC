@@ -57,14 +57,18 @@ The **Waveshare ESP32-S3 Touch AMOLED 1.64** is the final and primary OpenDrift 
 
 The older Waveshare 1.28-inch round display build is deprecated. Its PlatformIO environment and implementation remain in the repository for experimentation, but it may not receive new UI features or the same level of testing.
 
-Current default pinout:
+Both display boards use this PWM pinout:
 
 | Signal | GPIO | Direction | Notes |
 | --- | ---: | --- | --- |
-| Servo output | 16 | Output | Goes to steering servo signal |
-| Receiver steering | 17 | Input | Standard RC PWM input |
-| Receiver throttle | 15 | Input | Standard RC PWM input; always available to the blackbox |
+| Receiver steering / servo in | 15 | Input | Standard RC PWM input |
+| Receiver throttle / throttle in | 16 | Input | Throttle sensing and blackbox input |
+| Steering servo / servo out | 17 | Output | Stabilized steering command |
 | Gain input / throttle output | 18 | Selectable | Gain-channel input by default, or throttle passthrough output |
+
+GPIO 18 cannot provide throttle output and read receiver gain at the same time.
+To keep throttle sensing and gain adjustment, split the receiver throttle
+signal to GPIO 16 and the ESC rather than plugging the ESC into OpenDrift.
 
 Make sure the receiver, ESP32 board, and servo power system share ground.
 
@@ -74,15 +78,15 @@ CRSF targets repurpose the receiver pins:
 | --- | ---: | --- | --- |
 | CRSF receiver TX | 17 | Input | Native CRSF channel and link frames |
 | CRSF receiver RX | 18 | Output | Full-duplex parameter telemetry |
-| Steering servo | 16 | Output | Standard 250 Hz servo PWM |
-| ESC throttle | 15 | Output | Standard 50 Hz ESC PWM with active-neutral failsafe |
+| Steering servo / servo port | 15 | Output | Standard 250 Hz servo PWM |
+| ESC throttle / throttle port | 16 | Output | Standard 50 Hz ESC PWM with active-neutral failsafe |
 
 Both CRSF targets use the same full-duplex implementation. They use the
 separate `OpenDriftCRSF` settings namespace and do not overwrite a PWM tune.
 
 Throttle sensing is not required for basic stabilization, but it is strongly recommended. With the throttle signal connected, OpenDrift can release settled-drift features during power changes instead of inferring those events from yaw alone. Treat it like a sensored-motor cable: the fallback works without it, while Performance Mode has substantially better phase awareness.
 
-The servo should be powered from a suitable BEC or ESC receiver rail. Do not rely on the ESP32 board to power a steering servo.
+The servo should be powered from a suitable BEC or ESC receiver rail. Do not rely on the ESP32 board to power a steering servo. A DIY installation must feed the display/development board regulated 5 V, never an unregulated or 6 V-plus BEC output. The OpenDrift daughter boards under development include an onboard regulator. ESP32-S3 GPIOs are 3.3 V signal pins and are not 5 V tolerant.
 
 ## Build And Upload
 
@@ -118,7 +122,7 @@ pio run -e waveshare_amoled_164_crsf
 pio run -e waveshare_128_crsf
 ```
 
-Both targets enable full-duplex CRSF, GPIO 15 ESC output, neutral-hold arming,
+Both targets enable full-duplex CRSF, GPIO 16 ESC output, neutral-hold arming,
 and radio parameter telemetry on GPIO 18.
 
 Main dependencies are managed in `OpenDrift/platformio.ini`:

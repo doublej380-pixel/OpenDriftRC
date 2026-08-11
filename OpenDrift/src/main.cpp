@@ -90,24 +90,21 @@ TaskHandle_t controlTaskHandle = nullptr;
 TaskHandle_t crsfTaskHandle = nullptr;
 #endif
 
-#define SERVO_OUTPUT_PIN 16
-#define RADIO_STEERING_PIN 17
 #if defined(OPENDRIFT_INPUT_CRSF)
+#define SERVO_OUTPUT_PIN 15
 #define CRSF_RX_PIN 17
 #define CRSF_TX_PIN 18
-#define CRSF_THROTTLE_OUTPUT_PIN 15
+#define CRSF_THROTTLE_OUTPUT_PIN 16
 static constexpr uint8_t CRSF_STEERING_CHANNEL = 0;
 static constexpr uint8_t CRSF_THROTTLE_CHANNEL = 1;
 static constexpr uint8_t CRSF_GAIN_CHANNEL = 2;
 static constexpr uint32_t CRSF_SIGNAL_TIMEOUT_MS = 50;
 static constexpr uint32_t CRSF_THROTTLE_NEUTRAL_MS = 500;
 static constexpr int CRSF_THROTTLE_NEUTRAL_BAND_US = 50;
-#elif defined(OPENDRIFT_BOARD_AMOLED_164)
-#define RADIO_THROTTLE_PIN 15
 #else
-// The round board does not have a spare input. Its former GPIO 18 gain
-// channel is dedicated to throttle logging; gyro gain comes from settings.
-#define RADIO_THROTTLE_PIN 18
+#define SERVO_OUTPUT_PIN 17
+#define RADIO_STEERING_PIN 15
+#define RADIO_THROTTLE_PIN 16
 #endif
 #define SHARED_GAIN_THROTTLE_PIN 18
 
@@ -193,9 +190,9 @@ public:
         canvas.setTextColor(0x7BEF);
         canvas.drawString(
             #if defined(OPENDRIFT_INPUT_CRSF)
-            "control kernel 1.0.0-beta.1 crsf  ttyOD0",
+            "control kernel 1.0.0-beta.2 crsf  ttyOD0",
             #else
-            "control kernel 1.0.0-beta.1 pwm  ttyOD0",
+            "control kernel 1.0.0-beta.2 pwm  ttyOD0",
             #endif
             8,
             27
@@ -393,11 +390,6 @@ bool configurePin18Mode()
 {
     #if defined(OPENDRIFT_INPUT_CRSF)
     // GPIO 18 belongs to the full-duplex CRSF UART for parameter telemetry.
-    pin18ThrottleOutputMode = false;
-    pin18ModeConfigured = true;
-    return true;
-    #elif !defined(OPENDRIFT_BOARD_AMOLED_164)
-    // throttleRadio owns GPIO 18 for the lifetime of the round build.
     pin18ThrottleOutputMode = false;
     pin18ModeConfigured = true;
     return true;
@@ -1149,7 +1141,11 @@ void setup()
     Serial.println("SERVO OK");
 
     bootConsole.log(
-        "ledc: steering servo attached on gpio16"
+        #if defined(OPENDRIFT_INPUT_CRSF)
+        "ledc: steering servo output attached on gpio15"
+        #else
+        "ledc: steering servo output attached on gpio17"
+        #endif
     );
 
     //-------------------
@@ -1249,7 +1245,7 @@ void setup()
 
     #if defined(OPENDRIFT_INPUT_CRSF)
     bootConsole.log(
-        "ledc: esc neutral output attached on gpio15",
+        "ledc: esc neutral output attached on gpio16",
         throttleOutputOk ? "[ OK ]" : "[FAIL]",
         throttleOutputOk ? TFT_GREEN : TFT_RED
     );
@@ -1265,13 +1261,11 @@ void setup()
 
     bootConsole.log(
         #if defined(OPENDRIFT_INPUT_CRSF)
-        "gpio17/18: crsf rx/tx; gpio15: esc out locked"
-        #elif defined(OPENDRIFT_BOARD_AMOLED_164)
+        "gpio17/18: crsf rx/tx; gpio15/16: servo/esc out"
+        #else
         pin18ThrottleOutputMode
         ? "gpio18: throttle passthrough output"
         : "gpio18: gyro gain adjustment input"
-        #else
-        "gpio18: throttle input (gain uses saved setting)"
         #endif
     );
 
@@ -1689,11 +1683,7 @@ void loop()
         wifi,
         settings,
         steeringRadio,
-        #if defined(OPENDRIFT_BOARD_AMOLED_164) || defined(OPENDRIFT_INPUT_CRSF)
         gainRadio
-        #else
-        throttleRadio
-        #endif
     );
 
     ControlTelemetry telemetry;

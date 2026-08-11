@@ -184,11 +184,9 @@ void WebConfigurator::handleRoot()
     html += F("<div class='pill'>Steering: ");
     html += String(steeringRadio->getPulseWidth());
     html += steeringRadio->hasSignal() ? F(" OK") : F(" NO SIGNAL");
-    #if defined(OPENDRIFT_BOARD_AMOLED_164) || defined(OPENDRIFT_INPUT_CRSF)
     html += F("</div><div class='pill'>Gain: ");
     html += String(gainRadio->getPulseWidth());
     html += gainRadio->hasSignal() ? F(" OK") : F(" NO SIGNAL");
-    #endif
     html += F("</div><div class='pill'>Throttle: ");
     html += String(throttleRadio->getPulseWidth());
     html += throttleRadio->hasSignal() ? F(" OK") : F(" NO SIGNAL");
@@ -196,13 +194,9 @@ void WebConfigurator::handleRoot()
     html += F("</div><div class='pill'>CRSF: GPIO 17 RX / 18 TX");
     #else
     html += F("</div><div class='pill'>GPIO 18: ");
-    #if defined(OPENDRIFT_BOARD_AMOLED_164)
     html += settings->getThrottleOutputEnabled()
         ? F("THROTTLE OUT")
         : F("GAIN INPUT");
-    #else
-    html += F("THROTTLE INPUT");
-    #endif
     #endif
     html += F("</div></div></div>");
 
@@ -304,9 +298,9 @@ void WebConfigurator::handleRoot()
 
     html += F("<div class='card'><h2>Gain Channel Calibration</h2><div class='row'>");
     #if defined(OPENDRIFT_INPUT_CRSF)
-    html += F("CRSF channel 3 controls gyro gain. GPIO 15 actively outputs neutral during failsafe and passes throttle only after a valid neutral hold.");
+    html += F("CRSF channel 3 controls gyro gain. GPIO 15 drives the steering servo. GPIO 16 actively outputs neutral throttle during failsafe and passes throttle only after a valid neutral hold.");
     html += F("</div>");
-    #elif defined(OPENDRIFT_BOARD_AMOLED_164)
+    #else
     html += input("Gain low", "gainMin", String(settings->getGainMin()));
     html += input("Gain high", "gainMax", String(settings->getGainMax()));
     html += F("</div>");
@@ -315,9 +309,6 @@ void WebConfigurator::handleRoot()
         "throttleOutputEnabled",
         settings->getThrottleOutputEnabled()
     );
-    #else
-    html += F("GPIO 18 is dedicated to throttle input on the round board. Gyro gain uses the saved Gain setting.");
-    html += F("</div>");
     #endif
     html += F("</div>");
 
@@ -524,7 +515,7 @@ void WebConfigurator::handleSave()
         )
     );
 
-    #if defined(OPENDRIFT_BOARD_AMOLED_164)
+    #if !defined(OPENDRIFT_INPUT_CRSF)
     settings->setThrottleOutputEnabled(
         server.hasArg("throttleOutputEnabled")
     );

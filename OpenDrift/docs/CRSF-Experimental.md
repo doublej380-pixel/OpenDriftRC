@@ -12,7 +12,7 @@ CRSF settings are stored in the separate `OpenDriftCRSF` NVS namespace, so
 they do not overwrite the corresponding PWM tune.
 
 Both targets use the complete path: bounded CRSF receive processing, GPIO 18
-parameter telemetry, GPIO 15 ESC PWM, deterministic neutral behavior, and the
+parameter telemetry, GPIO 16 ESC PWM, deterministic neutral behavior, and the
 EdgeTX tuning tool. The round target proved stable with a SpeedyBee SB Nano at
 the MT12's F1000 packet rate after the receive loop was given an explicit byte
 budget; the AMOLED target now uses the same CRSF implementation.
@@ -32,14 +32,15 @@ OpenDrift outputs are:
 
 | OpenDrift board | Connect to | Signal |
 |---|---|---|
-| GPIO 16 | Steering servo signal | 250 Hz PWM |
-| GPIO 15 | ESC throttle signal | 50 Hz PWM |
+| GPIO 15 | Steering servo signal | 250 Hz PWM |
+| GPIO 16 | ESC throttle signal | 50 Hz PWM |
 
-Do not assume the round board's expansion connector supplies receiver-safe 5V,
-and do not power the servo or ESC motor from the display board. Feed the
-receiver from the vehicle's regulated 5V BEC, use the vehicle's normal power
-wiring, and make sure every device shares ground. Verify the labels on the
-board connector rather than relying on wire colour or connector position.
+Do not power the servo or ESC motor from the display board. A DIY display-board
+installation needs a regulated 5 V supply; do not feed a 6 V or higher BEC
+directly into the board. The daughter boards under development include their
+own regulator. Use the vehicle's normal power wiring, make sure every device
+shares ground, and verify the connector labels rather than relying on wire
+colour or position.
 
 ## Initial channel map
 
@@ -55,7 +56,7 @@ those decoded values through the same interfaces used by the PWM build.
 
 - A CRSF channel frame older than 50 ms is treated as signal loss.
 - Steering centers when the link is lost.
-- GPIO 15 emits no throttle PWM until a valid link has held throttle within
+- GPIO 16 emits no throttle PWM until a valid link has held throttle within
   50 microseconds of center for 500 ms.
 - If the link is lost, the full build commands neutral throttle immediately.
   Reconnection requires another neutral hold before live throttle passes.

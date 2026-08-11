@@ -15,26 +15,21 @@ Both boards use the QMI8658 six-axis IMU. OpenDrift uses body Z as yaw and recor
 
 The current board orientation reports clockwise rotation as positive Z and counter-clockwise rotation as negative Z. Always verify correction direction by rotating the complete car before driving.
 
-## Receiver and servo routing
+## PWM receiver and servo routing
 
-### AMOLED 1.64
+Both display builds use the same PWM pinout:
 
 | Signal | GPIO | Direction |
 | --- | ---: | --- |
-| Servo output | 16 | Output |
-| Receiver steering | 17 | Input |
-| Receiver throttle sensing | 15 | Input |
+| Receiver steering / servo in | 15 | Input |
+| Receiver throttle / throttle in | 16 | Input |
+| Steering servo / servo out | 17 | Output at 250 Hz |
 | Gain input or throttle passthrough | 18 | Selectable |
 
-### Round 1.28
-
-| Signal | GPIO | Direction |
-| --- | ---: | --- |
-| Servo output | 16 | Output |
-| Receiver steering | 17 | Input |
-| Receiver throttle sensing | 18 | Input |
-
-The round board does not have a spare gain-channel input in the current routing. Its Gain comes from the saved setting/profile.
+GPIO 18 can be a receiver gain input or an ESC throttle output, but not both.
+To retain throttle sensing and receiver gain control simultaneously, split the
+receiver throttle signal between GPIO 16 and the ESC instead of connecting the
+ESC to GPIO 18.
 
 ## CRSF routing
 
@@ -44,8 +39,8 @@ Both boards have isolated CRSF build targets. They share this logical routing:
 | --- | ---: | --- |
 | CRSF RX from receiver TX | 17 | Input |
 | CRSF TX to receiver RX | 18 | Output |
-| Steering servo PWM | 16 | Output at 250 Hz |
-| ESC throttle PWM | 15 | Output at 50 Hz |
+| Steering servo / servo port | 15 | Output at 250 Hz |
+| ESC throttle / throttle port | 16 | Output at 50 Hz |
 
 Both `waveshare_128_crsf` and `waveshare_amoled_164_crsf` enable the complete
 full-duplex path. They remain separate from the normal PWM environments because
@@ -65,5 +60,11 @@ Only the receiver signal and a shared ground are required. OpenDrift does not po
 ## Power and grounding
 
 The receiver, ESP32 board, and servo/ESC system must share ground. Power the steering servo from an appropriate BEC or receiver rail; do not draw servo current through the ESP32 board.
+
+Feed a DIY OpenDrift display/development board with regulated 5 V on its 5 V
+input. Do not connect a 6 V or higher BEC directly to that input. The OpenDrift
+daughter boards under development include an onboard regulator so the builder
+does not need to add a separate 5 V regulator. ESP32-S3 GPIOs remain 3.3 V logic
+and are not 5 V tolerant; GPIO 15 through GPIO 18 are signal pins only.
 
 Fast drift servos can draw large transient current and can oscillate from their own internal settings. Verify servo stability directly from the receiver before diagnosing the gyro.
