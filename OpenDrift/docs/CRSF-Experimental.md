@@ -13,7 +13,7 @@ they do not overwrite the corresponding PWM tune.
 
 Both targets use the complete path: bounded CRSF receive processing, GPIO 18
 parameter telemetry, GPIO 16 ESC PWM, deterministic neutral behavior, and the
-EdgeTX tuning tool. The round target proved stable with a SpeedyBee SB Nano at
+[EdgeTX tuning tool](https://github.com/doublej380-pixel/OpenDriftRC/releases/download/v1.0.0-beta.2/OpenDrift.lua). The round target proved stable with a SpeedyBee SB Nano at
 the MT12's F1000 packet rate after the receive loop was given an explicit byte
 budget; the AMOLED target now uses the same CRSF implementation.
 
@@ -61,10 +61,10 @@ those decoded values through the same interfaces used by the PWM build.
 - If the link is lost, the full build commands neutral throttle immediately.
   Reconnection requires another neutral hold before live throttle passes.
 
-## EdgeTX parameter tool
+## [EdgeTX parameter tool](https://github.com/doublej380-pixel/OpenDriftRC/releases/download/v1.0.0-beta.2/OpenDrift.lua)
 
-Copy `radio/edgetx/SCRIPTS/TOOLS/OpenDrift.lua` to the same path on the radio SD
-card, then open **OpenDrift** from the EdgeTX Tools menu. The current tool reads
+Download [`OpenDrift.lua`](https://github.com/doublej380-pixel/OpenDriftRC/releases/download/v1.0.0-beta.2/OpenDrift.lua) and copy it to `SCRIPTS/TOOLS/OpenDrift.lua` on the radio SD
+card, then open **OpenDrift** from the [EdgeTX Tools menu](https://github.com/doublej380-pixel/OpenDriftRC/releases/download/v1.0.0-beta.2/OpenDrift.lua). The current tool reads
 and writes sixteen settings over full-duplex CRSF:
 
 - saved gain, deadband, max correction, and smoothing;
@@ -101,7 +101,7 @@ screen.
    `throttle=ARMED`.
 7. Turn the transmitter off. Steering and throttle must return to neutral and
    the report must return to `throttle=LOCKED`.
-8. Open the EdgeTX tool, change one harmless value, and confirm both the radio
+8. Open the [EdgeTX tool](https://github.com/doublej380-pixel/OpenDriftRC/releases/download/v1.0.0-beta.2/OpenDrift.lua), change one harmless value, and confirm both the radio
    acknowledgement and gyro-screen refresh.
 
 Only reconnect the motor after every applicable check passes.

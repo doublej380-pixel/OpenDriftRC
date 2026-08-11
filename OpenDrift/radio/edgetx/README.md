@@ -1,10 +1,10 @@
-# OpenDrift EdgeTX tool
+# [OpenDrift EdgeTX tool](https://github.com/doublej380-pixel/OpenDriftRC/releases/download/v1.0.0-beta.2/OpenDrift.lua)
 
 This tool supports both Open Beta **full-duplex** CRSF firmware targets:
 `waveshare_amoled_164_crsf` and `waveshare_128_crsf`.
 
-Copy `SCRIPTS/TOOLS/OpenDrift.lua` to the same path on the radio SD card,
-then launch **OpenDrift** from the EdgeTX Tools menu.
+Download [`OpenDrift.lua`](https://github.com/doublej380-pixel/OpenDriftRC/releases/download/v1.0.0-beta.2/OpenDrift.lua), copy it to `SCRIPTS/TOOLS/OpenDrift.lua` on the radio SD card,
+then launch **OpenDrift** from the [EdgeTX Tools menu](https://github.com/doublej380-pixel/OpenDriftRC/releases/download/v1.0.0-beta.2/OpenDrift.lua).
 
 CRSF wiring for the full-duplex firmware:
 
