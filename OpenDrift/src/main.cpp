@@ -3,6 +3,7 @@
 #include <freertos/FreeRTOS.h>
 #include <freertos/semphr.h>
 #include <freertos/task.h>
+#include <esp_system.h>
 
 #include "LGFX_OpenDrift.hpp"
 #include "IMU.h"
@@ -65,6 +66,12 @@ bool blackboxStartAttempted = false;
 static constexpr uint32_t CONTROL_LOOP_HZ = 250;
 static constexpr uint32_t CONTROL_LOOP_PERIOD_MS =
     1000 / CONTROL_LOOP_HZ;
+
+#if defined(OPENDRIFT_BOARD_AMOLED_164)
+static constexpr uint8_t STARTUP_RETRY_COUNT = 3;
+static constexpr int I2C_SDA_PIN = 47;
+static constexpr int I2C_SCL_PIN = 48;
+#endif
 
 struct ControlTelemetry
 {
@@ -131,6 +138,73 @@ const char* password = "opendrift";
 
 #if defined(OPENDRIFT_BOARD_AMOLED_164)
 static constexpr float AMOLED_BOOT_LOG_TEXT_SIZE = 1.15f;
+#endif
+
+
+const char* resetReasonName(
+    esp_reset_reason_t reason
+)
+{
+    switch(reason)
+    {
+        case ESP_RST_POWERON: return "power-on";
+        case ESP_RST_EXT: return "external-reset";
+        case ESP_RST_SW: return "software-reset";
+        case ESP_RST_PANIC: return "panic";
+        case ESP_RST_INT_WDT: return "interrupt-watchdog";
+        case ESP_RST_TASK_WDT: return "task-watchdog";
+        case ESP_RST_WDT: return "watchdog";
+        case ESP_RST_DEEPSLEEP: return "deep-sleep";
+        case ESP_RST_BROWNOUT: return "brownout";
+        case ESP_RST_SDIO: return "sdio";
+        #if defined(ESP_RST_USB)
+        case ESP_RST_USB: return "usb";
+        #endif
+        #if defined(ESP_RST_JTAG)
+        case ESP_RST_JTAG: return "jtag";
+        #endif
+        #if defined(ESP_RST_PWR_GLITCH)
+        case ESP_RST_PWR_GLITCH: return "power-glitch";
+        #endif
+        #if defined(ESP_RST_CPU_LOCKUP)
+        case ESP_RST_CPU_LOCKUP: return "cpu-lockup";
+        #endif
+        default: return "unknown";
+    }
+}
+
+
+#if defined(OPENDRIFT_BOARD_AMOLED_164)
+void releaseI2cBus()
+{
+    Wire.end();
+
+    pinMode(I2C_SDA_PIN, INPUT_PULLUP);
+    pinMode(I2C_SCL_PIN, OUTPUT_OPEN_DRAIN);
+    digitalWrite(I2C_SCL_PIN, HIGH);
+    delayMicroseconds(10);
+
+    // A peripheral interrupted mid-byte can hold SDA low indefinitely.
+    // Nine clocks finish that byte before generating a STOP condition.
+    for(uint8_t pulse = 0; pulse < 9; pulse++)
+    {
+        digitalWrite(I2C_SCL_PIN, LOW);
+        delayMicroseconds(10);
+        digitalWrite(I2C_SCL_PIN, HIGH);
+        delayMicroseconds(10);
+    }
+
+    pinMode(I2C_SDA_PIN, OUTPUT_OPEN_DRAIN);
+    digitalWrite(I2C_SDA_PIN, LOW);
+    delayMicroseconds(10);
+    digitalWrite(I2C_SCL_PIN, HIGH);
+    delayMicroseconds(10);
+    digitalWrite(I2C_SDA_PIN, HIGH);
+    delayMicroseconds(10);
+
+    pinMode(I2C_SDA_PIN, INPUT_PULLUP);
+    pinMode(I2C_SCL_PIN, INPUT_PULLUP);
+}
 #endif
 
 
@@ -236,6 +310,10 @@ public:
         uint16_t statusColor = TFT_GREEN
     )
     {
+        Serial.print(status);
+        Serial.print(" ");
+        Serial.println(message);
+
         #if defined(OPENDRIFT_BOARD_AMOLED_164)
         if(!canvasReady || !panelReady)
         {
@@ -1026,26 +1104,60 @@ void setup()
 
     Serial.println("OpenDrift Starting");
 
+    esp_reset_reason_t resetReason =
+        esp_reset_reason();
+
+    Serial.print("Reset reason: ");
+    Serial.print(resetReasonName(resetReason));
+    Serial.print(" (");
+    Serial.print((int)resetReason);
+    Serial.println(")");
+
     #if !defined(OPENDRIFT_BOARD_AMOLED_164)
     pinMode(2, OUTPUT);
     digitalWrite(2, HIGH);
     #endif
 
-    bool displayOk =
-        lcd.init();
+    bool displayOk = false;
+
+    #if defined(OPENDRIFT_BOARD_AMOLED_164)
+    for(uint8_t attempt = 1; attempt <= STARTUP_RETRY_COUNT; attempt++)
+    {
+        displayOk = lcd.init();
+
+        Serial.printf(
+            "AMOLED init attempt %u/%u: %s\n",
+            attempt,
+            STARTUP_RETRY_COUNT,
+            displayOk ? "OK" : "FAIL"
+        );
+
+        if(displayOk)
+        {
+            break;
+        }
+
+        delay(150);
+    }
+    #else
+    displayOk = lcd.init();
+    #endif
 
     Serial.print("Display init: ");
     Serial.println(displayOk ? "OK" : "FAIL");
 
-    lcd.setColorDepth(16);
-    lcd.setSwapBytes(false);
-    lcd.setRotation(0);
-    lcd.fillScreen(TFT_BLACK);
-    lcd.setTextColor(TFT_WHITE);
+    if(displayOk)
+    {
+        lcd.setColorDepth(16);
+        lcd.setSwapBytes(false);
+        lcd.setRotation(0);
+        lcd.fillScreen(TFT_BLACK);
+        lcd.setTextColor(TFT_WHITE);
 
-    bootConsole.begin(
-        &lcd
-    );
+        bootConsole.begin(
+            &lcd
+        );
+    }
 
     bootConsole.log(
         displayOk
@@ -1092,16 +1204,52 @@ void setup()
     // IMU
     //-------------------
 
-    if(!imu.begin())
+    bool imuOk = false;
+
+    #if defined(OPENDRIFT_BOARD_AMOLED_164)
+    for(uint8_t attempt = 1; attempt <= STARTUP_RETRY_COUNT; attempt++)
+    {
+        if(attempt > 1)
+        {
+            releaseI2cBus();
+            delay(50);
+        }
+
+        imuOk = imu.begin();
+
+        Serial.printf(
+            "IMU init attempt %u/%u: %s\n",
+            attempt,
+            STARTUP_RETRY_COUNT,
+            imuOk ? "OK" : "FAIL"
+        );
+
+        if(imuOk)
+        {
+            break;
+        }
+
+        delay(150);
+    }
+    #else
+    imuOk = imu.begin();
+    #endif
+
+    if(!imuOk)
     {
         bootConsole.log(
-            "qmi8658: IMU probe failed",
+            "qmi8658: probe failed; safe reboot",
             "[FAIL]",
             TFT_RED
         );
 
-        while(true)
-            delay(1000);
+        #if defined(OPENDRIFT_BOARD_AMOLED_164)
+        releaseI2cBus();
+        #endif
+
+        Serial.flush();
+        delay(1500);
+        esp_restart();
     }
 
     Serial.println("IMU OK");
@@ -1109,6 +1257,62 @@ void setup()
     bootConsole.log(
         "qmi8658: 6-axis inertial sensor ready"
     );
+
+    //-------------------
+    // TOUCH
+    //-------------------
+
+    // Probe touch before attaching either actuator output. Touch is useful
+    // but not safety-critical: a failed controller must never brick the gyro.
+    Serial.println("Starting Touch");
+
+    bool touchOk = false;
+
+    #if defined(OPENDRIFT_BOARD_AMOLED_164)
+    for(uint8_t attempt = 1; attempt <= STARTUP_RETRY_COUNT; attempt++)
+    {
+        if(attempt > 1)
+        {
+            releaseI2cBus();
+            Wire.begin(I2C_SDA_PIN, I2C_SCL_PIN);
+            Wire.setClock(300000);
+            delay(50);
+        }
+
+        touchOk = touch.begin();
+
+        Serial.printf(
+            "Touch init attempt %u/%u: %s\n",
+            attempt,
+            STARTUP_RETRY_COUNT,
+            touchOk ? "OK" : "FAIL"
+        );
+
+        if(touchOk)
+        {
+            break;
+        }
+
+        delay(150);
+    }
+    #else
+    touchOk = touch.begin();
+    #endif
+
+    bootConsole.log(
+        touchOk
+        ?
+        #if defined(OPENDRIFT_BOARD_AMOLED_164)
+        "ft3168: capacitive touch input ready"
+        #else
+        "cst816s: capacitive touch input ready"
+        #endif
+        : "touch controller offline; continuing",
+        touchOk ? "[ OK ]" : "[WARN]",
+        touchOk ? TFT_GREEN : TFT_YELLOW
+    );
+
+    Serial.println(touchOk ? "TOUCH OK" : "TOUCH OFFLINE");
 
     //-------------------
     // SERVO
@@ -1120,13 +1324,14 @@ void setup()
     ))
     {
         bootConsole.log(
-            "ledc: steering servo output failed",
+            "ledc: steering output failed; safe reboot",
             "[FAIL]",
             TFT_RED
         );
 
-        while(true)
-            delay(1000);
+        Serial.flush();
+        delay(1500);
+        esp_restart();
     }
 
     steeringServo.configure(
@@ -1327,40 +1532,6 @@ void setup()
     gyro.setPredictionStrength(
         settings.getPredictionStrength()
     );
-
-    //-------------------
-    // TOUCH
-    //-------------------
-
-    Serial.println("Starting Touch");
-
-    if(!touch.begin())
-    {
-        bootConsole.log(
-            #if defined(OPENDRIFT_BOARD_AMOLED_164)
-            "cst92xx: touch controller probe failed",
-            #else
-            "cst816s: touch controller probe failed",
-            #endif
-            "[FAIL]",
-            TFT_RED
-        );
-
-        while(true)
-            delay(1000);
-    }
-
-    Serial.println("TOUCH OK");
-
-    bootConsole.log(
-        #if defined(OPENDRIFT_BOARD_AMOLED_164)
-        "cst92xx: capacitive touch input ready"
-        #else
-        "cst816s: capacitive touch input ready"
-        #endif
-    );
-
-    delay(1000);
 
     //-------------------
     // CALIBRATION
