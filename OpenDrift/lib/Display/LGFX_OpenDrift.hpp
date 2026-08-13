@@ -152,7 +152,13 @@ public:
         {
             auto cfg = _panel.config();
 
+            // Waveshare swapped LCD_CS and IMU_INT1 on the V2 PCB.
+            // V1: LCD_CS=GPIO9, V2: LCD_CS=GPIO46.
+            #if defined(OPENDRIFT_AMOLED_V2)
+            cfg.pin_cs = 46;
+            #else
             cfg.pin_cs = 9;
+            #endif
             cfg.pin_rst = 21;
             cfg.pin_busy = -1;
 

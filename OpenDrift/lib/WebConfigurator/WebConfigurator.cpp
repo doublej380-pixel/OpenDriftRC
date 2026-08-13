@@ -191,9 +191,17 @@ void WebConfigurator::handleRoot()
     html += String(throttleRadio->getPulseWidth());
     html += throttleRadio->hasSignal() ? F(" OK") : F(" NO SIGNAL");
     #if defined(OPENDRIFT_INPUT_CRSF)
+    #if defined(OPENDRIFT_AMOLED_V2)
+    html += F("</div><div class='pill'>CRSF: GPIO 1 RX / 2 TX");
+    #else
     html += F("</div><div class='pill'>CRSF: GPIO 17 RX / 18 TX");
+    #endif
+    #else
+    #if defined(OPENDRIFT_AMOLED_V2)
+    html += F("</div><div class='pill'>GPIO 2: ");
     #else
     html += F("</div><div class='pill'>GPIO 18: ");
+    #endif
     html += settings->getThrottleOutputEnabled()
         ? F("THROTTLE OUT")
         : F("GAIN INPUT");
@@ -298,14 +306,22 @@ void WebConfigurator::handleRoot()
 
     html += F("<div class='card'><h2>Gain Channel Calibration</h2><div class='row'>");
     #if defined(OPENDRIFT_INPUT_CRSF)
+    #if defined(OPENDRIFT_AMOLED_V2)
+    html += F("CRSF channel 3 controls gyro gain. GPIO 15 drives the steering servo. GPIO 16 actively outputs neutral throttle during failsafe and passes throttle only after a valid neutral hold. Receiver TX feeds GPIO 1; receiver RX connects to GPIO 2.");
+    #else
     html += F("CRSF channel 3 controls gyro gain. GPIO 15 drives the steering servo. GPIO 16 actively outputs neutral throttle during failsafe and passes throttle only after a valid neutral hold.");
+    #endif
     html += F("</div>");
     #else
     html += input("Gain low", "gainMin", String(settings->getGainMin()));
     html += input("Gain high", "gainMax", String(settings->getGainMax()));
     html += F("</div>");
     html += checkbox(
+        #if defined(OPENDRIFT_AMOLED_V2)
+        "Use GPIO 2 as throttle output instead of gyro gain input",
+        #else
         "Use GPIO 18 as throttle output instead of gyro gain input",
+        #endif
         "throttleOutputEnabled",
         settings->getThrottleOutputEnabled()
     );

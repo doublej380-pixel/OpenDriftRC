@@ -2179,7 +2179,11 @@ void UI::drawSystemPage(
         #if defined(OPENDRIFT_INPUT_CRSF)
         "CRSF",
         #else
+        #if defined(OPENDRIFT_AMOLED_V2)
+        "GPIO 2",
+        #else
         "GPIO 18",
+        #endif
         #endif
         22,
         212
@@ -2220,7 +2224,11 @@ void UI::drawSystemPage(
         240,
         38,
         #if defined(OPENDRIFT_INPUT_CRSF)
+        #if defined(OPENDRIFT_AMOLED_V2)
+        "RX1 / TX2",
+        #else
         "RX17 / TX18",
+        #endif
         OD_CYAN,
         #else
         settings.getThrottleOutputEnabled()
@@ -2283,7 +2291,11 @@ void UI::drawSystemPage(
         #if defined(OPENDRIFT_INPUT_CRSF)
         "CRSF UART",
         #else
+        #if defined(OPENDRIFT_AMOLED_V2)
+        "GPIO 2",
+        #else
         "GPIO 18",
+        #endif
         #endif
         120,
         119
@@ -2301,7 +2313,11 @@ void UI::drawSystemPage(
     lcd->setTextColor(TFT_WHITE);
     lcd->drawCenterString(
         #if defined(OPENDRIFT_INPUT_CRSF)
+        #if defined(OPENDRIFT_AMOLED_V2)
+        "1 RX / 2 TX",
+        #else
         "17 RX / 18 TX",
+        #endif
         #else
         settings.getThrottleOutputEnabled()
         ? "THROTTLE OUT"

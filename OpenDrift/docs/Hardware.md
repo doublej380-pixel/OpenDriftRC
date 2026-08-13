@@ -4,6 +4,8 @@
 
 The final supported target is the Waveshare ESP32-S3 Touch AMOLED 1.64. The older Waveshare 1.28-inch round display remains as a deprecated experimental build.
 
+The AMOLED board has incompatible V1 and V2 revisions. V1 is marked at the top of the PCB and uses LCD_CS GPIO 9. V2 is marked beside the right-side headers and uses LCD_CS GPIO 46. V2 also connects IMU_INT2 to GPIO 17 and TP_INT to GPIO 18, so OpenDrift does not use GPIO 17/18 for external signals on V2.
+
 ## QMI8658 IMU
 
 Both boards use the QMI8658 six-axis IMU. OpenDrift uses body Z as yaw and records body X/Y gyro plus all three accelerometer axes for terrain and load-transfer analysis.
@@ -17,7 +19,7 @@ The current board orientation reports clockwise rotation as positive Z and count
 
 ## PWM receiver and servo routing
 
-Both display builds use the same PWM pinout:
+AMOLED V1 and the Round build use the same PWM pinout:
 
 | Signal | GPIO | Direction |
 | --- | ---: | --- |
@@ -31,9 +33,11 @@ To retain throttle sensing and receiver gain control simultaneously, split the
 receiver throttle signal between GPIO 16 and the ESC instead of connecting the
 ESC to GPIO 18.
 
+AMOLED V2 PWM uses GPIO 15 steering input, GPIO 16 throttle input, GPIO 1 steering-servo output, and GPIO 2 as the selectable gain input or throttle output.
+
 ## CRSF routing
 
-Both boards have isolated CRSF build targets. They share this logical routing:
+AMOLED V1 and Round CRSF share this routing:
 
 | Signal | GPIO | Direction |
 | --- | ---: | --- |
@@ -45,6 +49,8 @@ Both boards have isolated CRSF build targets. They share this logical routing:
 Both `waveshare_128_crsf` and `waveshare_amoled_164_crsf` enable the complete
 full-duplex path. They remain separate from the normal PWM environments because
 the GPIO routing and settings namespace differ.
+
+AMOLED V2 CRSF uses GPIO 1 RX, GPIO 2 TX, GPIO 15 steering-servo output, and GPIO 16 ESC output. Its targets are `waveshare_amoled_164_v2` and `waveshare_amoled_164_v2_crsf`.
 
 CRSF channel mapping is channel 1 steering, channel 2 throttle, and channel 3
 gain. A stale channel frame centers steering and commands neutral throttle.
@@ -65,6 +71,6 @@ Feed a DIY OpenDrift display/development board with regulated 5 V on its 5 V
 input. Do not connect a 6 V or higher BEC directly to that input. The OpenDrift
 daughter boards under development include an onboard regulator so the builder
 does not need to add a separate 5 V regulator. ESP32-S3 GPIOs remain 3.3 V logic
-and are not 5 V tolerant; GPIO 15 through GPIO 18 are signal pins only.
+and are not 5 V tolerant; every external GPIO is a 3.3 V signal only.
 
 Fast drift servos can draw large transient current and can oscillate from their own internal settings. Verify servo stability directly from the receiver before diagnosing the gyro.

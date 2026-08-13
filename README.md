@@ -47,7 +47,7 @@ Visit [opendriftrc.com](https://opendriftrc.com) for the project overview, [wiri
 - Tail Slide Speed adjustment centered at the Open Beta baseline of `50`.
 - Separate PWM and full-duplex CRSF targets for both display boards.
 - Full-duplex CRSF steering, throttle, gain, link statistics, parameter
-  telemetry, neutral failsafes, and [EdgeTX tuning](https://github.com/doublej380-pixel/OpenDriftRC/releases/download/v1.0.1/OpenDrift.lua) on AMOLED and round builds.
+  telemetry, neutral failsafes, and [EdgeTX tuning](https://github.com/doublej380-pixel/OpenDriftRC/releases/download/v1.0.2/OpenDrift.lua) on AMOLED and round builds.
 
 ## Hardware Routing
 
@@ -55,9 +55,11 @@ Visit [opendriftrc.com](https://opendriftrc.com) for the project overview, [wiri
 
 The **Waveshare ESP32-S3 Touch AMOLED 1.64** is the final and primary OpenDrift hardware target. New development, UI work, and release testing target this board.
 
+Waveshare ships V1 and V2 revisions that require different firmware. V1 has its version silkscreen at the top of the PCB and uses LCD_CS on GPIO 9. V2 has the silkscreen beside the right-side pin headers and uses LCD_CS on GPIO 46. Select the exact revision in the web flasher.
+
 The older Waveshare 1.28-inch round display build is deprecated. Its PlatformIO environment and implementation remain in the repository for experimentation, but it may not receive new UI features or the same level of testing.
 
-Both display boards use this PWM pinout:
+AMOLED V1 and the Round board use this PWM pinout:
 
 | Signal | GPIO | Direction | Notes |
 | --- | ---: | --- | --- |
@@ -72,6 +74,8 @@ signal to GPIO 16 and the ESC rather than plugging the ESC into OpenDrift.
 
 Make sure the receiver, ESP32 board, and servo power system share ground.
 
+AMOLED V2 keeps receiver steering on GPIO 15 and throttle on GPIO 16, but moves steering output to GPIO 1 and the switchable gain/throttle connection to GPIO 2. Do not use GPIO 17/18 for OpenDrift signals on V2; Waveshare connects those pins to IMU_INT2 and TP_INT.
+
 CRSF targets repurpose the receiver pins:
 
 | Signal | GPIO | Direction | Notes |
@@ -81,7 +85,7 @@ CRSF targets repurpose the receiver pins:
 | Steering servo / servo port | 15 | Output | Standard 250 Hz servo PWM |
 | ESC throttle / throttle port | 16 | Output | Standard 50 Hz ESC PWM with active-neutral failsafe |
 
-Both CRSF targets use the same full-duplex implementation. They use the
+AMOLED V2 instead uses GPIO 1 for CRSF RX and GPIO 2 for CRSF TX while retaining GPIO 15 steering-servo output and GPIO 16 ESC output. All CRSF targets use the same full-duplex implementation and the
 separate `OpenDriftCRSF` settings namespace and do not overwrite a PWM tune.
 
 Throttle sensing is not required for basic stabilization, but it is strongly recommended. With the throttle signal connected, OpenDrift can release settled-drift features during power changes instead of inferring those events from yaw alone. Treat it like a sensored-motor cable: the fallback works without it, while Performance Mode has substantially better phase awareness.
@@ -109,6 +113,13 @@ pio run -e waveshare_amoled_164 -t upload
 
 The custom PlatformIO board definition is included at `OpenDrift/boards/waveshare_amoled_164.json`.
 
+AMOLED V2 uses separate targets:
+
+```sh
+pio run -e waveshare_amoled_164_v2
+pio run -e waveshare_amoled_164_v2_crsf
+```
+
 The deprecated round-board environment remains available for experimentation:
 
 ```sh
@@ -122,8 +133,7 @@ pio run -e waveshare_amoled_164_crsf
 pio run -e waveshare_128_crsf
 ```
 
-Both targets enable full-duplex CRSF, GPIO 16 ESC output, neutral-hold arming,
-and radio parameter telemetry on GPIO 18.
+All targets enable full-duplex CRSF, GPIO 16 ESC output, and neutral-hold arming. Telemetry uses GPIO 18 on V1/Round and GPIO 2 on AMOLED V2.
 
 Main dependencies are managed in `OpenDrift/platformio.ini`:
 
@@ -456,7 +466,7 @@ Important folders:
 - `OpenDrift/docs/Tuning.md`: complete tuning and blackbox interpretation guide.
 - `OpenDrift/docs/CRSF-Experimental.md`: CRSF wiring, failsafes, and validation
   workflow.
-- `OpenDrift/radio/edgetx`: source for the [OpenDrift EdgeTX tuning tool](https://github.com/doublej380-pixel/OpenDriftRC/releases/download/v1.0.1/OpenDrift.lua).
+- `OpenDrift/radio/edgetx`: source for the [OpenDrift EdgeTX tuning tool](https://github.com/doublej380-pixel/OpenDriftRC/releases/download/v1.0.2/OpenDrift.lua).
 - `OpenDrift/assets/backgrounds`: flash-resident AMOLED UI background data.
 - `OpenDrift/boards`: custom PlatformIO board definitions.
 
