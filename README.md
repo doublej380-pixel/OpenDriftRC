@@ -47,7 +47,7 @@ Visit [opendriftrc.com](https://opendriftrc.com) for the project overview, [wiri
 - Tail Slide Speed adjustment centered at the Open Beta baseline of `50`.
 - Separate PWM and full-duplex CRSF targets for both display boards.
 - Full-duplex CRSF steering, throttle, gain, link statistics, parameter
-  telemetry, neutral failsafes, and [EdgeTX tuning](https://github.com/doublej380-pixel/OpenDriftRC/releases/download/v1.0.0-beta.2/OpenDrift.lua) on AMOLED and round builds.
+  telemetry, neutral failsafes, and [EdgeTX tuning](https://github.com/doublej380-pixel/OpenDriftRC/releases/download/v1.0.1/OpenDrift.lua) on AMOLED and round builds.
 
 ## Hardware Routing
 
@@ -456,7 +456,7 @@ Important folders:
 - `OpenDrift/docs/Tuning.md`: complete tuning and blackbox interpretation guide.
 - `OpenDrift/docs/CRSF-Experimental.md`: CRSF wiring, failsafes, and validation
   workflow.
-- `OpenDrift/radio/edgetx`: source for the [OpenDrift EdgeTX tuning tool](https://github.com/doublej380-pixel/OpenDriftRC/releases/download/v1.0.0-beta.2/OpenDrift.lua).
+- `OpenDrift/radio/edgetx`: source for the [OpenDrift EdgeTX tuning tool](https://github.com/doublej380-pixel/OpenDriftRC/releases/download/v1.0.1/OpenDrift.lua).
 - `OpenDrift/assets/backgrounds`: flash-resident AMOLED UI background data.
 - `OpenDrift/boards`: custom PlatformIO board definitions.
 

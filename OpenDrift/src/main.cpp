@@ -264,9 +264,9 @@ public:
         canvas.setTextColor(0x7BEF);
         canvas.drawString(
             #if defined(OPENDRIFT_INPUT_CRSF)
-            "control kernel 1.0.0-beta.2 crsf  ttyOD0",
+            "control kernel 1.0.1 crsf  ttyOD0",
             #else
-            "control kernel 1.0.0-beta.2 pwm  ttyOD0",
+            "control kernel 1.0.1 pwm  ttyOD0",
             #endif
             8,
             27
