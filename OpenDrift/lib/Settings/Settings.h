@@ -113,6 +113,11 @@ public:
     bool getThrottleOutputEnabled();
     void setThrottleOutputEnabled(bool value);
 
+    // CRSF auxiliary receiver-style PWM outputs. A value of zero disables
+    // the GPIO; values 1-16 select the corresponding CRSF radio channel.
+    uint8_t getAuxChannelForGpio(uint8_t gpio);
+    void setAuxChannelForGpio(uint8_t gpio, uint8_t channel);
+
     // Driving profiles
     uint8_t getProfileCount();
     int8_t getActiveProfileIndex();
@@ -182,6 +187,8 @@ private:
     int gainMax = 2000;
 
     bool throttleOutputEnabled = false;
+
+    uint8_t auxChannels[8] = {0};
 
     DrivingProfile profiles[MAX_PROFILES];
 

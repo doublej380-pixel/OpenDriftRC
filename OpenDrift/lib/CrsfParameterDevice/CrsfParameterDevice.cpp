@@ -169,20 +169,58 @@ void CrsfParameterDevice::sendParameter(
         appendInt32(payload, length, definition->step);
         appendString(payload, length, definition->unit);
     }
-    else if(parameter == 15 || parameter == 16)
+    else if(
+        parameter == 15 ||
+        parameter == 16
+        #if defined(OPENDRIFT_BOARD_AMOLED_164)
+        || (parameter >= 17 && parameter <= 24)
+        #endif
+    )
     {
         appendByte(payload, length, 0);
         appendByte(payload, length, DATA_SELECTION);
-        appendString(
-            payload,
-            length,
-            parameter == 15 ? "Servo Reverse" : "Gyro Reverse"
-        );
-        appendString(payload, length, "Off;On");
-        appendByte(payload, length, getScaledValue(parameter));
-        appendByte(payload, length, 0);
-        appendByte(payload, length, 1);
-        appendByte(payload, length, 0);
+
+        #if defined(OPENDRIFT_BOARD_AMOLED_164)
+        if(parameter >= 17)
+        {
+            uint8_t gpio = parameter - 16;
+            bool available =
+                #if defined(OPENDRIFT_AMOLED_V2)
+                gpio >= 3;
+                #else
+                true;
+                #endif
+
+            char name[8];
+            snprintf(
+                name,
+                sizeof(name),
+                "GPIO%u",
+                gpio
+            );
+
+            appendString(payload, length, name);
+            appendString(payload, length, available ? "-;1;2;3;4;5;6;7;8;9;10;11;12;13;14;15;16" : "RES");
+            appendByte(payload, length, available ? getScaledValue(parameter) : 0);
+            appendByte(payload, length, 0);
+            appendByte(payload, length, available ? 16 : 0);
+            appendByte(payload, length, 0);
+        }
+        else
+        #endif
+        {
+            appendString(
+                payload,
+                length,
+                parameter == 15 ? "Servo Reverse" : "Gyro Reverse"
+            );
+            appendString(payload, length, "Off;On");
+            appendByte(payload, length, getScaledValue(parameter));
+            appendByte(payload, length, 0);
+            appendByte(payload, length, 1);
+            appendByte(payload, length, 0);
+        }
+
         appendString(payload, length, "");
     }
     else
@@ -216,9 +254,18 @@ void CrsfParameterDevice::writeParameter(
         value = readInt32(data);
         valueLength = 4;
     }
-    else if((parameter == 15 || parameter == 16) && length >= 1)
+    else if(
+        (
+            parameter == 15 ||
+            parameter == 16
+            #if defined(OPENDRIFT_BOARD_AMOLED_164)
+            || (parameter >= 17 && parameter <= 24)
+            #endif
+        ) &&
+        length >= 1
+    )
     {
-        value = data[0] != 0 ? 1 : 0;
+        value = data[0];
         valueLength = 1;
     }
     else
@@ -277,6 +324,16 @@ int32_t CrsfParameterDevice::getScaledValue(
         case 14: return settings->getServoCenter();
         case 15: return settings->getServoReverse() ? 1 : 0;
         case 16: return settings->getGyroReverse() ? 1 : 0;
+        #if defined(OPENDRIFT_BOARD_AMOLED_164)
+        case 17: return settings->getAuxChannelForGpio(1);
+        case 18: return settings->getAuxChannelForGpio(2);
+        case 19: return settings->getAuxChannelForGpio(3);
+        case 20: return settings->getAuxChannelForGpio(4);
+        case 21: return settings->getAuxChannelForGpio(5);
+        case 22: return settings->getAuxChannelForGpio(6);
+        case 23: return settings->getAuxChannelForGpio(7);
+        case 24: return settings->getAuxChannelForGpio(8);
+        #endif
         default: return 0;
     }
 }
@@ -317,6 +374,32 @@ void CrsfParameterDevice::setScaledValue(
         case 14: settings->setServoCenter(value); break;
         case 15: settings->setServoReverse(value != 0); break;
         case 16: settings->setGyroReverse(value != 0); break;
+        #if defined(OPENDRIFT_BOARD_AMOLED_164)
+        case 17:
+        case 18:
+        case 19:
+        case 20:
+        case 21:
+        case 22:
+        case 23:
+        case 24:
+        {
+            uint8_t gpio = parameter - 16;
+
+            #if defined(OPENDRIFT_AMOLED_V2)
+            if(gpio < 3)
+            {
+                value = 0;
+            }
+            #endif
+
+            settings->setAuxChannelForGpio(
+                gpio,
+                constrain(value, 0, 16)
+            );
+            break;
+        }
+        #endif
     }
 }
 

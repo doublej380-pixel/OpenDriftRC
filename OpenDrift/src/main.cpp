@@ -18,6 +18,9 @@
 #if defined(OPENDRIFT_INPUT_CRSF)
 #include "CrsfInput.h"
 #include "CrsfParameterDevice.h"
+#if defined(OPENDRIFT_BOARD_AMOLED_164)
+#include "AuxChannelOutputs.h"
+#endif
 #endif
 #include "WebConfigurator.h"
 #include "BlackboxLogger.h"
@@ -51,6 +54,9 @@ RadioInput throttleRadio;
 #if defined(OPENDRIFT_INPUT_CRSF)
 CrsfInput crsf;
 CrsfParameterDevice crsfParameters;
+#if defined(OPENDRIFT_BOARD_AMOLED_164)
+AuxChannelOutputs auxChannelOutputs;
+#endif
 #endif
 
 BlackboxLogger blackbox;
@@ -281,9 +287,9 @@ public:
         canvas.setTextColor(0x7BEF);
         canvas.drawString(
             #if defined(OPENDRIFT_INPUT_CRSF)
-            "control kernel 1.0.2 crsf  ttyOD0",
+            "control kernel 1.0.3 crsf  ttyOD0",
             #else
-            "control kernel 1.0.2 pwm  ttyOD0",
+            "control kernel 1.0.3 pwm  ttyOD0",
             #endif
             8,
             27
@@ -1434,6 +1440,11 @@ void setup()
     }
 
     bool throttleOutputOk = throttleOutputActive;
+
+    #if defined(OPENDRIFT_BOARD_AMOLED_164)
+    bool auxOutputsOk =
+        auxChannelOutputs.begin(settings);
+    #endif
     #else
     bool steeringRadioOk =
         steeringRadio.begin(
@@ -1486,6 +1497,18 @@ void setup()
         "crsf: channel adapters and pin routing ready",
         radioOk ? "[ OK ]" : "[FAIL]",
         radioOk ? TFT_GREEN : TFT_RED
+    );
+    #endif
+
+    #if defined(OPENDRIFT_INPUT_CRSF) && defined(OPENDRIFT_BOARD_AMOLED_164)
+    bootConsole.log(
+        #if defined(OPENDRIFT_AMOLED_V2)
+        "mcpwm: auxiliary outputs ready on gpio3-8",
+        #else
+        "mcpwm: auxiliary outputs ready on gpio1-8",
+        #endif
+        auxOutputsOk ? "[ OK ]" : "[WARN]",
+        auxOutputsOk ? TFT_GREEN : TFT_YELLOW
     );
     #endif
 
@@ -1832,6 +1855,14 @@ void loop()
         crsfThrottlePulse,
         crsfThrottleSignal
     );
+
+    #if defined(OPENDRIFT_BOARD_AMOLED_164)
+    auxChannelOutputs.update(
+        settings,
+        crsf,
+        crsf.hasSignal(CRSF_SIGNAL_TIMEOUT_MS)
+    );
+    #endif
     #else
     if(
         pin18ThrottleOutputMode &&

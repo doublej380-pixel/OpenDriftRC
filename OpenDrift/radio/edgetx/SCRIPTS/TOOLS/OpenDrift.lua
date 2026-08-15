@@ -19,7 +19,15 @@ local fields = {
   {13, "Servo Travel",    10,  150,   1, 0 },
   {14, "Servo Center",  1000, 2000,   1, 0 },
   {15, "Servo Reverse",    0,    1,   1, 0, true},
-  {16, "Gyro Reverse",     0,    1,   1, 0, true}
+  {16, "Gyro Reverse",     0,    1,   1, 0, true},
+  {17, "GPIO 1 Output",    0,   16,   1, 0, true, true},
+  {18, "GPIO 2 Output",    0,   16,   1, 0, true, true},
+  {19, "GPIO 3 Output",    0,   16,   1, 0, true, true},
+  {20, "GPIO 4 Output",    0,   16,   1, 0, true, true},
+  {21, "GPIO 5 Output",    0,   16,   1, 0, true, true},
+  {22, "GPIO 6 Output",    0,   16,   1, 0, true, true},
+  {23, "GPIO 7 Output",    0,   16,   1, 0, true, true},
+  {24, "GPIO 8 Output",    0,   16,   1, 0, true, true}
 }
 
 local selected = 1
@@ -91,6 +99,10 @@ local function consumeTelemetry()
           while index <= #data and data[index] ~= 0 do index = index + 1 end
           index = index + 1
           if index <= #data then field.value = data[index] end
+          if index + 2 <= #data then
+            field[3] = data[index + 1]
+            field[4] = data[index + 2]
+          end
         end
         connected = true
         lastRx = getTime()
@@ -112,6 +124,10 @@ end
 
 local function valueText(field)
   if field.value == nil then return "---" end
+  if field[8] then
+    if field[4] == 0 then return "RES" end
+    return field.value == 0 and "OFF" or "CH" .. tostring(field.value)
+  end
   if field[7] then return field.value == 0 and "OFF" or "ON" end
   local decimals = field[6]
   if decimals == 0 then return tostring(field.value) end

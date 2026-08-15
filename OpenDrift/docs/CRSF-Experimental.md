@@ -7,14 +7,16 @@ variant only when the receiver is wired through OpenDrift.
 
 - `waveshare_amoled_164_crsf`: full-duplex AMOLED target
 - `waveshare_amoled_164_v2_crsf`: full-duplex AMOLED V2 target
-- `waveshare_128_crsf`: full-duplex round-display target
+
+The Waveshare round-display target is frozen and is no longer part of current
+builds or releases.
 
 CRSF settings are stored in the separate `OpenDriftCRSF` NVS namespace, so
 they do not overwrite the corresponding PWM tune.
 
 All targets use the complete path: bounded CRSF receive processing, parameter
 telemetry, GPIO 16 ESC PWM, deterministic neutral behavior, and the
-[EdgeTX tuning tool](https://github.com/doublej380-pixel/OpenDriftRC/releases/download/v1.0.2/OpenDrift.lua). The round target proved stable with a SpeedyBee SB Nano at
+[EdgeTX tuning tool](https://github.com/doublej380-pixel/OpenDriftRC/releases/download/v1.0.3/OpenDrift.lua). The round target proved stable with a SpeedyBee SB Nano at
 the MT12's F1000 packet rate after the receive loop was given an explicit byte
 budget; the AMOLED target now uses the same CRSF implementation.
 
@@ -29,7 +31,7 @@ Wire the receiver signals crossed, as required by a UART:
 | GND | GND | Common signal ground |
 | 5V | Vehicle BEC 5V | Receiver power |
 
-That table applies to AMOLED V1 and Round. AMOLED V2 uses GPIO 1 for receiver
+That table applies to AMOLED V1. AMOLED V2 uses GPIO 1 for receiver
 TX into OpenDrift and GPIO 2 for receiver RX/parameter telemetry. Do not use
 GPIO 17/18 for external signals on V2 because Waveshare connects them to
 IMU_INT2 and TP_INT.
@@ -58,6 +60,14 @@ Channel values are decoded from native 11-bit CRSF frames. Existing steering
 calibration, travel, gyro processing, web status, and blackbox logging consume
 those decoded values through the same interfaces used by the PWM build.
 
+## Auxiliary channel outputs
+
+The local WiFi configurator can assign CRSF channel 1–16 independently to
+GPIO 1–8 on AMOLED V1. AMOLED V2 offers GPIO 3–8 because GPIO 1/2 are used by
+the CRSF UART. Outputs use standard 50 Hz receiver PWM and command 1500
+microseconds on signal loss. They are 3.3 V signal pins, not accessory power
+outputs; use external power and a common ground for lights and controllers.
+
 ## Failsafes
 
 - A CRSF channel frame older than 50 ms is treated as signal loss.
@@ -67,10 +77,10 @@ those decoded values through the same interfaces used by the PWM build.
 - If the link is lost, the full build commands neutral throttle immediately.
   Reconnection requires another neutral hold before live throttle passes.
 
-## [EdgeTX parameter tool](https://github.com/doublej380-pixel/OpenDriftRC/releases/download/v1.0.2/OpenDrift.lua)
+## [EdgeTX parameter tool](https://github.com/doublej380-pixel/OpenDriftRC/releases/download/v1.0.3/OpenDrift.lua)
 
-Download [`OpenDrift.lua`](https://github.com/doublej380-pixel/OpenDriftRC/releases/download/v1.0.2/OpenDrift.lua) and copy it to `SCRIPTS/TOOLS/OpenDrift.lua` on the radio SD
-card, then open **OpenDrift** from the [EdgeTX Tools menu](https://github.com/doublej380-pixel/OpenDriftRC/releases/download/v1.0.2/OpenDrift.lua). The current tool reads
+Download [`OpenDrift.lua`](https://github.com/doublej380-pixel/OpenDriftRC/releases/download/v1.0.3/OpenDrift.lua) and copy it to `SCRIPTS/TOOLS/OpenDrift.lua` on the radio SD
+card, then open **OpenDrift** from the [EdgeTX Tools menu](https://github.com/doublej380-pixel/OpenDriftRC/releases/download/v1.0.3/OpenDrift.lua). The current tool reads
 and writes sixteen settings over full-duplex CRSF:
 
 - saved gain, deadband, max correction, and smoothing;
@@ -82,6 +92,10 @@ and writes sixteen settings over full-duplex CRSF:
 Writes are acknowledged over CRSF, applied live, saved through the normal
 delayed settings writer, and request an immediate redraw of the current gyro
 screen.
+
+The same tool also exposes the auxiliary output map. AMOLED V1 can assign
+GPIO 1–8 to CRSF channel 1–16 or Off. AMOLED V2 can assign GPIO 3–8; GPIO 1/2
+show as reserved because they carry the CRSF UART.
 
 ## Problems found during validation
 
@@ -107,7 +121,8 @@ screen.
    `throttle=ARMED`.
 7. Turn the transmitter off. Steering and throttle must return to neutral and
    the report must return to `throttle=LOCKED`.
-8. Open the [EdgeTX tool](https://github.com/doublej380-pixel/OpenDriftRC/releases/download/v1.0.2/OpenDrift.lua), change one harmless value, and confirm both the radio
-   acknowledgement and gyro-screen refresh.
+8. Open the [EdgeTX tool](https://github.com/doublej380-pixel/OpenDriftRC/releases/download/v1.0.3/OpenDrift.lua), change one harmless value, and confirm both the radio
+acknowledgement and gyro-screen refresh.
+
 
 Only reconnect the motor after every applicable check passes.

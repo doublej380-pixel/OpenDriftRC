@@ -23,7 +23,11 @@ public:
 private:
 
     static constexpr uint8_t DEVICE_ADDRESS = 0xC8;
+    #if defined(OPENDRIFT_BOARD_AMOLED_164)
+    static constexpr uint8_t PARAMETER_COUNT = 25;
+    #else
     static constexpr uint8_t PARAMETER_COUNT = 17;
+    #endif
 
     static constexpr uint8_t TYPE_PARAMETER_PING = 0x28;
     static constexpr uint8_t TYPE_DEVICE_INFO = 0x29;

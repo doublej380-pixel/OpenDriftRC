@@ -10,7 +10,7 @@ See the current [Technical Tuning Reference](OpenDrift/docs/Tuning.md) for the s
 
 ## Install Firmware
 
-Visit [opendriftrc.com](https://opendriftrc.com) for the project overview, [wiring reference](https://opendriftrc.com/wiring/), and Open Beta firmware. The [browser installer](https://opendriftrc.com/flash/) provides AMOLED and round-display images with either PWM or CRSF receiver support, without an account, source compilation, or command-line tools.
+Visit [opendriftrc.com](https://opendriftrc.com) for the project overview, [wiring reference](https://opendriftrc.com/wiring/), and Open Beta firmware. The [browser installer](https://opendriftrc.com/flash/) provides current AMOLED images with either PWM or CRSF receiver support, without an account, source compilation, or command-line tools. Historical round-display releases remain available but are frozen.
 
 ## Current Features
 
@@ -45,9 +45,11 @@ Visit [opendriftrc.com](https://opendriftrc.com) for the project overview, [wiri
 - Temporary blackbox v10 CSV logging with OpenDrift v1.0 reference, prediction, throttle, and correction telemetry.
 - Persistent settings stored in ESP32 preferences.
 - Tail Slide Speed adjustment centered at the Open Beta baseline of `50`.
-- Separate PWM and full-duplex CRSF targets for both display boards.
+- Separate PWM and full-duplex CRSF targets for Waveshare AMOLED V1 and V2.
 - Full-duplex CRSF steering, throttle, gain, link statistics, parameter
-  telemetry, neutral failsafes, and [EdgeTX tuning](https://github.com/doublej380-pixel/OpenDriftRC/releases/download/v1.0.2/OpenDrift.lua) on AMOLED and round builds.
+  telemetry, neutral failsafes, and [EdgeTX tuning](https://github.com/doublej380-pixel/OpenDriftRC/releases/download/v1.0.3/OpenDrift.lua).
+- CRSF channel routing to accessory PWM outputs: GPIO 1–8 on AMOLED V1 and
+  GPIO 3–8 on AMOLED V2.
 
 ## Hardware Routing
 
@@ -57,7 +59,7 @@ The **Waveshare ESP32-S3 Touch AMOLED 1.64** is the final and primary OpenDrift 
 
 Waveshare ships V1 and V2 revisions that require different firmware. V1 has its version silkscreen at the top of the PCB and uses LCD_CS on GPIO 9. V2 has the silkscreen beside the right-side pin headers and uses LCD_CS on GPIO 46. Select the exact revision in the web flasher.
 
-The older Waveshare 1.28-inch round display build is deprecated. Its PlatformIO environment and implementation remain in the repository for experimentation, but it may not receive new UI features or the same level of testing.
+The older Waveshare 1.28-inch round display build is deprecated and frozen. Its PlatformIO environment and implementation remain in the repository for experimentation, but no new firmware releases or feature-parity work are planned.
 
 AMOLED V1 and the Round board use this PWM pinout:
 
@@ -87,6 +89,12 @@ CRSF targets repurpose the receiver pins:
 
 AMOLED V2 instead uses GPIO 1 for CRSF RX and GPIO 2 for CRSF TX while retaining GPIO 15 steering-servo output and GPIO 16 ESC output. All CRSF targets use the same full-duplex implementation and the
 separate `OpenDriftCRSF` settings namespace and do not overwrite a PWM tune.
+
+CRSF builds can also mirror any receiver channel to accessory outputs from the
+WiFi web configurator. AMOLED V1 exposes GPIO 1–8; AMOLED V2 exposes GPIO 3–8
+because GPIO 1/2 carry CRSF. Each enabled pin emits standard 50 Hz receiver PWM
+and returns to 1500 microseconds when the CRSF link is lost. These are 3.3 V
+signal outputs only: power lights and accessories separately and share ground.
 
 Throttle sensing is not required for basic stabilization, but it is strongly recommended. With the throttle signal connected, OpenDrift can release settled-drift features during power changes instead of inferring those events from yaw alone. Treat it like a sensored-motor cable: the fallback works without it, while Performance Mode has substantially better phase awareness.
 
@@ -120,7 +128,7 @@ pio run -e waveshare_amoled_164_v2
 pio run -e waveshare_amoled_164_v2_crsf
 ```
 
-The deprecated round-board environment remains available for experimentation:
+The frozen round-board environment remains available for local experimentation:
 
 ```sh
 pio run -e waveshare_128
@@ -130,10 +138,9 @@ CRSF builds are intentionally separate:
 
 ```sh
 pio run -e waveshare_amoled_164_crsf
-pio run -e waveshare_128_crsf
 ```
 
-All targets enable full-duplex CRSF, GPIO 16 ESC output, and neutral-hold arming. Telemetry uses GPIO 18 on V1/Round and GPIO 2 on AMOLED V2.
+Both supported targets enable full-duplex CRSF, GPIO 16 ESC output, and neutral-hold arming. Telemetry uses GPIO 18 on AMOLED V1 and GPIO 2 on AMOLED V2.
 
 Main dependencies are managed in `OpenDrift/platformio.ini`:
 
@@ -466,7 +473,7 @@ Important folders:
 - `OpenDrift/docs/Tuning.md`: complete tuning and blackbox interpretation guide.
 - `OpenDrift/docs/CRSF-Experimental.md`: CRSF wiring, failsafes, and validation
   workflow.
-- `OpenDrift/radio/edgetx`: source for the [OpenDrift EdgeTX tuning tool](https://github.com/doublej380-pixel/OpenDriftRC/releases/download/v1.0.2/OpenDrift.lua).
+- `OpenDrift/radio/edgetx`: source for the [OpenDrift EdgeTX tuning tool](https://github.com/doublej380-pixel/OpenDriftRC/releases/download/v1.0.3/OpenDrift.lua).
 - `OpenDrift/assets/backgrounds`: flash-resident AMOLED UI background data.
 - `OpenDrift/boards`: custom PlatformIO board definitions.
 

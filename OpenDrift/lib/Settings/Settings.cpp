@@ -253,6 +253,24 @@ bool Settings::begin()
         false
     );
 
+    for(uint8_t index = 0; index < 8; index++)
+    {
+        char key[10];
+
+        snprintf(
+            key,
+            sizeof(key),
+            "auxCh%u",
+            index + 1
+        );
+
+        auxChannels[index] = constrain(
+            prefs.getUChar(key, 0),
+            0,
+            16
+        );
+    }
+
     loadProfiles();
 
     return true;
@@ -395,6 +413,23 @@ void Settings::save()
         "thrOut",
         throttleOutputEnabled
     );
+
+    for(uint8_t index = 0; index < 8; index++)
+    {
+        char key[10];
+
+        snprintf(
+            key,
+            sizeof(key),
+            "auxCh%u",
+            index + 1
+        );
+
+        prefs.putUChar(
+            key,
+            auxChannels[index]
+        );
+    }
 
     if(
         activeProfileIndex >= 0 &&
@@ -765,6 +800,35 @@ bool Settings::getThrottleOutputEnabled()
 void Settings::setThrottleOutputEnabled(bool value)
 {
     throttleOutputEnabled = value;
+    dirty = true;
+}
+
+uint8_t Settings::getAuxChannelForGpio(uint8_t gpio)
+{
+    if(gpio < 1 || gpio > 8)
+    {
+        return 0;
+    }
+
+    return auxChannels[gpio - 1];
+}
+
+void Settings::setAuxChannelForGpio(
+    uint8_t gpio,
+    uint8_t channel
+)
+{
+    if(gpio < 1 || gpio > 8)
+    {
+        return;
+    }
+
+    auxChannels[gpio - 1] = constrain(
+        channel,
+        (uint8_t)0,
+        (uint8_t)16
+    );
+
     dirty = true;
 }
 

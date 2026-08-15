@@ -1,5 +1,9 @@
 #include "WebConfigurator.h"
 
+#if defined(OPENDRIFT_INPUT_CRSF) && defined(OPENDRIFT_BOARD_AMOLED_164)
+#include "AuxChannelOutputs.h"
+#endif
+
 #include <FFat.h>
 
 
@@ -163,7 +167,7 @@ void WebConfigurator::handleRoot()
 
     String html;
 
-    html.reserve(14000);
+    html.reserve(20000);
 
     html += F("<!doctype html><html><head><meta name='viewport' content='width=device-width,initial-scale=1'>");
     html += F("<title>OpenDrift Config</title><style>");
@@ -171,7 +175,7 @@ void WebConfigurator::handleRoot()
     html += F("main{max-width:760px;margin:0 auto;padding:18px}");
     html += F("h1{font-size:28px;margin:8px 0 2px}h2{font-size:18px;margin:22px 0 10px}");
     html += F(".sub{color:#aeb4bb;margin-bottom:20px}.card{border:1px solid #33383f;border-radius:8px;padding:14px;margin:12px 0;background:#171a1f}");
-    html += F("label{display:block;font-size:13px;color:#c8cdd2;margin:12px 0 5px}input{width:100%;box-sizing:border-box;background:#0b0d10;color:#fff;border:1px solid #3b4148;border-radius:6px;padding:10px;font-size:16px}");
+    html += F("label{display:block;font-size:13px;color:#c8cdd2;margin:12px 0 5px}input,select{width:100%;box-sizing:border-box;background:#0b0d10;color:#fff;border:1px solid #3b4148;border-radius:6px;padding:10px;font-size:16px}");
     html += F("input[type=checkbox]{width:auto;transform:scale(1.3);margin-right:8px}.row{display:grid;grid-template-columns:1fr 1fr;gap:10px}");
     html += F(".status{display:grid;grid-template-columns:1fr 1fr;gap:8px}.pill{background:#0b0d10;border:1px solid #33383f;border-radius:6px;padding:10px}");
     html += F("button{width:100%;padding:13px 16px;border:0;border-radius:6px;background:#24a36b;color:#fff;font-size:17px;font-weight:700;margin-top:16px}");
@@ -327,6 +331,56 @@ void WebConfigurator::handleRoot()
     );
     #endif
     html += F("</div>");
+
+    #if defined(OPENDRIFT_INPUT_CRSF) && defined(OPENDRIFT_BOARD_AMOLED_164)
+    html += F("<div class='card'><h2>Auxiliary Channel Outputs</h2><p class='sub'>Route any CRSF channel to a standard 50 Hz receiver-style PWM signal. Outputs return to 1500 us on signal loss. GPIO is 3.3 V signal only: power accessories externally and connect a common ground.</p><div class='row'>");
+
+    for(uint8_t gpio = 1; gpio <= 8; gpio++)
+    {
+        html += F("<div><label>GPIO ");
+        html += String(gpio);
+
+        if(!AuxChannelOutputs::isPinAvailable(gpio))
+        {
+            html += F("</label><div class='pill'>Reserved for CRSF UART</div></div>");
+            continue;
+        }
+
+        html += F("</label><select name='auxGpio");
+        html += String(gpio);
+        html += F("'><option value='0'");
+
+        uint8_t selectedChannel =
+            settings->getAuxChannelForGpio(gpio);
+
+        if(selectedChannel == 0)
+        {
+            html += F(" selected");
+        }
+
+        html += F(">Disabled</option>");
+
+        for(uint8_t channel = 1; channel <= 16; channel++)
+        {
+            html += F("<option value='");
+            html += String(channel);
+            html += F("'");
+
+            if(selectedChannel == channel)
+            {
+                html += F(" selected");
+            }
+
+            html += F(">CRSF Channel ");
+            html += String(channel);
+            html += F("</option>");
+        }
+
+        html += F("</select></div>");
+    }
+
+    html += F("</div><p class='sub'>Mappings take effect immediately after Save Settings. Multiple GPIOs may mirror the same channel.</p></div>");
+    #endif
 
     html += F("<div class='card'><h2>WiFi</h2>");
     html += checkbox("Enable WiFi on boot", "wifiEnabled", settings->getWifiEnabled());
@@ -535,6 +589,33 @@ void WebConfigurator::handleSave()
     settings->setThrottleOutputEnabled(
         server.hasArg("throttleOutputEnabled")
     );
+    #endif
+
+    #if defined(OPENDRIFT_INPUT_CRSF) && defined(OPENDRIFT_BOARD_AMOLED_164)
+    for(uint8_t gpio = 1; gpio <= 8; gpio++)
+    {
+        if(!AuxChannelOutputs::isPinAvailable(gpio))
+        {
+            continue;
+        }
+
+        char argument[12];
+
+        snprintf(
+            argument,
+            sizeof(argument),
+            "auxGpio%u",
+            gpio
+        );
+
+        settings->setAuxChannelForGpio(
+            gpio,
+            getIntArg(
+                argument,
+                settings->getAuxChannelForGpio(gpio)
+            )
+        );
+    }
     #endif
 
     settings->setWifiEnabled(

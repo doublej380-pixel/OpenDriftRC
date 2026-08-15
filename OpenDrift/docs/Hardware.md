@@ -2,7 +2,7 @@
 
 ## Primary board
 
-The final supported target is the Waveshare ESP32-S3 Touch AMOLED 1.64. The older Waveshare 1.28-inch round display remains as a deprecated experimental build.
+The final supported target is the Waveshare ESP32-S3 Touch AMOLED 1.64. The older Waveshare 1.28-inch round display is deprecated and frozen; its existing source remains available for experimentation but receives no new releases or feature-parity work.
 
 The AMOLED board has incompatible V1 and V2 revisions. V1 is marked at the top of the PCB and uses LCD_CS GPIO 9. V2 is marked beside the right-side headers and uses LCD_CS GPIO 46. V2 also connects IMU_INT2 to GPIO 17 and TP_INT to GPIO 18, so OpenDrift does not use GPIO 17/18 for external signals on V2.
 
@@ -56,6 +56,23 @@ CRSF channel mapping is channel 1 steering, channel 2 throttle, and channel 3
 gain. A stale channel frame centers steering and commands neutral throttle.
 Throttle output requires a valid link and a 500 ms neutral hold
 before arming.
+
+## CRSF auxiliary channel outputs
+
+The AMOLED CRSF builds can mirror any CRSF channel from 1 through 16 to a
+standard 50 Hz receiver-style PWM signal. Assign each pin independently in the
+WiFi web configurator under **Auxiliary Channel Outputs**.
+
+| Board | Available auxiliary GPIOs |
+| --- | --- |
+| AMOLED V1 CRSF | GPIO 1–8 |
+| AMOLED V2 CRSF | GPIO 3–8 |
+
+GPIO 1/2 are unavailable on V2 because they carry the CRSF UART. Disabled pins
+remain inputs. Enabled pins output the selected channel and command 1500
+microseconds when the CRSF link is lost. GPIOs provide a 3.3 V signal only;
+lights, controllers, or other accessories require their own appropriate power
+supply and a common ground with OpenDrift.
 
 ## Throttle sensing
 
