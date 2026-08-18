@@ -287,9 +287,9 @@ public:
         canvas.setTextColor(0x7BEF);
         canvas.drawString(
             #if defined(OPENDRIFT_INPUT_CRSF)
-            "control kernel 1.0.3 crsf  ttyOD0",
+            "control kernel 1.0.4 crsf  ttyOD0",
             #else
-            "control kernel 1.0.3 pwm  ttyOD0",
+            "control kernel 1.0.4 pwm  ttyOD0",
             #endif
             8,
             27
@@ -1413,7 +1413,8 @@ void setup()
 
     crsfParameters.begin(
         crsf,
-        settings
+        settings,
+        gyro
     );
 
     bool steeringRadioOk = steeringRadio.beginExternal();

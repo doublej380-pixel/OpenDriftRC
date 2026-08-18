@@ -7,7 +7,7 @@ namespace
 {
     const CrsfParameterDevice::FloatDefinition FLOAT_PARAMETERS[] =
     {
-        {"Saved Gain",       50,  500, 150, 2,   5, "x"},
+        {"Active Gain",      50,  500, 150, 2,   5, "x"},
         {"Deadband",          0,  200,  20, 1,   1, "dps"},
         {"Max Correction",    0, 1000, 250, 0,  10, "us"},
         {"Smoothing",         1,  100,  10, 2,   1, ""},
@@ -27,11 +27,13 @@ namespace
 
 void CrsfParameterDevice::begin(
     CrsfInput& input,
-    Settings& storedSettings
+    Settings& storedSettings,
+    GyroController& activeGyro
 )
 {
     crsf = &input;
     settings = &storedSettings;
+    gyro = &activeGyro;
 }
 
 
@@ -308,7 +310,14 @@ int32_t CrsfParameterDevice::getScaledValue(
 {
     switch(parameter)
     {
-        case 1: return lroundf(settings->getGain() * 100.0f);
+        // Channel 3 is authoritative while it has a valid signal. Report the
+        // controller's live value so EdgeTX never shows the saved fallback
+        // while the car is actually running a different gain.
+        case 1:
+            return lroundf(
+                (gyro != nullptr ? gyro->getGain() : settings->getGain())
+                * 100.0f
+            );
         case 2: return lroundf(settings->getDeadband() * 10.0f);
         case 3: return settings->getGyroMaxCorrection();
         case 4: return lroundf(settings->getGyroSmoothing() * 100.0f);

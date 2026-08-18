@@ -62,6 +62,15 @@ void WebConfigurator::begin(
     );
 
     server.on(
+        "/live-status",
+        HTTP_GET,
+        [this]()
+        {
+            handleLiveStatus();
+        }
+    );
+
+    server.on(
         "/create-profile",
         HTTP_POST,
         [this]()
@@ -191,6 +200,9 @@ void WebConfigurator::handleRoot()
     html += F("</div><div class='pill'>Gain: ");
     html += String(gainRadio->getPulseWidth());
     html += gainRadio->hasSignal() ? F(" OK") : F(" NO SIGNAL");
+    html += F("</div><div class='pill'>Active gain: <strong id='activeGain'>");
+    html += gyro != nullptr ? String(gyro->getGain(), 2) : F("--");
+    html += F("</strong><br><small id='gainOverride'>Checking gain source...</small>");
     html += F("</div><div class='pill'>Throttle: ");
     html += String(throttleRadio->getPulseWidth());
     html += throttleRadio->hasSignal() ? F(" OK") : F(" NO SIGNAL");
@@ -270,7 +282,7 @@ void WebConfigurator::handleRoot()
     html += F("<form method='post' action='/save'>");
 
     html += F("<div class='card'><h2>Drive &amp; Limits</h2><div class='row'>");
-    html += input("Gain", "gain", String(settings->getGain(), 2), "number", "0.01");
+    html += input("Saved gain (fallback)", "gain", String(settings->getGain(), 2), "number", "0.01");
     html += input("Deadband", "deadband", String(settings->getDeadband(), 2), "number", "1");
     html += input("Max correction (us)", "gyroMax", String(settings->getGyroMaxCorrection()), "number", "1");
     html += F("</div>");
@@ -421,12 +433,60 @@ void WebConfigurator::handleRoot()
 
     html += F("</div>");
 
-    html += F("</main></body></html>");
+    html += F("</main><script>function updateLive(){fetch('/live-status',{cache:'no-store'}).then(r=>r.json()).then(s=>{document.getElementById('activeGain').textContent=Number(s.gain).toFixed(2);document.getElementById('gainOverride').textContent=s.override?'CH3 gain override active':'Saved gain active';}).catch(()=>{});}updateLive();setInterval(updateLive,500);</script></body></html>");
 
     server.send(
         200,
         "text/html",
         html
+    );
+}
+
+
+void WebConfigurator::handleLiveStatus()
+{
+    if(
+        settings == nullptr ||
+        gyro == nullptr ||
+        gainRadio == nullptr
+    )
+    {
+        server.send(
+            503,
+            "application/json",
+            "{\"error\":\"unavailable\"}"
+        );
+
+        return;
+    }
+
+    bool gainOverride = gainRadio->hasSignal();
+
+    #if !defined(OPENDRIFT_INPUT_CRSF)
+    gainOverride =
+        gainOverride &&
+        !settings->getThrottleOutputEnabled();
+    #endif
+
+    String json;
+    json.reserve(72);
+    json += F("{\"gain\":");
+    json += String(gyro->getGain(), 2);
+    json += F(",\"pulse\":");
+    json += String(gainRadio->getPulseWidth());
+    json += F(",\"override\":");
+    json += gainOverride ? F("true") : F("false");
+    json += F("}");
+
+    server.sendHeader(
+        "Cache-Control",
+        "no-store"
+    );
+
+    server.send(
+        200,
+        "application/json",
+        json
     );
 }
 

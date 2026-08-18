@@ -3,6 +3,7 @@
 #include <Arduino.h>
 
 #include "CrsfInput.h"
+#include "GyroController.h"
 #include "Settings.h"
 
 
@@ -12,7 +13,8 @@ public:
 
     void begin(
         CrsfInput& input,
-        Settings& settings
+        Settings& settings,
+        GyroController& gyro
     );
 
     void update();
@@ -57,6 +59,7 @@ private:
 
     CrsfInput* crsf = nullptr;
     Settings* settings = nullptr;
+    GyroController* gyro = nullptr;
     bool settingsChanged = false;
 
     void processFrame(

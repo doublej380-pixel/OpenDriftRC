@@ -124,6 +124,8 @@ private:
 
     unsigned long lastRadioRefresh = 0;
 
+    int16_t lastDrawnGainHundredths = -1;
+
     unsigned long lastPageSwipe = 0;
 
     uint8_t radioSection = 0;

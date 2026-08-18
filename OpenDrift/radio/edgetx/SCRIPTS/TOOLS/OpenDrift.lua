@@ -4,7 +4,7 @@ local DEVICE = 0xC8
 local RADIO = 0xEA
 
 local fields = {
-  { 1, "Saved Gain",      50,  500,   5, 2 },
+  { 1, "Active Gain",     50,  500,   5, 2 },
   { 2, "Deadband",         0,  200,   1, 1 },
   { 3, "Max Correction",   0, 1000,  10, 0 },
   { 4, "Smoothing",        1,  100,   1, 2 },
@@ -36,7 +36,8 @@ local editing = false
 local connected = false
 local lastRx = 0
 local nextRequest = 0
-local requestIndex = 1
+local requestIndex = 2
+local nextGainRequest = 0
 
 local function readInt32(data, index)
   local value = data[index] * 16777216
@@ -138,7 +139,7 @@ end
 local function moveSelection(step)
   selected = math.max(1, math.min(#fields, selected + step))
   if selected < scroll then scroll = selected end
-  if selected > scroll + 4 then scroll = selected - 4 end
+  if selected > scroll + 3 then scroll = selected - 3 end
   requestField(fields[selected])
 end
 
@@ -151,8 +152,9 @@ end
 
 local function init()
   for i = 1, #fields do fields[i].value = nil end
-  requestIndex = 1
+  requestIndex = 2
   nextRequest = 0
+  nextGainRequest = 0
 end
 
 local function run(event)
@@ -164,8 +166,15 @@ local function run(event)
   if now >= nextRequest then
     requestField(fields[requestIndex])
     requestIndex = requestIndex + 1
-    if requestIndex > #fields then requestIndex = 1 end
+    if requestIndex > #fields then requestIndex = 2 end
     nextRequest = now + 15
+  end
+
+  -- Keep the displayed gain following channel 3 instead of waiting for a
+  -- complete parameter-list polling cycle.
+  if now >= nextGainRequest then
+    requestField(fields[1])
+    nextGainRequest = now + 25
   end
 
   local right = event == EVT_ROT_RIGHT or event == EVT_VIRTUAL_NEXT
@@ -184,15 +193,16 @@ local function run(event)
   lcd.clear()
   lcd.drawText(1, 0, "OpenDrift CRSF", INVERS)
   lcd.drawText(127, 0, connected and "LINK" or "WAIT", RIGHT + INVERS)
+  lcd.drawText(1, 10, "CH3 OVERRIDES GAIN", 0)
 
-  for row = 0, 4 do
+  for row = 0, 3 do
     local index = scroll + row
     if index <= #fields then
       local field = fields[index]
       local flags = index == selected and INVERS or 0
       if editing and index == selected then flags = flags + BLINK end
-      lcd.drawText(1, 12 + row * 10, field[2], flags)
-      lcd.drawText(127, 12 + row * 10, valueText(field), RIGHT + flags)
+      lcd.drawText(1, 21 + row * 10, field[2], flags)
+      lcd.drawText(127, 21 + row * 10, valueText(field), RIGHT + flags)
     end
   end
 

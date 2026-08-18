@@ -49,6 +49,8 @@ private:
 
     void handleRoot();
 
+    void handleLiveStatus();
+
     void handleSave();
 
     void handleProfileCreate();

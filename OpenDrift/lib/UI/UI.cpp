@@ -1647,6 +1647,9 @@ void UI::drawMainPage(
     Settings& settings
 )
 {
+    lastDrawnGainHundredths =
+        (int16_t)(gyro.getGain() * 100.0f + 0.5f);
+
     #if !defined(OPENDRIFT_BOARD_AMOLED_164)
     drawUiBackground(lcd);
 
@@ -5472,6 +5475,7 @@ void UI::update(
     // preview; refreshing here would briefly restore the source page.
     if(
         (
+            page == PAGE_DRIVE ||
             page == PAGE_RADIO ||
             page == PAGE_STEERING
         ) &&
@@ -5484,12 +5488,28 @@ void UI::update(
         millis() - lastRadioRefresh > 250
     )
     {
-        updateRadioPage(
-            steeringRadio,
-            gainRadio,
-            settings,
-            gyro
-        );
+        if(page == PAGE_DRIVE)
+        {
+            int16_t activeGainHundredths =
+                (int16_t)(gyro.getGain() * 100.0f + 0.5f);
+
+            if(activeGainHundredths != lastDrawnGainHundredths)
+            {
+                drawMainPage(
+                    gyro,
+                    settings
+                );
+            }
+        }
+        else
+        {
+            updateRadioPage(
+                steeringRadio,
+                gainRadio,
+                settings,
+                gyro
+            );
+        }
 
         lastRadioRefresh =
             millis();
