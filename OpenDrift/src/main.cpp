@@ -287,9 +287,9 @@ public:
         canvas.setTextColor(0x7BEF);
         canvas.drawString(
             #if defined(OPENDRIFT_INPUT_CRSF)
-            "control kernel 1.0.4 crsf  ttyOD0",
+            "control kernel 1.0.5 crsf  ttyOD0",
             #else
-            "control kernel 1.0.4 pwm  ttyOD0",
+            "control kernel 1.0.5 pwm  ttyOD0",
             #endif
             8,
             27
@@ -1106,7 +1106,13 @@ void updateBlackboxAvailability()
         blackboxStarted =
             true;
 
-        Serial.println("Blackbox logging OK");
+        Serial.printf(
+            "Blackbox PSRAM logger OK: %u KB\n",
+            (unsigned)(
+                blackbox.getCapacityBytes() /
+                1024
+            )
+        );
     }
     else
     {
@@ -1627,8 +1633,8 @@ void setup()
 
         bootConsole.log(
             blackbox.isReady()
-            ? "ffat: blackbox recorder mounted"
-            : "ffat: blackbox recorder unavailable",
+            ? "psram: blackbox recorder allocated"
+            : "psram: blackbox recorder unavailable",
             blackbox.isReady() ? "[ OK ]" : "[WARN]",
             blackbox.isReady() ? TFT_GREEN : TFT_YELLOW
         );
@@ -1638,7 +1644,7 @@ void setup()
         Serial.println("Blackbox logging disabled");
 
         bootConsole.log(
-            "ffat: blackbox recorder disabled",
+            "psram: blackbox recorder disabled",
             "[SKIP]",
             0x8410
         );
@@ -2002,14 +2008,6 @@ void loop()
             settings.getGyroTailSlideSpeed(),
             gyro.getTailSlideBlend()
         );
-    }
-
-    if(
-        settings.getBlackboxEnabled() &&
-        blackbox.isReady()
-    )
-    {
-        blackbox.update(false);
     }
 
     delay(1);

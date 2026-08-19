@@ -4,9 +4,6 @@
 #include "AuxChannelOutputs.h"
 #endif
 
-#include <FFat.h>
-
-
 WebConfigurator::WebConfigurator()
 :
 server(80)
@@ -112,15 +109,6 @@ void WebConfigurator::begin(
         [this]()
         {
             handleLogClear();
-        }
-    );
-
-    server.on(
-        "/flush-log",
-        HTTP_POST,
-        [this]()
-        {
-            handleLogFlush();
         }
     );
 
@@ -413,22 +401,36 @@ void WebConfigurator::handleRoot()
     }
     else if(blackbox != nullptr && blackbox->isReady())
     {
-        html += F("<p class='sub'>Size: ");
+        html += F("<p class='sub'>Binary records in PSRAM: ");
+        html += String(blackbox->getRecordCount());
+        html += F(" &middot; used: ");
         html += String(blackbox->getSize() / 1024);
-        html += F(" KB");
+        html += F(" / ");
+        html += String(blackbox->getCapacityBytes() / 1024);
+        html += F(" KB &middot; duration: ");
+        html += String(blackbox->getDurationMs() / 60000);
+        html += F("m ");
+        html += String((blackbox->getDurationMs() / 1000) % 60);
+        html += F("s");
 
         if(blackbox->isFull())
         {
-            html += F(" - full");
+            html += F(" &middot; retaining newest records");
         }
 
-        html += F("</p><a href='/blackbox.csv'>Download CSV</a>");
-        html += F("<form method='post' action='/flush-log'><button type='submit'>Flush Log</button></form>");
-        html += F("<form method='post' action='/clear-log'><button type='submit'>Clear Log</button></form>");
+        if(blackbox->getOverwrittenRows() > 0)
+        {
+            html += F(" &middot; overwritten: ");
+            html += String(blackbox->getOverwrittenRows());
+        }
+
+        html += F("</p><p class='sub'>Stage-one logger: records stay entirely in volatile PSRAM. No internal flash writes occur. Download converts the binary records to CSV; power cycling clears the log.</p>");
+        html += F("<a href='/blackbox.csv'>Download CSV</a>");
+        html += F("<form method='post' action='/clear-log'><button type='submit'>Clear RAM Log</button></form>");
     }
     else
     {
-        html += F("<p class='sub'>Log storage unavailable.</p>");
+        html += F("<p class='sub'>PSRAM log buffer unavailable.</p>");
     }
 
     html += F("</div>");
@@ -867,78 +869,72 @@ void WebConfigurator::handleLogDownload()
         return;
     }
 
-    blackbox->flush();
-
-    File file =
-        FFat.open(
-            blackbox->getPath(),
-            FILE_READ
-        );
-
-    if(!file)
-    {
-        server.send(
-            404,
-            "text/plain",
-            "Log file not found"
-        );
-
-        return;
-    }
-
     server.sendHeader(
         "Content-Disposition",
         "attachment; filename=opendrift-blackbox.csv"
     );
 
-    server.streamFile(
-        file,
-        "text/csv"
-    );
-
-    file.close();
-}
-
-
-
-void WebConfigurator::handleLogFlush()
-{
-    if(
-        settings != nullptr &&
-        !settings->getBlackboxEnabled()
-    )
-    {
-        server.send(
-            503,
-            "text/plain",
-            "Blackbox logging disabled"
-        );
-
-        return;
-    }
-
-    if(
-        blackbox == nullptr ||
-        !blackbox->flush()
-    )
-    {
-        server.send(
-            503,
-            "text/plain",
-            "Could not flush blackbox log"
-        );
-
-        return;
-    }
-
-    server.sendHeader(
-        "Location",
-        "/"
+    server.setContentLength(
+        CONTENT_LENGTH_UNKNOWN
     );
 
     server.send(
-        303
+        200,
+        "text/csv",
+        ""
     );
+
+    server.sendContent(
+        blackbox->getCsvHeader()
+    );
+    server.sendContent("\n");
+
+    size_t recordCount =
+        blackbox->getRecordCount();
+
+    char line[672];
+    String chunk;
+    chunk.reserve(8192);
+
+    for(size_t index = 0; index < recordCount; index++)
+    {
+        size_t length =
+            blackbox->formatCsvRecord(
+                index,
+                line,
+                sizeof(line)
+            );
+
+        if(length == 0)
+        {
+            continue;
+        }
+
+        if(chunk.length() + length > 8192)
+        {
+            server.sendContent(chunk);
+            chunk = "";
+
+            if(!server.client().connected())
+            {
+                return;
+            }
+        }
+
+        chunk.concat(line, length);
+
+        if((index & 0x7F) == 0)
+        {
+            delay(0);
+        }
+    }
+
+    if(chunk.length() > 0)
+    {
+        server.sendContent(chunk);
+    }
+
+    server.sendContent("");
 }
 
 
@@ -961,17 +957,19 @@ void WebConfigurator::handleLogClear()
 
     if(
         blackbox == nullptr ||
-        !blackbox->clear()
+        !blackbox->isReady()
     )
     {
         server.send(
             503,
             "text/plain",
-            "Could not clear blackbox log"
+            "Blackbox log unavailable"
         );
 
         return;
     }
+
+    blackbox->clear();
 
     server.sendHeader(
         "Location",

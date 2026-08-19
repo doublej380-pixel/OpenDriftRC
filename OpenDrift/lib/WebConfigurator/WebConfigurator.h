@@ -61,8 +61,6 @@ private:
 
     void handleLogDownload();
 
-    void handleLogFlush();
-
     void handleLogClear();
 
     void handleNotFound();

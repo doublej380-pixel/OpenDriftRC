@@ -150,5 +150,14 @@ the retired alpha-era tuning fields:
 | `tail_slide_speed` | Saved centered experimental setting; `50` is the RC1 baseline |
 | `tail_slide_blend` | Instantaneous signed rotation-speed adjustment from -1 to 1 |
 
-This CSV logger is temporary. The planned SD binary logger will replace
-runtime float formatting and internal-flash flushing.
+The stage-one onboard logger stores fixed-size binary records entirely in a
+4 MB circular PSRAM buffer. It performs no internal-flash or filesystem writes
+while driving. At the current 20 Hz sample rate, the complete telemetry set
+retains approximately the newest 18 minutes of a run. Once full, the oldest
+records are overwritten so the most recent behavior remains available.
+
+Use **Download CSV** in the web configurator before removing power. CSV text is
+generated from the binary records only during the download. The buffer is
+volatile and is cleared by a power cycle or **Clear RAM Log**. A later SD-card
+stage will continuously persist this same binary stream without returning to
+internal FFat storage.
