@@ -35,6 +35,10 @@ namespace
     static constexpr float HUNT_MIN_HALF_PERIOD = 0.11f;
     static constexpr float HUNT_MAX_HALF_PERIOD = 0.23f;
     static constexpr float HUNT_LATCH_SECONDS = 0.75f;
+    static float lastCorrection = 0;
+    static float filteredOutput = 0;
+    static float correctionOutput = 0;
+
 }
 
 
@@ -115,6 +119,7 @@ void GyroController::resetDynamicState()
 
     requestedCorrectionOutput = 0;
     correctionOutput = 0;
+    lastCorrection = 0;
 }
 
 
@@ -1206,23 +1211,18 @@ int GyroController::update(
     float huntDampedYaw =
         predictedYaw - huntRemovedYaw;
 
-    float directCorrection =
+    // Base Direct Correction (Unscaled)
+    float baseDirectCorrection =
         huntDampedYaw
         *
         gyroGain
         *
         directDampingScale;
 
-    float huntRemovedCorrection =
-        huntRemovedYaw
-        *
-        gyroGain
-        *
-        directDampingScale;
+    // Direct correction calculation prior to curve/damper scaling
+    float directCorrection = baseDirectCorrection;
 
-    // Countersteer Assist is deliberately sourced from the slow learned
-    // drift reference. It increases how much of a settled drift OpenDrift
-    // carries without raising fast yaw damping or responding to chatter.
+    // Countersteer Assist from steady drift reference
     float steadyAssistCorrection =
         driftReferenceReady
         ?
@@ -1241,19 +1241,181 @@ int GyroController::update(
     counterSteerCorrection =
         (int)roundf(steadyAssistCorrection);
 
+    // Initial total correction before stick/servo deflection scaling
     float baseCorrection =
         directCorrection
         +
         steadyAssistCorrection;
 
-    // Transition Speed shapes the response above, but it must never reduce
-    // the hard correction authority. Doing so made fast transitions hit a
-    // moving ceiling and then snap when that ceiling released.
+    // Calculate Final Commanded Servo Deflection Offset [0.0, 1.0]
+    float estimatedCorrection = -(baseCorrection + integralCorrection);
+    
+    // Combine driver command with controller correction
+    float rawServoCommand = (float)steeringCommand + correctionOutput;
+
+    // Measure total final servo deflection from neutral center (1500 us)
+    float commandOffset = fabsf(rawServoCommand - 1500.0f) / 500.0f;
+    commandOffset = constrain(commandOffset, 0.0f, 1.0f);
+    // float commandOffset = fabsf(estimatedCorrection) / 500.0f;
+    // commandOffset = constrain(commandOffset, 0.0f, 1.0f);
+
+    
+
+
+
+    // if (curvePower > 1.0f)
+    // {
+
+    //     float curveGainScale = 1;
+        
+    //     if (commandOffset > damperPoint) {
+    //         curveGainScale = 5.0f*(curvePower-1.0f)*powf(commandOffset-damperPoint,2) + 1;
+    //         // curveGainScale = 5.0f*(curvePower-1.0f)*(commandOffset-damperPoint) + 1;
+    //     }
+    //     // Apply curve gain scaling to direct correction
+    //     directCorrection *= curveGainScale;
+    // }
+
+    // // Curve Power (Progressive Stiffening based on Final Servo Deflection)
+    // float curveGainScale = 1.0f;
+    // if (curvePower > 1.0f)
+    // {
+    //     curveGainScale = 1.0f + (curvePower - 1.0f) * (commandOffset * commandOffset);
+    // }
+
+    // directCorrection *= curveGainScale;
+
+    // // Damper & Damper Point Adjustment (based on Final Servo Deflection)
+    // if (damperPower > 0.0f)
+    // {
+    //     float damperScale = 1.0f;
+    //     if (commandOffset < damperPoint && (1.0f - damperPoint) > 0.001f)
+    //     {
+    //         float excess = (commandOffset - damperPoint) / (1.0f - damperPoint);
+    //         damperScale += damperPower * excess * excess;
+    //     }
+    //     else
+    //     {
+    //         damperScale += 0; //damperPower * (commandOffset / max(damperPoint, 0.001f)) * 0.25f;
+    //     }
+
+    //     directCorrection /= damperScale;
+    // }
+
+    // // ------------------------------------------------------------------------
+    // // Logarithmic Rate Limit Scheduling on directCorrection
+    // // Rapid rate limit boost near center, tapering off near endpoints
+    // // ------------------------------------------------------------------------
+
+    // // 2. Rate limit boundaries (microseconds / second)
+    // float minRateLimitUsPerSec = 100.0f; // Baseline rate limit at absolute neutral center
+    // float maxRateLimitUsPerSec = 8000.0f; // Maximum rate limit near endpoints
+
+    // // 3. Logarithmic Curvature Configuration
+    // // k = 1.0f -> Gentle log curve
+    // // k = 9.0f -> Steeper initial boost (ln(10) normalization makes math fast)
+    // float logCurvature = curvePower*curvePower; 
+
+    // // 4. Compute Normalized Logarithmic Scaling Factor [0.0 to 1.0]
+    // float logFactor = logf(1.0f + logCurvature * commandOffset) / logf(1.0f + logCurvature);
+    // logFactor = constrain(logFactor, 0.0f, 1.0f);
+
+    // // 5. Interpolate Dynamic Rate Limit
+    // float currentRateLimit = minRateLimitUsPerSec + (maxRateLimitUsPerSec - minRateLimitUsPerSec) * logFactor;
+
+    // // 6. Execute Slew-Rate Limiter on directCorrection
+    // float maxStep = currentRateLimit * dt;
+    // float delta = directCorrection - lastCorrection;
+    // delta = constrain(delta, -maxStep, maxStep);
+
+    // lastCorrection += delta;
+    // directCorrection = lastCorrection;
+
+
+    // // 2. Define minimum rate limit at center and maximum rate limit at endpoints (us/sec)
+    // float minRateLimitUsPerSec = 100.0f*curvePower*curvePower; // Soft, smooth limit at neutral center
+    // float maxRateLimitUsPerSec = 8000.0f; // Fast, responsive limit at full lock
+
+    // // 3. Interpolate dynamic rate limit across commandOffset
+    // // (Option A: Linear Interpolation)
+    // float currentRateLimit = minRateLimitUsPerSec + (maxRateLimitUsPerSec - minRateLimitUsPerSec) * commandOffset;
+
+    // // float currentRateLimit = minRateLimitUsPerSec;
+    // // if (commandOffset > damperPoint) {
+    // //     currentRateLimit = minRateLimitUsPerSec + (maxRateLimitUsPerSec - minRateLimitUsPerSec) * powf(commandOffset-damperPoint,2);
+    // // }
+
+    // // (Option B: Quadratic Interpolation for a stronger progressive ramp)
+    // // float currentRateLimit = minRateLimitUsPerSec + (maxRateLimitUsPerSec - minRateLimitUsPerSec) * (commandOffset * commandOffset);
+
+    // // 4. Calculate maximum allowable step change for the current frame
+    // float maxStep = currentRateLimit * dt;
+
+    // // 5. Apply the slew-rate limiter directly to directCorrection
+    // float delta = directCorrection - lastCorrection;
+    // delta = constrain(delta, -maxStep, maxStep);
+
+    // lastCorrection += delta;
+    // directCorrection = lastCorrection;
+
+    // -------------------------------------------------------------------
+    // 7. FREQUENCY: Low-pass output smoothing filter (RC filter alpha)
+    // -------------------------------------------------------------------
+    // Idea: have a parameter that works like countersteer, but make the yaw tracking better
+    // Dynamic yaw filter. Increase bandwidth at center of travel to track normal yaw, decrease at ends
+    // Scale this term by steering angle
+    // float maxFilterBandwidth = 1.0f/dt;
+    // float minFilterBandwidth = 100.0f;
+
+    // float currentFilterBandwidth = minFilterBandwidth;
+    // if (commandOffset > damperPoint) {
+    //     currentFilterBandwidth = minFilterBandwidth + (maxFilterBandwidth - minFilterBandwidth) * powf(commandOffset-damperPoint,2);
+    // }
+
+    // float logCurvature = 20; 
+
+    // // 4. Compute Normalized Logarithmic Scaling Factor [0.0 to 1.0]
+    // float logFactor = logf(1.0f + logCurvature * commandOffset) / logf(1.0f + logCurvature);
+    // logFactor = constrain(logFactor, 0.0f, 1.0f);
+
+    // float currentFilterBandwidth = maxFilterBandwidth + (maxFilterBandwidth - minFilterBandwidth) * -logFactor;
+
+    float damperScale = 1.0f;
+    if (commandOffset < damperPoint && (1.0f - damperPoint) > 0.001f)
+    {
+        // float excess = (commandOffset - damperPoint) / (1.0f - damperPoint);
+        // damperScale += damperPower * excess * excess;
+        damperScale = (damperPower)*powf(commandOffset-damperPoint,2)+1;
+    }
+    damperScale = constrain(damperScale,0.0f,1.0f);
+
+    float rc = 1.0f / (2.0f * M_PI * 100);
+    float alpha = dt / (rc + dt);
+
+    // Calculate dynamic filtered yaw rate
+    filteredOutput += alpha * (huntDampedYaw - filteredOutput);
+    // filteredOutput += alpha * (lastCorrection - filteredOutput);
+
+    directCorrection += (curvePower*curvePower-1)*filteredOutput*damperScale;
+
+
+
+    float huntRemovedCorrection =
+        huntRemovedYaw
+        *
+        gyroGain
+        *
+        directDampingScale;
+
+    // Re-evaluate base correction with shaped direct correction
+    baseCorrection =
+        directCorrection
+        +
+        steadyAssistCorrection;
+
+    // Transition Speed capping check
     int effectiveMaxCorrection = maxCorrection;
 
-    // There is no accumulating state to wind up. When direct damping has
-    // saturated, memory may help it unwind but may not push farther into the
-    // same limit.
     if(
         fabsf(baseCorrection) >= effectiveMaxCorrection &&
         integralCorrection * baseCorrection > 0.0f
@@ -1275,6 +1437,9 @@ int GyroController::update(
             -effectiveMaxCorrection,
             effectiveMaxCorrection
         );
+    // ========================================================================
+    // END OF PASTED CODE BLOCK
+    // ========================================================================
 
     if(idle && correctedYaw == 0.0f)
     {
@@ -1753,4 +1918,35 @@ float GyroController::getThrottleTransient()
 float GyroController::getFilteredYaw()
 {
     return filteredYaw;
+}
+
+
+void GyroController::setCurvePower(float power)
+{
+    curvePower = constrain(power, 1.0f, 4.0f);
+}
+
+float GyroController::getCurvePower()
+{
+    return curvePower;
+}
+
+void GyroController::setDamperPower(float power)
+{
+    damperPower = constrain(power, 0.0f, 5.0f);
+}
+
+float GyroController::getDamperPower()
+{
+    return damperPower;
+}
+
+void GyroController::setDamperPoint(float threshold)
+{
+    damperPoint = constrain(threshold, 0.0f, 1.0f);
+}
+
+float GyroController::getDamperPoint()
+{
+    return damperPoint;
 }

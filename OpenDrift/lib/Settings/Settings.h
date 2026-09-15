@@ -12,7 +12,7 @@ public:
 
     struct DrivingProfile
     {
-        uint32_t version = 10;
+        uint32_t version = 11;
         char name[PROFILE_NAME_LENGTH] = {0};
 
         float gain = 1.5f;
@@ -28,6 +28,10 @@ public:
         int32_t gyroCounterSteerAssist = 0;
         int32_t gyroTransitionSpeed = 50;
         int32_t gyroHuntStrength = 50;
+
+        float curvePower = 1.0f;
+        float damperPower = 0.0f;
+        float damperPoint = 0.5f;
     };
 
     bool begin();
@@ -74,6 +78,15 @@ public:
 
     int getGyroHuntStrength();
     void setGyroHuntStrength(int value);
+
+    float getCurvePower();
+    void setCurvePower(float value);
+
+    float getDamperPower();
+    void setDamperPower(float value);
+
+    float getDamperPoint();
+    void setDamperPoint(float value);
 
     // Servo
     int getServoCenter();
@@ -192,6 +205,12 @@ private:
     int predictionStrength = 0;
 
     int gyroHuntStrength = 50;
+
+    float curvePower = 1.0f;
+
+    float damperPower = 0.0f;
+
+    float damperPoint = 0.5f;
 
     int servoCenter = 1500;
 

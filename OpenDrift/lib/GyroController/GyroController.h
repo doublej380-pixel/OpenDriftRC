@@ -95,7 +95,25 @@ public:
     float getSettledBlend();
     float getThrottleTransient();
     float getFilteredYaw();
+
+    // Add to public section of GyroController.h:
+    void setCurvePower(float power);
+    float getCurvePower();
+
+    void setDamperPower(float power);
+    float getDamperPower();
+
+    void setDamperPoint(float threshold);
+    float getDamperPoint();
+
 private:
+    // ReveD RS-ST style parameters
+    float curvePower = 2.0f;   // 1.0 = Linear, >1.0 = Stiffens progressively away from center
+    float damperPower = 0.0f;  // Damping scaling intensity
+    float damperPoint = 0.5f;  // Normalized command threshold (0.0 - 1.0) where damping curve shifts
+
+
+
 
     float gyroGain = 1.5f;
     float gyroOffset = 0.0f;
@@ -194,7 +212,7 @@ private:
 
     int requestedCorrectionOutput = 0;
     int correctionOutput = 0;
-
+    
     bool calibrated = false;
     uint32_t lastUpdateMicros = 0;
 
