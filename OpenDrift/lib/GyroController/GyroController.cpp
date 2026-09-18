@@ -1257,50 +1257,26 @@ int GyroController::update(
     // Measure total final servo deflection from neutral center (1500 us)
     float commandOffset = fabsf(rawServoCommand - 1500.0f) / 500.0f;
     commandOffset = constrain(commandOffset, 0.0f, 1.0f);
-    
 
-    // // Damper & Damper Point Adjustment (based on Final Servo Deflection)
-    // if (damperPower > 0.0f)
-    // {
-    //     float damperScale = 1.0f;
-    //     if (commandOffset < damperPoint && (1.0f - damperPoint) > 0.001f)
-    //     {
-    //         float excess = (commandOffset - damperPoint) / (1.0f - damperPoint);
-    //         damperScale += damperPower * excess * excess;
-    //     }
-    //     else
-    //     {
-    //         damperScale += 0; //damperPower * (commandOffset / max(damperPoint, 0.001f)) * 0.25f;
-    //     }
+    // // -------------------------------------------------------------------
+    // // 7. FREQUENCY: Low-pass output smoothing filter (RC filter alpha)
+    // // -------------------------------------------------------------------
+    // // Idea: have a parameter that works like countersteer, but make the yaw tracking better
+    // // Dynamic yaw filter. Increase bandwidth at center of travel to track normal yaw, decrease at ends
+    // // Scale this term by steering angle
+    // float maxFilterBandwidth = 1.0f/dt;
+    // float minFilterBandwidth = damperPower*2;
 
-    //     directCorrection /= damperScale;
+    // float currentFilterBandwidth = minFilterBandwidth;
+    // if (commandOffset < damperPoint && damperPoint > 0.001f) {
+    //     currentFilterBandwidth = maxFilterBandwidth + (minFilterBandwidth - maxFilterBandwidth) * (powf(commandOffset/(damperPoint+0.001f),2));
     // }
 
-
-    float damperScale = 1.0f;
-    // if (commandOffset < damperPoint && (1.0f - damperPoint) > 0.001f)
-    // {
-    //     // damperScale = (-damperPower*damperPower)*powf(commandOffset-damperPoint,2) + 1;
-    //     float excess = (commandOffset - damperPoint) / (1.0f - damperPoint);
-    //     damperScale += damperPower * excess * excess;
-    // }
-    // // damperScale = constrain(damperScale,0.0f,1.0f);
-
-    // directCorrection = (gyroGain*gyroGain)*huntDampedYaw/damperScale;
-
-    
-
-    // -------------------------------------------------------------------
-    // 7. FREQUENCY: Low-pass output smoothing filter (RC filter alpha)
-    // -------------------------------------------------------------------
-    // Idea: have a parameter that works like countersteer, but make the yaw tracking better
-    // Dynamic yaw filter. Increase bandwidth at center of travel to track normal yaw, decrease at ends
-    // Scale this term by steering angle
     float maxFilterBandwidth = 1.0f/dt;
-    float minFilterBandwidth = damperPower*2;
+    float minFilterBandwidth = maxFilterBandwidth*(damperPoint + 0.001f);
 
     float currentFilterBandwidth = minFilterBandwidth;
-    currentFilterBandwidth = maxFilterBandwidth + (minFilterBandwidth - maxFilterBandwidth) * commandOffset*commandOffset*commandOffset*commandOffset;
+    currentFilterBandwidth = maxFilterBandwidth + (minFilterBandwidth - maxFilterBandwidth) * (powf(commandOffset,curvePower)); 
 
     float rc = 1.0f / (2.0f * M_PI * currentFilterBandwidth);
     float alphaLowPass = dt / (rc + dt);
@@ -1310,7 +1286,7 @@ int GyroController::update(
     float alphaHighPass = rc / (rc + dt);
     highPassOutput += alphaHighPass * (huntDampedYaw - highPassOutput);
 
-    directCorrection = lowPassOutput*curvePower*2 + huntDampedYaw*gyroGain; //highPassOutput*gyroGain;
+    directCorrection = lowPassOutput*damperPower + huntDampedYaw*gyroGain; //highPassOutput*gyroGain;
 
     float huntRemovedCorrection =
         huntRemovedYaw
