@@ -1297,10 +1297,10 @@ int GyroController::update(
     // Dynamic yaw filter. Increase bandwidth at center of travel to track normal yaw, decrease at ends
     // Scale this term by steering angle
     float maxFilterBandwidth = 1.0f/dt;
-    float minFilterBandwidth = damperPower;
+    float minFilterBandwidth = damperPower*2;
 
     float currentFilterBandwidth = minFilterBandwidth;
-    currentFilterBandwidth = maxFilterBandwidth + (minFilterBandwidth - maxFilterBandwidth) * commandOffset*commandOffset;
+    currentFilterBandwidth = maxFilterBandwidth + (minFilterBandwidth - maxFilterBandwidth) * commandOffset*commandOffset*commandOffset*commandOffset;
 
     float rc = 1.0f / (2.0f * M_PI * currentFilterBandwidth);
     float alphaLowPass = dt / (rc + dt);
@@ -1310,7 +1310,7 @@ int GyroController::update(
     float alphaHighPass = rc / (rc + dt);
     highPassOutput += alphaHighPass * (huntDampedYaw - highPassOutput);
 
-    directCorrection = lowPassOutput*curvePower + highPassOutput*gyroGain;
+    directCorrection = lowPassOutput*curvePower*2 + huntDampedYaw*gyroGain; //highPassOutput*gyroGain;
 
     float huntRemovedCorrection =
         huntRemovedYaw
