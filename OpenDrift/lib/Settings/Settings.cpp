@@ -333,7 +333,7 @@ bool Settings::begin()
 
     curvePower = constrain(
         prefs.getFloat("curvePower", 1.0f),
-        1.0f,
+        0.0f,
         5.0f
     );
 
@@ -934,7 +934,7 @@ float Settings::getCurvePower()
 
 void Settings::setCurvePower(float value)
 {
-    curvePower = constrain(value, 1.0f, 5.0f);
+    curvePower = constrain(value, 0.0f, 5.0f);
     dirty = true;
 }
 
@@ -1949,7 +1949,7 @@ void Settings::applyProfile(
     gyroCounterSteerAssist = profile.gyroCounterSteerAssist;
     gyroTransitionSpeed = profile.gyroTransitionSpeed;
     gyroHuntStrength = profile.gyroHuntStrength;
-    curvePower = constrain(profile.curvePower, 1.0f, 5.0f);
+    curvePower = constrain(profile.curvePower, 0.0f, 5.0f);
     damperPower = constrain(profile.damperPower, 0.0f, 10.0f);
     damperPoint = constrain(profile.damperPoint, 0.0f, 1.0f);
 }

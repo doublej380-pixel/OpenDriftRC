@@ -1273,7 +1273,7 @@ int GyroController::update(
     // }
 
     float maxFilterBandwidth = 1.0f/dt;
-    float minFilterBandwidth = maxFilterBandwidth*(damperPoint + 0.001f);
+    float minFilterBandwidth = maxFilterBandwidth/2*damperPoint;
 
     float currentFilterBandwidth = minFilterBandwidth;
     currentFilterBandwidth = maxFilterBandwidth + (minFilterBandwidth - maxFilterBandwidth) * (powf(commandOffset,curvePower)); 
@@ -1811,7 +1811,7 @@ float GyroController::getFilteredYaw()
 
 void GyroController::setCurvePower(float power)
 {
-    curvePower = constrain(power, 1.0f, 4.0f);
+    curvePower = constrain(power, 0.0f, 5.0f);
 }
 
 float GyroController::getCurvePower()
