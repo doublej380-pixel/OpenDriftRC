@@ -1247,10 +1247,10 @@ int GyroController::update(
         directCorrection
         +
         steadyAssistCorrection;
-
-    // Calculate Final Commanded Servo Deflection Offset [0.0, 1.0]
-    float estimatedCorrection = -(baseCorrection + integralCorrection);
     
+
+
+        
     // Combine driver command with controller correction
     float rawServoCommand = (float)steeringCommand + correctionOutput;
 
@@ -1261,24 +1261,15 @@ int GyroController::update(
     float steeringCommandNormalized = fabsf((float)steeringCommand - 1500.0f) / 500.0f;
     steeringCommandNormalized = constrain(steeringCommandNormalized, 0.0f, 1.0f);
 
-    // float maxFilterBandwidth = 1.0f/dt;
-    // float minFilterBandwidth = maxFilterBandwidth/2*damperPoint;
-
-    // float currentFilterBandwidth = minFilterBandwidth;
-    // currentFilterBandwidth = maxFilterBandwidth + (minFilterBandwidth - maxFilterBandwidth) * (powf(commandOffset,curvePower)); 
-
-    // float rc = 1.0f / (2.0f * M_PI * currentFilterBandwidth);
-    // float alphaLowPass = dt / (rc + dt);
-    // lowPassOutput += alphaLowPass * (huntDampedYaw - lowPassOutput);
-
-    // float rcHighPass = 1.0f / (2.0f * M_PI * minFilterBandwidth);
-    // float alphaHighPass = dt / (rcHighPass + dt);
-    // highPassOutput += alphaHighPass * (huntDampedYaw - highPassOutput);
-
     // Calculate steering gain reduction
     float steeringGainReduction = (1.0f-steeringCommandNormalized*damperPoint);
 
-    directCorrection = huntDampedYaw*damperPower*steeringGainReduction + huntDampedYaw*gyroGain;
+    // Apply steering gain reduction
+    directCorrection = huntDampedYaw*gyroGain*steeringGainReduction;
+
+
+
+
 
     float huntRemovedCorrection =
         huntRemovedYaw
@@ -1317,9 +1308,6 @@ int GyroController::update(
             -effectiveMaxCorrection,
             effectiveMaxCorrection
         );
-    // ========================================================================
-    // END OF PASTED CODE BLOCK
-    // ========================================================================
 
     if(idle && correctedYaw == 0.0f)
     {
