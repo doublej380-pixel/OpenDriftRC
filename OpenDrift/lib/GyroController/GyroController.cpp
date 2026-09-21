@@ -1258,35 +1258,27 @@ int GyroController::update(
     float commandOffset = fabsf(rawServoCommand - 1500.0f) / 500.0f;
     commandOffset = constrain(commandOffset, 0.0f, 1.0f);
 
-    // // -------------------------------------------------------------------
-    // // 7. FREQUENCY: Low-pass output smoothing filter (RC filter alpha)
-    // // -------------------------------------------------------------------
-    // // Idea: have a parameter that works like countersteer, but make the yaw tracking better
-    // // Dynamic yaw filter. Increase bandwidth at center of travel to track normal yaw, decrease at ends
-    // // Scale this term by steering angle
+    float steeringCommandNormalized = fabsf((float)steeringCommand - 1500.0f) / 500.0f;
+    steeringCommandNormalized = constrain(steeringCommandNormalized, 0.0f, 1.0f);
+
     // float maxFilterBandwidth = 1.0f/dt;
-    // float minFilterBandwidth = damperPower*2;
+    // float minFilterBandwidth = maxFilterBandwidth/2*damperPoint;
 
     // float currentFilterBandwidth = minFilterBandwidth;
-    // if (commandOffset < damperPoint && damperPoint > 0.001f) {
-    //     currentFilterBandwidth = maxFilterBandwidth + (minFilterBandwidth - maxFilterBandwidth) * (powf(commandOffset/(damperPoint+0.001f),2));
-    // }
+    // currentFilterBandwidth = maxFilterBandwidth + (minFilterBandwidth - maxFilterBandwidth) * (powf(commandOffset,curvePower)); 
 
-    float maxFilterBandwidth = 1.0f/dt;
-    float minFilterBandwidth = maxFilterBandwidth/2*damperPoint;
+    // float rc = 1.0f / (2.0f * M_PI * currentFilterBandwidth);
+    // float alphaLowPass = dt / (rc + dt);
+    // lowPassOutput += alphaLowPass * (huntDampedYaw - lowPassOutput);
 
-    float currentFilterBandwidth = minFilterBandwidth;
-    currentFilterBandwidth = maxFilterBandwidth + (minFilterBandwidth - maxFilterBandwidth) * (powf(commandOffset,curvePower)); 
+    // float rcHighPass = 1.0f / (2.0f * M_PI * minFilterBandwidth);
+    // float alphaHighPass = dt / (rcHighPass + dt);
+    // highPassOutput += alphaHighPass * (huntDampedYaw - highPassOutput);
 
-    float rc = 1.0f / (2.0f * M_PI * currentFilterBandwidth);
-    float alphaLowPass = dt / (rc + dt);
-    lowPassOutput += alphaLowPass * (huntDampedYaw - lowPassOutput);
+    // Calculate steering gain reduction
+    float steeringGainReduction = (1.0f-steeringCommandNormalized*damperPoint);
 
-    float rcHigh = 1.0f / (2.0f * M_PI * minFilterBandwidth);
-    float alphaHighPass = rc / (rc + dt);
-    highPassOutput += alphaHighPass * (huntDampedYaw - highPassOutput);
-
-    directCorrection = lowPassOutput*damperPower + huntDampedYaw*gyroGain; //highPassOutput*gyroGain;
+    directCorrection = huntDampedYaw*damperPower*steeringGainReduction + huntDampedYaw*gyroGain;
 
     float huntRemovedCorrection =
         huntRemovedYaw
