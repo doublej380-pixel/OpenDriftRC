@@ -1250,7 +1250,7 @@ int GyroController::update(
     
 
 
-        
+
     // Combine driver command with controller correction
     float rawServoCommand = (float)steeringCommand + correctionOutput;
 
@@ -1261,14 +1261,8 @@ int GyroController::update(
     float steeringCommandNormalized = fabsf((float)steeringCommand - 1500.0f) / 500.0f;
     steeringCommandNormalized = constrain(steeringCommandNormalized, 0.0f, 1.0f);
 
-    // Calculate steering gain reduction
+
     float steeringGainReduction = (1.0f-steeringCommandNormalized*damperPoint);
-
-    // Apply steering gain reduction
-    directCorrection = huntDampedYaw*gyroGain*steeringGainReduction;
-
-
-
 
 
     float huntRemovedCorrection =
