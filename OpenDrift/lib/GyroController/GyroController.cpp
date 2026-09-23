@@ -36,9 +36,8 @@ namespace
     static constexpr float HUNT_MAX_HALF_PERIOD = 0.23f;
     static constexpr float HUNT_LATCH_SECONDS = 0.75f;
     static float lastCorrection = 0;
-    static float lowPassOutput = 0;
-    static float highPassOutput = 0;
     static float correctionOutput = 0;
+    static float servoCommandNormalized = 0;
 
 }
 
@@ -1212,11 +1211,18 @@ int GyroController::update(
     float huntDampedYaw =
         predictedYaw - huntRemovedYaw;
 
+    // Calculate PCA gain reduction
+    float steeringCommandNormalized = fabsf((float)steeringCommand - 1500.0f) / 500.0f;
+    steeringCommandNormalized = constrain(steeringCommandNormalized, 0.0f, 1.0f);
+    float pcaGain = (1.0f-steeringCommandNormalized*pca);
+
     // Base Direct Correction (Unscaled)
     float baseDirectCorrection =
         huntDampedYaw
         *
-        gyroGain*0.0f
+        gyroGain
+        *
+        pcaGain
         *
         directDampingScale;
 
@@ -1247,25 +1253,6 @@ int GyroController::update(
         directCorrection
         +
         steadyAssistCorrection;
-    
-
-
-
-    // Combine driver command with controller correction
-    float rawServoCommand = (float)steeringCommand + correctionOutput;
-
-    // Measure total final servo deflection from neutral center (1500 us)
-    float commandOffset = fabsf(rawServoCommand - 1500.0f) / 500.0f;
-    commandOffset = constrain(commandOffset, 0.0f, 1.0f);
-
-    float steeringCommandNormalized = fabsf((float)steeringCommand - 1500.0f) / 500.0f;
-    steeringCommandNormalized = constrain(steeringCommandNormalized, 0.0f, 1.0f);
-
-    // Calculate steering gain reduction
-    float steeringGainReduction = (1.0f-steeringCommandNormalized*pca);
-
-    // Apply steering gain reduction
-    directCorrection = huntDampedYaw*gyroGain*steeringGainReduction;
 
     float huntRemovedCorrection =
         huntRemovedYaw
@@ -1345,6 +1332,11 @@ int GyroController::update(
     );
     transitionAuthorityTelemetry = transitionAuthorityBlend;
     transitionPredictionScaleTelemetry = transitionPredictionScale;
+
+    // Calculate normalized servo command for future use
+    float rawServoCommand = (float)steeringCommand + correctionOutput;
+    servoCommandNormalized = fabsf(rawServoCommand - 1500.0f) / 500.0f;
+    servoCommandNormalized = constrain(servoCommandNormalized, 0.0f, 1.0f);
 
     return correctionOutput;
 }
