@@ -1262,7 +1262,7 @@ int GyroController::update(
     steeringCommandNormalized = constrain(steeringCommandNormalized, 0.0f, 1.0f);
 
     // Calculate steering gain reduction
-    float steeringGainReduction = (1.0f-steeringCommandNormalized*damperPoint);
+    float steeringGainReduction = (1.0f-steeringCommandNormalized*pca);
 
     // Apply steering gain reduction
     directCorrection = huntDampedYaw*gyroGain*steeringGainReduction;
@@ -1784,33 +1784,12 @@ float GyroController::getFilteredYaw()
     return filteredYaw;
 }
 
-
-void GyroController::setCurvePower(float power)
+void GyroController::setpca(float threshold)
 {
-    curvePower = constrain(power, 0.0f, 5.0f);
+    pca = constrain(threshold, 0.0f, 1.0f);
 }
 
-float GyroController::getCurvePower()
+float GyroController::getpca()
 {
-    return curvePower;
-}
-
-void GyroController::setDamperPower(float power)
-{
-    damperPower = constrain(power, 0.0f, 10.0f);
-}
-
-float GyroController::getDamperPower()
-{
-    return damperPower;
-}
-
-void GyroController::setDamperPoint(float threshold)
-{
-    damperPoint = constrain(threshold, 0.0f, 1.0f);
-}
-
-float GyroController::getDamperPoint()
-{
-    return damperPoint;
+    return pca;
 }

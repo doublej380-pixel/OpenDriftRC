@@ -331,20 +331,8 @@ bool Settings::begin()
         100
     );
 
-    curvePower = constrain(
-        prefs.getFloat("curvePower", 1.0f),
-        0.0f,
-        5.0f
-    );
-
-    damperPower = constrain(
-        prefs.getFloat("damperPower", 0.0f),
-        0.0f,
-        10.0f
-    );
-
-    damperPoint = constrain(
-        prefs.getFloat("damperPoint", 0.5f),
+    pca = constrain(
+        prefs.getFloat("pca", 0.0f),
         0.0f,
         1.0f
     );
@@ -497,9 +485,7 @@ bool Settings::begin()
         gyroTransitionSpeed = 25;
         gyroHuntStrength = 75;
         controlLoopHz = 333;
-        curvePower = 1.0f;
-        damperPower = 0.0f;
-        damperPoint = 0.5f;
+        pca = 0.0f;
 
         prefs.putFloat("gain", gain);
         prefs.putFloat("deadband", deadband);
@@ -514,9 +500,7 @@ bool Settings::begin()
         prefs.putInt("tailSpeedC", gyroTransitionSpeed);
         prefs.putInt("huntStrength", gyroHuntStrength);
         prefs.putUShort("loopHz", controlLoopHz);
-        prefs.putFloat("curvePower", curvePower);
-        prefs.putFloat("damperPower", damperPower);
-        prefs.putFloat("damperPoint", damperPoint);
+        prefs.putFloat("pca", pca);
         prefs.putBool("log51Preset", true);
     }
     #endif
@@ -605,18 +589,8 @@ void Settings::save()
     );
 
     prefs.putFloat(
-        "curvePower",
-        curvePower
-    );
-
-    prefs.putFloat(
-        "damperPower",
-        damperPower
-    );
-
-    prefs.putFloat(
-        "damperPoint",
-        damperPoint
+        "pca",
+        pca
     );
 
     prefs.putInt(
@@ -927,36 +901,14 @@ void Settings::setGyroHuntStrength(int value)
     dirty = true;
 }
 
-float Settings::getCurvePower()
+float Settings::getpca()
 {
-    return curvePower;
+    return pca;
 }
 
-void Settings::setCurvePower(float value)
+void Settings::setpca(float value)
 {
-    curvePower = constrain(value, 0.0f, 5.0f);
-    dirty = true;
-}
-
-float Settings::getDamperPower()
-{
-    return damperPower;
-}
-
-void Settings::setDamperPower(float value)
-{
-    damperPower = constrain(value, 0.0f, 10.0f);
-    dirty = true;
-}
-
-float Settings::getDamperPoint()
-{
-    return damperPoint;
-}
-
-void Settings::setDamperPoint(float value)
-{
-    damperPoint = constrain(value, 0.0f, 1.0f);
+    pca = constrain(value, 0.0f, 1.0f);
     dirty = true;
 }
 
@@ -1641,9 +1593,7 @@ void Settings::loadProfiles()
                 profile.gyroCounterSteerAssist = legacy.gyroCounterSteerAssist;
                 profile.gyroTransitionSpeed = legacy.gyroTransitionSpeed;
                 profile.gyroHuntStrength = legacy.gyroHuntStrength;
-                profile.curvePower = 1.0f;
-                profile.damperPower = 0.0f;
-                profile.damperPoint = 0.5f;
+                profile.pca = 0.0f;
 
                 if(legacy.version == 9)
                 {
@@ -1693,9 +1643,7 @@ void Settings::loadProfiles()
                 profile.gyroCounterSteerAssist = legacy.gyroCounterSteerAssist;
                 profile.gyroTransitionSpeed = legacy.gyroTransitionSpeed;
                 profile.gyroHuntStrength = legacy.gyroHuntStrength;
-                profile.curvePower = 1.0f;
-                profile.damperPower = 0.0f;
-                profile.damperPoint = 0.5f;
+                profile.pca = 0.0f;
                 loadedCount++;
             }
         }
@@ -1725,9 +1673,7 @@ void Settings::loadProfiles()
                 profile.gyroCounterSteerAssist = legacy.gyroCounterSteerAssist;
                 profile.gyroTransitionSpeed = legacy.gyroTransitionSpeed;
                 profile.gyroHuntStrength = 50;
-                profile.curvePower = 1.0f;
-                profile.damperPower = 0.0f;
-                profile.damperPoint = 0.5f;
+                profile.pca = 0.0f;
                 loadedCount++;
             }
         }
@@ -1756,9 +1702,7 @@ void Settings::loadProfiles()
                 profile.radioSteeringTravel = legacy.radioSteeringTravel;
                 profile.gyroCounterSteerAssist = legacy.gyroCounterSteerAssist;
                 profile.gyroTransitionSpeed = legacy.gyroTransitionSpeed;
-                profile.curvePower = 1.0f;
-                profile.damperPower = 0.0f;
-                profile.damperPoint = 0.5f;
+                profile.pca = 0.0f;
                 loadedCount++;
             }
         }
@@ -1787,9 +1731,7 @@ void Settings::loadProfiles()
                 profile.radioSteeringTravel = legacy.radioSteeringTravel;
                 profile.gyroCounterSteerAssist = legacy.gyroCounterSteerAssist;
                 profile.gyroTransitionSpeed = legacy.gyroTailSlideSpeed;
-                profile.curvePower = 1.0f;
-                profile.damperPower = 0.0f;
-                profile.damperPoint = 0.5f;
+                profile.pca = 0.0f;
                 loadedCount++;
             }
         }
@@ -1822,9 +1764,7 @@ void Settings::loadProfiles()
                     50,
                     100
                 );
-                profile.curvePower = 1.0f;
-                profile.damperPower = 0.0f;
-                profile.damperPoint = 0.5f;
+                profile.pca = 0.0f;
                 loadedCount++;
             }
         }
@@ -1853,9 +1793,7 @@ void Settings::loadProfiles()
                 profile.radioSteeringTravel = legacy.radioSteeringTravel;
                 profile.gyroCounterSteerAssist = legacy.gyroCounterSteerAssist;
                 profile.gyroTransitionSpeed = 50;
-                profile.curvePower = 1.0f;
-                profile.damperPower = 0.0f;
-                profile.damperPoint = 0.5f;
+                profile.pca = 0.0f;
                 loadedCount++;
             }
         }
@@ -1884,9 +1822,7 @@ void Settings::loadProfiles()
                 profile.radioSteeringTravel = legacy.radioSteeringTravel;
                 profile.gyroCounterSteerAssist = 0;
                 profile.gyroTransitionSpeed = 50;
-                profile.curvePower = 1.0f;
-                profile.damperPower = 0.0f;
-                profile.damperPoint = 0.5f;
+                profile.pca = 0.0f;
                 loadedCount++;
             }
         }
@@ -1928,9 +1864,7 @@ void Settings::captureProfile(
     profile.gyroCounterSteerAssist = gyroCounterSteerAssist;
     profile.gyroTransitionSpeed = gyroTransitionSpeed;
     profile.gyroHuntStrength = gyroHuntStrength;
-    profile.curvePower = curvePower;
-    profile.damperPower = damperPower;
-    profile.damperPoint = damperPoint;
+    profile.pca = pca;
 }
 
 void Settings::applyProfile(
@@ -1949,9 +1883,7 @@ void Settings::applyProfile(
     gyroCounterSteerAssist = profile.gyroCounterSteerAssist;
     gyroTransitionSpeed = profile.gyroTransitionSpeed;
     gyroHuntStrength = profile.gyroHuntStrength;
-    curvePower = constrain(profile.curvePower, 0.0f, 5.0f);
-    damperPower = constrain(profile.damperPower, 0.0f, 10.0f);
-    damperPoint = constrain(profile.damperPoint, 0.0f, 1.0f);
+    pca = constrain(profile.pca, 0.0f, 1.0f);
 }
 
 bool Settings::persistProfile(

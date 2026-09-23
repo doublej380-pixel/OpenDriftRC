@@ -879,16 +879,8 @@ void runControlIteration()
         settings.getPredictionStrength()
     );
 
-    gyro.setCurvePower(
-        settings.getCurvePower()
-    );
-
-    gyro.setDamperPower(
-        settings.getDamperPower()
-    );
-
-    gyro.setDamperPoint(
-        settings.getDamperPoint()
+    gyro.setpca(
+        settings.getpca()
     );
 
     gyro.setHuntStrength(
@@ -1644,16 +1636,8 @@ void setup()
         settings.getPredictionStrength()
     );
 
-    gyro.setCurvePower(
-        settings.getCurvePower()
-    );
-
-    gyro.setDamperPower(
-        settings.getDamperPower()
-    );
-
-    gyro.setDamperPoint(
-        settings.getDamperPoint()
+    gyro.setpca(
+        settings.getpca()
     );
 
     gyro.setHuntStrength(

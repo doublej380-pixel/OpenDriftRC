@@ -29,9 +29,7 @@ public:
         int32_t gyroTransitionSpeed = 50;
         int32_t gyroHuntStrength = 50;
 
-        float curvePower = 1.0f;
-        float damperPower = 0.0f;
-        float damperPoint = 0.5f;
+        float pca = 0.0f;
     };
 
     bool begin();
@@ -79,14 +77,8 @@ public:
     int getGyroHuntStrength();
     void setGyroHuntStrength(int value);
 
-    float getCurvePower();
-    void setCurvePower(float value);
-
-    float getDamperPower();
-    void setDamperPower(float value);
-
-    float getDamperPoint();
-    void setDamperPoint(float value);
+    float getpca();
+    void setpca(float value);
 
     // Servo
     int getServoCenter();
@@ -206,11 +198,7 @@ private:
 
     int gyroHuntStrength = 50;
 
-    float curvePower = 1.0f;
-
-    float damperPower = 0.0f;
-
-    float damperPoint = 0.5f;
+    float pca = 0.0f;
 
     int servoCenter = 1500;
 
