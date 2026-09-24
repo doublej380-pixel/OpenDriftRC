@@ -29,7 +29,7 @@ public:
 private:
 
     static constexpr uint8_t DEVICE_ADDRESS = 0xC8;
-    static constexpr uint8_t PARAMETER_COUNT = 34;
+    static constexpr uint8_t PARAMETER_COUNT = 35;
 
     static constexpr uint8_t TYPE_PARAMETER_PING = 0x28;
     static constexpr uint8_t TYPE_DEVICE_INFO = 0x29;

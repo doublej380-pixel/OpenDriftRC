@@ -35,6 +35,10 @@ namespace
     static constexpr float HUNT_MIN_HALF_PERIOD = 0.11f;
     static constexpr float HUNT_MAX_HALF_PERIOD = 0.23f;
     static constexpr float HUNT_LATCH_SECONDS = 0.75f;
+    static float lastCorrection = 0;
+    static float correctionOutput = 0;
+    static float servoCommandNormalized = 0;
+
 }
 
 
@@ -115,6 +119,7 @@ void GyroController::resetDynamicState()
 
     requestedCorrectionOutput = 0;
     correctionOutput = 0;
+    lastCorrection = 0;
 }
 
 
@@ -1206,23 +1211,25 @@ int GyroController::update(
     float huntDampedYaw =
         predictedYaw - huntRemovedYaw;
 
-    float directCorrection =
+    // Calculate PCA gain reduction
+    float steeringCommandNormalized = fabsf((float)steeringCommand - 1500.0f) / 500.0f;
+    steeringCommandNormalized = constrain(steeringCommandNormalized, 0.0f, 1.0f);
+    float pcaGain = (1.0f-steeringCommandNormalized*pca);
+
+    // Base Direct Correction (Unscaled)
+    float baseDirectCorrection =
         huntDampedYaw
         *
         gyroGain
         *
-        directDampingScale;
-
-    float huntRemovedCorrection =
-        huntRemovedYaw
-        *
-        gyroGain
+        pcaGain
         *
         directDampingScale;
 
-    // Countersteer Assist is deliberately sourced from the slow learned
-    // drift reference. It increases how much of a settled drift OpenDrift
-    // carries without raising fast yaw damping or responding to chatter.
+    // Direct correction calculation prior to curve/damper scaling
+    float directCorrection = baseDirectCorrection;
+
+    // Countersteer Assist from steady drift reference
     float steadyAssistCorrection =
         driftReferenceReady
         ?
@@ -1241,19 +1248,28 @@ int GyroController::update(
     counterSteerCorrection =
         (int)roundf(steadyAssistCorrection);
 
+    // Initial total correction before stick/servo deflection scaling
     float baseCorrection =
         directCorrection
         +
         steadyAssistCorrection;
 
-    // Transition Speed shapes the response above, but it must never reduce
-    // the hard correction authority. Doing so made fast transitions hit a
-    // moving ceiling and then snap when that ceiling released.
+    float huntRemovedCorrection =
+        huntRemovedYaw
+        *
+        gyroGain
+        *
+        directDampingScale;
+
+    // Re-evaluate base correction with shaped direct correction
+    baseCorrection =
+        directCorrection
+        +
+        steadyAssistCorrection;
+
+    // Transition Speed capping check
     int effectiveMaxCorrection = maxCorrection;
 
-    // There is no accumulating state to wind up. When direct damping has
-    // saturated, memory may help it unwind but may not push farther into the
-    // same limit.
     if(
         fabsf(baseCorrection) >= effectiveMaxCorrection &&
         integralCorrection * baseCorrection > 0.0f
@@ -1316,6 +1332,11 @@ int GyroController::update(
     );
     transitionAuthorityTelemetry = transitionAuthorityBlend;
     transitionPredictionScaleTelemetry = transitionPredictionScale;
+
+    // Calculate normalized servo command for future use
+    float rawServoCommand = (float)steeringCommand + correctionOutput;
+    servoCommandNormalized = fabsf(rawServoCommand - 1500.0f) / 500.0f;
+    servoCommandNormalized = constrain(servoCommandNormalized, 0.0f, 1.0f);
 
     return correctionOutput;
 }
@@ -1753,4 +1774,14 @@ float GyroController::getThrottleTransient()
 float GyroController::getFilteredYaw()
 {
     return filteredYaw;
+}
+
+void GyroController::setpca(float threshold)
+{
+    pca = constrain(threshold, 0.0f, 1.0f);
+}
+
+float GyroController::getpca()
+{
+    return pca;
 }

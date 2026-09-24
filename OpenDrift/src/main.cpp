@@ -442,7 +442,7 @@ public:
 
         display->setTextSize(1);
         display->setTextColor(0x8410);
-        display->drawString(timestamp, 7, nextLineY);
+        display.drawString(timestamp, 7, nextLineY);
 
         display->setTextColor(statusColor);
         display->drawString(status, 58, nextLineY);
@@ -877,6 +877,10 @@ void runControlIteration()
 
     gyro.setPredictionStrength(
         settings.getPredictionStrength()
+    );
+
+    gyro.setpca(
+        settings.getpca()
     );
 
     gyro.setHuntStrength(
@@ -1632,6 +1636,10 @@ void setup()
         settings.getPredictionStrength()
     );
 
+    gyro.setpca(
+        settings.getpca()
+    );
+
     gyro.setHuntStrength(
         settings.getGyroHuntStrength()
     );
@@ -2113,4 +2121,3 @@ void loop()
 
     delay(1);
 }
- 

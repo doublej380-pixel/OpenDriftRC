@@ -11,6 +11,7 @@ local fields = {
   { 3, "Max Corr %",       0,  100,   1, 0 },
   { 4, "Smoothing",        0,  100,   1, 2 },
   {32, "Gyro LPF",         0,    2,   1, 0, true, false, false, false, false, true},
+  {35, "PCA",              0,  100,   1, 2 },
   { 5, "Drift Memory",     0, 2000,   1, 2 },
   { 6, "Memory Limit",     0,  500,   5, 0 },
   { 7, "Hold Assist",      0,  100,   1, 0 },

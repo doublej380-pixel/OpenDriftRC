@@ -95,6 +95,10 @@ public:
     float getSettledBlend();
     float getThrottleTransient();
     float getFilteredYaw();
+
+    void setpca(float threshold);
+    float getpca();
+
 private:
 
     float gyroGain = 1.5f;
@@ -102,6 +106,7 @@ private:
     float deadband = 2.0f;
     float smoothing = 0.10f;
     int maxCorrection = 250;
+    float pca = 0.0f;
 
     float integralGain = 0.0f;
     int integralLimit = 120;
@@ -194,7 +199,7 @@ private:
 
     int requestedCorrectionOutput = 0;
     int correctionOutput = 0;
-
+    
     bool calibrated = false;
     uint32_t lastUpdateMicros = 0;
 

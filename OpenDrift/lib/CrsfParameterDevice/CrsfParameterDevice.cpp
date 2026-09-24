@@ -31,6 +31,9 @@ namespace
 
     const CrsfParameterDevice::FloatDefinition CHANNEL_3_GAIN_MAX_PARAMETER =
         {"CH3 Gain Max", 0, 600, 300, 2, 5, "x"};
+
+    const CrsfParameterDevice::FloatDefinition PCA_PARAMETER =
+        {"PCA", 0, 100, 50, 2, 1, ""};
 }
 
 
@@ -184,14 +187,14 @@ void CrsfParameterDevice::sendParameter(
         appendByte(payload, length, 32);
         appendByte(payload, length, 33);
         appendByte(payload, length, 34);
+        appendByte(payload, length, 35);
 
         appendByte(payload, length, 0xFF);
     }
     else if(
         (parameter >= 1 && parameter <= 14) ||
         parameter == 26 ||
-        parameter == 33 ||
-        parameter == 34
+        (parameter >= 33 && parameter <= 35)
     )
     {
         const FloatDefinition* definition =
@@ -336,10 +339,9 @@ void CrsfParameterDevice::writeParameter(
 
     if(
         (
-            parameter >= 1 && parameter <= 14
+            (parameter >= 1 && parameter <= 14)
             || parameter == 26
-            || parameter == 33
-            || parameter == 34
+            || (parameter >= 33 && parameter <= 35)
         ) &&
         length >= 4
     )
@@ -456,6 +458,7 @@ int32_t CrsfParameterDevice::getScaledValue(
         case 32: return settings->getGyroLpfMode();
         case 33: return lroundf(settings->getChannel3GainMin() * 100.0f);
         case 34: return lroundf(settings->getChannel3GainMax() * 100.0f);
+        case 35: return lroundf(settings->getpca() * 100.0f);
         default: return 0;
     }
 }
@@ -469,8 +472,7 @@ void CrsfParameterDevice::setScaledValue(
     if(
         (parameter >= 1 && parameter <= 14) ||
         parameter == 26 ||
-        parameter == 33 ||
-        parameter == 34
+        (parameter >= 33 && parameter <= 35)
     )
     {
         const FloatDefinition* definition =
@@ -577,6 +579,9 @@ void CrsfParameterDevice::setScaledValue(
         case 34:
             settings->setChannel3GainMax(value / 100.0f);
             break;
+        case 35:
+            settings->setpca(value / 100.0f);
+            break;
     }
 }
 
@@ -599,6 +604,11 @@ CrsfParameterDevice::getFloatDefinition(
     if(parameter == 34)
     {
         return &CHANNEL_3_GAIN_MAX_PARAMETER;
+    }
+
+    if(parameter == 35)
+    {
+        return &PCA_PARAMETER;
     }
 
     return &FLOAT_PARAMETERS[parameter - 1];
