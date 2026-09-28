@@ -2381,6 +2381,8 @@ void UI::drawSystemPage(
         #if defined(OPENDRIFT_INPUT_CRSF)
         #if defined(OPENDRIFT_CRSF_OOPS_SWAPPED_PINS)
         "RC TX17 / RX18",
+        #elif defined(OPENDRIFT_CRSF_V2_THROTTLE_GPIO8)
+        "RX1 TX2 / ESC8",
         #elif defined(OPENDRIFT_AMOLED_V2)
         "RX1 / TX2",
         #else
@@ -2472,6 +2474,8 @@ void UI::drawSystemPage(
         #if defined(OPENDRIFT_INPUT_CRSF)
         #if defined(OPENDRIFT_CRSF_OOPS_SWAPPED_PINS)
         "RC TX17 / RX18",
+        #elif defined(OPENDRIFT_CRSF_V2_THROTTLE_GPIO8)
+        "1RX 2TX / ESC8",
         #elif defined(OPENDRIFT_AMOLED_V2)
         "1 RX / 2 TX",
         #else

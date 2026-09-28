@@ -157,8 +157,14 @@ bool AuxChannelOutputs::isPinAvailable(
 
     #if defined(OPENDRIFT_AMOLED_V2)
     // V2 uses GPIO1/2 for the full-duplex CRSF UART because its onboard IMU
-    // and touch interrupt lines occupy GPIO17/18.
-    return gpio >= 3;
+    // and touch interrupt lines occupy GPIO17/18. The private GPIO8 recovery
+    // build additionally reserves GPIO8 for its dedicated ESC output.
+    return
+        gpio >= 3
+        #if defined(OPENDRIFT_CRSF_V2_THROTTLE_GPIO8)
+        && gpio != 8
+        #endif
+        ;
     #else
     return true;
     #endif

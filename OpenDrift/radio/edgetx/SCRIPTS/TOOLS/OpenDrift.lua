@@ -20,6 +20,7 @@ local fields = {
   {38, "Driver Priority",  0,   50,   1, 0 },
   {10, "Prediction",       0,  100,   1, 0 },
   {26, "Anti Wobble",      0,  100,   1, 0 },
+  {41, "Gyro Hyst.",       0,    4,   1, 0 },
   {36, "Wobble Scale",     0,    1,   1, 0, true, false, false, false, false, false, false, true},
   {11, "Servo Quiet",      0,   50,   1, 0 },
   {12, "Steering Travel",  0,  100,   1, 0 },
@@ -42,7 +43,8 @@ local fields = {
   {24, "GPIO 8 Output",    0,   16,   1, 0, true, true},
   {25, "Servo Rate*",      0,    1,   1, 0, true, false, true},
   {39, "Throttle Rate*",   0,    2,   1, 0, true, false, false, false, false, false, false, false, false, true},
-  {35, "Display Rotate",   0,    3,   1, 0, true, false, false, false, false, false, true}
+  {35, "Display Rotate",   0,    3,   1, 0, true, false, false, false, false, false, true},
+  {40, "Archive Log",      0,    8,   1, 0, true, false, false, false, false, false, false, false, false, false, true}
 }
 
 local selected = 1
@@ -54,6 +56,7 @@ local nextRequest = 0
 local requestIndex = 1
 local nextGainRequest = 0
 local nextCalibrationRequest = 0
+local nextArchiveRequest = 0
 local pushFailed = 0
 local pushedThisFrame = false
 
@@ -117,11 +120,23 @@ local function consumeTelemetry()
         local keepValue = editing and field == fields[selected]
         local dataType = data[6]
         local index = 7
-        while index <= #data and data[index] ~= 0 do index = index + 1 end
+        local name = ""
+        while index <= #data and data[index] ~= 0 do
+          name = name .. string.char(data[index])
+          index = index + 1
+        end
+        if #name > 0 then field[2] = name end
         index = index + 1
 
         if dataType == 0x08 and index + 3 <= #data then
           if not keepValue then field.value = readInt32(data, index) end
+          if index + 20 <= #data then
+            field[3] = readInt32(data, index + 4)
+            field[4] = readInt32(data, index + 8)
+            field[6] = data[index + 16]
+            field[5] = readInt32(data, index + 17)
+            field[7] = false
+          end
         elseif dataType == 0x09 then
           while index <= #data and data[index] ~= 0 do index = index + 1 end
           index = index + 1
@@ -129,6 +144,9 @@ local function consumeTelemetry()
           if index + 2 <= #data then
             field[3] = data[index + 1]
             field[4] = data[index + 2]
+            field[5] = 1
+            field[6] = 0
+            field[7] = true
           end
         end
         connected = true
@@ -152,6 +170,10 @@ end
 
 local function valueText(field)
   if field.value == nil then return "---" end
+  if field[17] then
+    local states = {"PARK CAR", "PRESS", "SAVING", "SAVED", "NO LOG", "NO SPACE", "FAILED", "CANCELLED", "UNAVAILABLE"}
+    return states[field.value + 1] or "---"
+  end
   if field[10] then
     if field.value == 2 then return "YES" end
     if field.value == 1 then return "PARTIAL" end
@@ -197,7 +219,7 @@ end
 
 local function adjust(step)
   local field = fields[selected]
-  if field[10] or field[11] or field[15] then return end
+  if field[10] or field[11] or field[15] or field[17] then return end
   if field.value == nil then return end
   field.value = math.max(field[3], math.min(field[4], field.value + step * field[5]))
   writeField(field)
@@ -209,6 +231,7 @@ local function init()
   nextRequest = 0
   nextGainRequest = 0
   nextCalibrationRequest = 0
+  nextArchiveRequest = 0
   pushFailed = 0
 end
 
@@ -234,7 +257,17 @@ local function run(event)
     end
   elseif enter then
     local field = fields[selected]
-    if field[11] then
+    if field[17] then
+      -- READY starts the first archive. SAVED permits replacing a log that
+      -- survived a reboot; the firmware still refuses unless the car is parked.
+      if field.value == 1 or field.value == 3 then
+        local status = field.value
+        field.value = 1
+        writeField(field)
+        field.value = status
+        nextArchiveRequest = 0
+      end
+    elseif field[11] then
       field.value = 1
       writeField(field)
       field.value = 0
@@ -255,6 +288,10 @@ local function run(event)
 
   if now >= nextGainRequest and requestField(findField(37)) then
     nextGainRequest = now + 25
+  end
+
+  if now >= nextArchiveRequest and requestField(findField(40)) then
+    nextArchiveRequest = now + 25
   end
 
   if now >= nextRequest and requestField(fields[requestIndex]) then

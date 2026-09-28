@@ -20,6 +20,12 @@ void WebConfigurator::setBackgroundStore(Backgrounds& store)
 {
     backgrounds = &store;
 }
+
+
+void WebConfigurator::setBlackboxArchive(BlackboxArchive& archive)
+{
+    blackboxArchive = &archive;
+}
 #endif
 
 
@@ -122,6 +128,20 @@ void WebConfigurator::begin(
             handleLogClear();
         }
     );
+
+    #if defined(OPENDRIFT_BOARD_AMOLED_164)
+    server.on(
+        "/blackbox-saved.csv",
+        HTTP_GET,
+        [this]() { handleArchivedLogDownload(); }
+    );
+
+    server.on(
+        "/clear-saved-log",
+        HTTP_POST,
+        [this]() { handleArchivedLogClear(); }
+    );
+    #endif
 
     server.on(
         "/restart",
@@ -260,6 +280,8 @@ void WebConfigurator::handleRoot()
     #if defined(OPENDRIFT_INPUT_CRSF)
     #if defined(OPENDRIFT_CRSF_OOPS_SWAPPED_PINS)
     html += F("</div><div class='pill'>CRSF OOPS: receiver TX to GPIO 17 / RX to GPIO 18");
+    #elif defined(OPENDRIFT_CRSF_V2_THROTTLE_GPIO8)
+    html += F("</div><div class='pill'>CRSF: GPIO 1 RX / 2 TX &middot; ESC: GPIO 8");
     #elif defined(OPENDRIFT_BOARD_MATRIX)
     html += F("</div><div class='pill'>CRSF: GPIO 3 RX / 4 TX");
     #elif defined(OPENDRIFT_AMOLED_V2)
@@ -347,16 +369,16 @@ void WebConfigurator::handleRoot()
     html += F("<form method='post' action='/save'>");
 
     html += F("<div class='card'><h2>Drive &amp; Limits</h2><div class='row'>");
-    html += input("Saved gain (fallback)", "gain", String(settings->getGain(), 2), "number", "0.01");
-    html += input("Deadband", "deadband", String(settings->getDeadband(), 2), "number", "1");
-    html += input("Max correction (% full steering span)", "gyroMax", String(settings->getGyroMaxCorrection()), "number", "1");
+    html += parameterInput(OpenDriftParameters::Id::GYRO_GAIN, "gain", String(settings->getGain(), 2), "Saved gain (fallback)");
+    html += parameterInput(OpenDriftParameters::Id::DEADBAND, "deadband", String(settings->getDeadband(), 2));
+    html += parameterInput(OpenDriftParameters::Id::MAX_CORRECTION, "gyroMax", String(settings->getGyroMaxCorrection()), "Max correction (% full steering span)");
     html += F("<p class='sub'>This is the gyro's maximum endpoint-to-endpoint authority. 50% can move from center to one calibrated endpoint; 100% can override one endpoint all the way to the other. Physical endpoint calibration remains the final hard limit.</p>");
     html += F("</div>");
     html += checkbox("Reverse gyro correction", "gyroReverse", settings->getGyroReverse());
     html += F("</div>");
 
     html += F("<div class='card'><h2>OpenDrift v1.0 Response</h2><div class='row'>");
-    html += input("Smoothing", "gyroSmoothing", String(settings->getGyroSmoothing(), 2), "number", "0.01");
+    html += parameterInput(OpenDriftParameters::Id::SMOOTHING, "gyroSmoothing", String(settings->getGyroSmoothing(), 2));
     html += F("<label>Gyro sensor LPF</label><select name='gyroLpfMode'><option value='0'");
     if(settings->getGyroLpfMode() == 0) html += F(" selected");
     html += F(">24 Hz - original</option><option value='1'");
@@ -364,26 +386,27 @@ void WebConfigurator::handleRoot()
     html += F(">120 Hz - low latency</option><option value='2'");
     if(settings->getGyroLpfMode() == 2) html += F(" selected");
     html += F(">Off - raw bandwidth</option></select>");
-    html += input("Prediction strength (0-100)", "predictionStrength", String(settings->getPredictionStrength()), "number", "1");
-    html += input("Anti Wobble (0-100)", "huntStrength", String(settings->getGyroHuntStrength()), "number", "1");
+    html += parameterInput(OpenDriftParameters::Id::PREDICTION, "predictionStrength", String(settings->getPredictionStrength()));
+    html += parameterInput(OpenDriftParameters::Id::ANTI_WOBBLE, "huntStrength", String(settings->getGyroHuntStrength()));
+    html += parameterInput(OpenDriftParameters::Id::GYRO_HYSTERESIS, "gyroOutputHysteresis", String(settings->getGyroOutputHysteresis()));
     html += F("<label>Anti Wobble scale</label><select name='antiWobbleScale'><option value='0'");
     if(settings->getAntiWobbleScale() == 0) html += F(" selected");
     html += F(">1/10 scale</option><option value='1'");
     if(settings->getAntiWobbleScale() == 1) html += F(" selected");
     html += F(">Micro (1/24-1/28)</option></select>");
-    html += F("<p class='sub'>Anti Wobble controls the depth of OpenDrift's narrow, phase-aware wheel-wobble notch. Use 1/10 for the proven 2.5-3.6 Hz steering mode, or Micro for faster 5-15 Hz steering systems. Start at 50. Zero bypasses the notch and 100 applies its maximum depth.</p>");
+    html += F("<p class='sub'>Anti Wobble controls the depth of OpenDrift's narrow, phase-aware wheel-wobble notch. Use 1/10 for the proven 2.5-3.6 Hz steering mode, or Micro for faster 5-15 Hz steering systems. Gyro output hysteresis is an experimental diagnostic that holds only tiny gyro-correction changes; it never reduces driver steering resolution. Leave it at zero for the unchanged 1.0.9 response.</p>");
     html += F("</div></div>");
 
     html += F("<div class='card'><h2>Transition &amp; Driver Priority</h2><p class='sub'>Transition Speed controls how quickly gyro correction reverses during a direction change. Driver Priority progressively reduces only fast direct gyro gain as you hold more steering, giving the driver more authority near full lock. Start at 0 and test 10-20; steady Countersteer Assist, Drift Memory, and Max Correction remain unchanged.</p><div class='row'>");
-    html += input("Transition speed (0-100)", "transitionSpeed", String(settings->getGyroTransitionSpeed()), "number", "1");
-    html += input("Driver priority (0-50%)", "driverPriority", String(settings->getDriverPriority()), "number", "1");
+    html += parameterInput(OpenDriftParameters::Id::TRANSITION_SPEED, "transitionSpeed", String(settings->getGyroTransitionSpeed()));
+    html += parameterInput(OpenDriftParameters::Id::DRIVER_PRIORITY, "driverPriority", String(settings->getDriverPriority()));
     html += F("</div></div>");
 
     html += F("<div class='card'><h2>Drift Assist</h2><p class='sub'>Countersteer Assist changes only the steady steering workload. Zero preserves the base v1.0 response; higher values let OpenDrift carry more of a settled drift.</p><div class='row'>");
-    html += input("Countersteer assist (0-100)", "counterSteerAssist", String(settings->getGyroCounterSteerAssist()), "number", "1");
-    html += input("Hold assist (0-100)", "gyroHoldBoost", String(settings->getGyroHoldBoost()), "number", "1");
-    html += input("Drift memory", "gyroIGain", String(settings->getGyroIntegralGain(), 2), "number", "0.01");
-    html += input("Memory limit (us)", "gyroILimit", String(settings->getGyroIntegralLimit()), "number", "1");
+    html += parameterInput(OpenDriftParameters::Id::COUNTERSTEER, "counterSteerAssist", String(settings->getGyroCounterSteerAssist()));
+    html += parameterInput(OpenDriftParameters::Id::HOLD_ASSIST, "gyroHoldBoost", String(settings->getGyroHoldBoost()));
+    html += parameterInput(OpenDriftParameters::Id::DRIFT_MEMORY, "gyroIGain", String(settings->getGyroIntegralGain(), 2));
+    html += parameterInput(OpenDriftParameters::Id::MEMORY_LIMIT, "gyroILimit", String(settings->getGyroIntegralLimit()));
     html += F("</div></div>");
 
     html += F("<div class='card'><h2>Servo</h2>");
@@ -401,9 +424,9 @@ void WebConfigurator::handleRoot()
     if(settings->getThrottleOutputHz() == 333) html += F(" selected");
     html += F(">333 Hz - supported ESCs only</option></select><p class='sub'>Higher rates reduce throttle command latency and increase effective pulse resolution. Use 250 or 333 Hz only when the ESC explicitly supports that input rate. A restart is required.</p>");
     html += F("<div class='row'>");
-    html += input("Center pulse", "servoCenter", String(settings->getServoCenter()));
-    html += input("Travel percent", "servoTravel", String(settings->getServoTravel()));
-    html += input("Quiet band us", "servoQuiet", String(settings->getServoQuiet()), "number", "1");
+    html += parameterInput(OpenDriftParameters::Id::SERVO_CENTER, "servoCenter", String(settings->getServoCenter()), "Center pulse");
+    html += parameterInput(OpenDriftParameters::Id::SERVO_TRAVEL, "servoTravel", String(settings->getServoTravel()), "Travel percent");
+    html += parameterInput(OpenDriftParameters::Id::SERVO_QUIET, "servoQuiet", String(settings->getServoQuiet()), "Quiet band us");
     html += F("</div></div>");
 
     #if defined(OPENDRIFT_BOARD_MATRIX)
@@ -457,13 +480,15 @@ void WebConfigurator::handleRoot()
     html += F("'><input type='hidden' name='steeringMaxWas' value='");
     html += String(settings->getSteeringMax());
     html += F("'>");
-    html += input("Steering travel percent", "radioSteeringTravel", String(settings->getRadioSteeringTravel()), "number", "1");
+    html += parameterInput(OpenDriftParameters::Id::STEERING_TRAVEL, "radioSteeringTravel", String(settings->getRadioSteeringTravel()), "Steering travel percent");
     html += F("</div></div>");
 
     html += F("<div class='card'><h2>Gain Channel Calibration</h2><div class='row'>");
     #if defined(OPENDRIFT_INPUT_CRSF)
     #if defined(OPENDRIFT_CRSF_OOPS_SWAPPED_PINS)
     html += F("Personal swapped-pin build: CRSF channel 3 controls gyro gain. GPIO 16 drives the steering servo. GPIO 15 actively outputs neutral throttle during failsafe and passes throttle only after a valid neutral hold. Receiver TX feeds GPIO 17; receiver RX connects to GPIO 18.");
+    #elif defined(OPENDRIFT_CRSF_V2_THROTTLE_GPIO8)
+    html += F("Personal V2 GPIO8 recovery build: CRSF channel 3 controls gyro gain. GPIO 15 drives the steering servo. GPIO 8 actively outputs neutral throttle during failsafe and passes throttle only after a valid neutral hold. Receiver TX feeds GPIO 1; receiver RX connects to GPIO 2. GPIO 8 is reserved and unavailable as an auxiliary output.");
     #elif defined(OPENDRIFT_BOARD_MATRIX)
     html += F("CRSF channel 3 controls gyro gain. GPIO 1 drives the steering servo. GPIO 2 actively outputs neutral throttle during failsafe and passes throttle only after a valid neutral hold. Receiver TX feeds GPIO 3; receiver RX connects to GPIO 4.");
     #elif defined(OPENDRIFT_AMOLED_V2)
@@ -489,8 +514,8 @@ void WebConfigurator::handleRoot()
     );
     #endif
     html += F("<div class='row'>");
-    html += input("CH3 gain minimum", "channel3GainMin", String(settings->getChannel3GainMin(), 2), "number", "0.05");
-    html += input("CH3 gain maximum", "channel3GainMax", String(settings->getChannel3GainMax(), 2), "number", "0.05");
+    html += parameterInput(OpenDriftParameters::Id::CHANNEL_3_GAIN_MIN, "channel3GainMin", String(settings->getChannel3GainMin(), 2));
+    html += parameterInput(OpenDriftParameters::Id::CHANNEL_3_GAIN_MAX, "channel3GainMax", String(settings->getChannel3GainMax(), 2));
     html += F("</div><p class='sub'>Maps the full Channel 3 control range to gyro gain. Defaults are 0.50 to 3.00; both ends support 0.00 to 6.00.</p>");
     html += F("</div>");
 
@@ -638,14 +663,32 @@ void WebConfigurator::handleRoot()
             html += String(blackbox->getOverwrittenRows());
         }
 
-        html += F("</p><p class='sub'>Stage-one logger: records stay entirely in volatile PSRAM. No internal flash writes occur. Download converts the binary records to CSV; power cycling clears the log.</p>");
+        html += F("</p><p class='sub'>While driving, records stay entirely in volatile PSRAM. Internal flash is written only when you explicitly archive after parking. Download converts the binary records to CSV; power cycling clears only the RAM copy.</p>");
         html += F("<a href='/blackbox.csv'>Download CSV</a>");
         html += F("<form method='post' action='/clear-log'><button type='submit'>Clear RAM Log</button></form>");
+
     }
     else
     {
         html += F("<p class='sub'>PSRAM log buffer unavailable.</p>");
     }
+
+    #if defined(OPENDRIFT_BOARD_AMOLED_164)
+    if(blackboxArchive != nullptr && blackboxArchive->hasArchive())
+    {
+        html += F("<p class='sub'>Saved internal archive: ");
+        html += String(blackboxArchive->getArchiveRecordCount());
+        html += F(" records &middot; ");
+        html += String(blackboxArchive->getArchiveBytes() / 1024);
+        html += F(" KB. This copy survives power cycles.</p>");
+        html += F("<a href='/blackbox-saved.csv'>Download saved CSV</a>");
+        html += F("<form method='post' action='/clear-saved-log'><button type='submit'>Delete Saved Log</button></form>");
+    }
+    else
+    {
+        html += F("<p class='sub'>No persistent log saved. Park the car for two seconds, then press Archive Log in the EdgeTX tool.</p>");
+    }
+    #endif
 
     html += F("</div>");
 
@@ -820,6 +863,13 @@ void WebConfigurator::handleSave()
         getIntArg(
             "huntStrength",
             settings->getGyroHuntStrength()
+        )
+    );
+
+    settings->setGyroOutputHysteresis(
+        getIntArg(
+            "gyroOutputHysteresis",
+            settings->getGyroOutputHysteresis()
         )
     );
 
@@ -1382,6 +1432,99 @@ void WebConfigurator::handleLogClear()
 
 
 #if defined(OPENDRIFT_BOARD_AMOLED_164)
+void WebConfigurator::handleArchivedLogDownload()
+{
+    if(
+        blackboxArchive == nullptr ||
+        blackbox == nullptr ||
+        blackboxArchive->isSaving()
+    )
+    {
+        server.send(503, "text/plain", "Saved blackbox log unavailable");
+        return;
+    }
+
+    File file;
+    size_t recordCount = 0;
+    size_t recordSize = 0;
+
+    if(!blackboxArchive->openArchive(file, recordCount, recordSize))
+    {
+        server.send(404, "text/plain", "No valid saved blackbox log");
+        return;
+    }
+
+    if(recordSize > 512)
+    {
+        file.close();
+        server.send(500, "text/plain", "Saved blackbox format is unsupported");
+        return;
+    }
+
+    server.sendHeader(
+        "Content-Disposition",
+        "attachment; filename=opendrift-blackbox-saved.csv"
+    );
+    server.setContentLength(CONTENT_LENGTH_UNKNOWN);
+    server.send(200, "text/csv", "");
+    server.sendContent(blackbox->getCsvHeader());
+    server.sendContent("\n");
+
+    uint8_t record[512];
+    char line[704];
+    String chunk;
+    chunk.reserve(8192);
+
+    for(size_t index = 0; index < recordCount; index++)
+    {
+        if(file.read(record, recordSize) != recordSize) break;
+
+        const size_t length = blackbox->formatBinaryRecord(
+            record,
+            recordSize,
+            line,
+            sizeof(line)
+        );
+
+        if(length == 0) continue;
+
+        if(chunk.length() + length > 8192)
+        {
+            server.sendContent(chunk);
+            chunk = "";
+
+            if(!server.client().connected())
+            {
+                file.close();
+                return;
+            }
+        }
+
+        chunk.concat(line, length);
+        if((index & 0x7F) == 0) delay(0);
+    }
+
+    file.close();
+    if(chunk.length() > 0) server.sendContent(chunk);
+    server.sendContent("");
+}
+
+
+void WebConfigurator::handleArchivedLogClear()
+{
+    if(blackboxArchive == nullptr || !blackboxArchive->clearArchive())
+    {
+        server.send(503, "text/plain", "Could not delete saved blackbox log");
+        return;
+    }
+
+    server.sendHeader("Location", "/");
+    server.send(303);
+}
+#endif
+
+
+#if defined(OPENDRIFT_BOARD_AMOLED_164)
 void WebConfigurator::handleBackgroundUploadChunk()
 {
     if(backgrounds == nullptr) return;
@@ -1567,6 +1710,39 @@ String WebConfigurator::input(
     html += value;
     html += F("'></div>");
 
+    return html;
+}
+
+
+String WebConfigurator::parameterInput(
+    OpenDriftParameters::Id id,
+    const char* name,
+    String value,
+    const char* label
+)
+{
+    const OpenDriftParameters::Definition* definition =
+        OpenDriftParameters::find(id);
+
+    if(definition == nullptr)
+    {
+        return input(label != nullptr ? label : name, name, value);
+    }
+
+    String html;
+    html += F("<div><label>");
+    html += label != nullptr ? label : definition->name;
+    html += F("</label><input name='");
+    html += name;
+    html += F("' type='number' min='");
+    html += String(definition->minimum, (unsigned int)definition->decimals);
+    html += F("' max='");
+    html += String(definition->maximum, (unsigned int)definition->decimals);
+    html += F("' step='");
+    html += String(definition->step, (unsigned int)definition->decimals);
+    html += F("' value='");
+    html += value;
+    html += F("'></div>");
     return html;
 }
 

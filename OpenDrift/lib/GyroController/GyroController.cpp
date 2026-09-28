@@ -95,6 +95,8 @@ void GyroController::resetDynamicState()
     centerReturnCorrection = 0.0f;
     centerReturnReady = false;
     driverPriorityScale = 1.0f;
+    outputHysteresisCorrection = 0.0f;
+    outputHysteresisReady = false;
     lastSteeringCommand = 1500;
     steeringReady = false;
 
@@ -155,6 +157,8 @@ void GyroController::resetDynamicState()
     transitionSlewCorrectionTelemetry = 0.0f;
     driverPriorityScaleTelemetry = 1.0f;
     effectiveDirectGainTelemetry = gyroGain;
+    preHysteresisCorrectionTelemetry = 0.0f;
+    postHysteresisCorrectionTelemetry = 0.0f;
 
     requestedCorrectionOutput = 0;
     correctionOutput = 0;
@@ -1349,42 +1353,11 @@ float GyroController::update(
     // correction path to the driver. A short filter prevents an abrupt gain
     // rise as the steering passes through center, while the downstream
     // transition slew still controls correction reversal timing.
-    float steeringDeflection =
-        steeringSignal
-        ? constrain(
-            fabsf((float)steeringCommand - 1500.0f) / 500.0f,
-            0.0f,
-            1.0f
-        )
-        : 0.0f;
-
-    float priorityTargetScale =
-        1.0f
-        - steeringDeflection
-        * (driverPriority / 100.0f);
-
-    if(driverPriority <= 0)
-    {
-        // Preserve the existing controller bit-for-bit when the feature is
-        // disabled, including immediately after loading an older profile.
-        driverPriorityScale = 1.0f;
-    }
-    else
-    {
-        driverPriorityScale +=
-            (priorityTargetScale - driverPriorityScale)
-            *
-            (1.0f - expf(-dt / DRIVER_PRIORITY_FILTER_SECONDS));
-    }
-
-    driverPriorityScale = constrain(
-        driverPriorityScale,
-        0.5f,
-        1.0f
+    float effectiveDirectGain = calculateEffectiveDirectGain(
+        steeringCommand,
+        steeringSignal,
+        dt
     );
-
-    float effectiveDirectGain =
-        gyroGain * driverPriorityScale;
 
     float directCorrection =
         huntDampedYaw
@@ -1399,20 +1372,7 @@ float GyroController::update(
     // Countersteer Assist is deliberately sourced from the slow learned
     // drift reference. It increases how much of a settled drift OpenDrift
     // carries without raising fast yaw damping or responding to chatter.
-    float steadyAssistCorrection =
-        driftReferenceReady
-        ?
-        driftReferenceYaw
-        *
-        gyroGain
-        *
-        (counterSteerAssist / 100.0f)
-        *
-        settledBlend
-        *
-        (1.0f - 0.75f * transitionAuthorityBlend)
-        :
-        0.0f;
+    float steadyAssistCorrection = calculateSteadyAssistCorrection();
 
     counterSteerCorrection =
         (int)roundf(steadyAssistCorrection);
@@ -1609,6 +1569,17 @@ float GyroController::update(
             (float)effectiveMaxCorrection
         );
 
+    // The high-resolution PWM path intentionally preserves sub-microsecond
+    // driver motion, but it also lets a tiny alternating gyro correction keep
+    // re-exciting the steering resonance after the notch has removed most of
+    // its energy. This experimental gate holds only the gyro correction until
+    // its accumulated change reaches the selected threshold. Zero is a true
+    // bypass and preserves the current 1.0.9 response exactly.
+    preHysteresisCorrectionTelemetry = -targetCorrection;
+
+    targetCorrection = applyOutputHysteresis(targetCorrection);
+    postHysteresisCorrectionTelemetry = -targetCorrection;
+
     // Expose a signed correction, not a fake centered servo command. The
     // controller's sign convention is opposite the servo mix convention.
     // The caller combines this with driver input and performs the one final
@@ -1651,12 +1622,88 @@ float GyroController::update(
 }
 
 
+float GyroController::calculateEffectiveDirectGain(
+    int steeringCommand,
+    bool steeringSignal,
+    float dt
+)
+{
+    float steeringDeflection =
+        steeringSignal
+        ? constrain(
+            fabsf((float)steeringCommand - 1500.0f) / 500.0f,
+            0.0f,
+            1.0f
+        )
+        : 0.0f;
+
+    float priorityTargetScale =
+        1.0f
+        - steeringDeflection
+        * (driverPriority / 100.0f);
+
+    if(driverPriority <= 0)
+    {
+        driverPriorityScale = 1.0f;
+    }
+    else
+    {
+        driverPriorityScale +=
+            (priorityTargetScale - driverPriorityScale)
+            *
+            (1.0f - expf(-dt / DRIVER_PRIORITY_FILTER_SECONDS));
+    }
+
+    driverPriorityScale = constrain(
+        driverPriorityScale,
+        0.5f,
+        1.0f
+    );
+
+    return gyroGain * driverPriorityScale;
+}
+
+
+float GyroController::calculateSteadyAssistCorrection() const
+{
+    if(!driftReferenceReady)
+    {
+        return 0.0f;
+    }
+
+    return
+        driftReferenceYaw
+        * gyroGain
+        * (counterSteerAssist / 100.0f)
+        * settledBlend
+        * (1.0f - 0.75f * transitionAuthorityBlend);
+}
+
+
+float GyroController::applyOutputHysteresis(float targetCorrection)
+{
+    if(!outputHysteresisReady || outputHysteresis <= 0)
+    {
+        outputHysteresisCorrection = targetCorrection;
+        outputHysteresisReady = true;
+    }
+    else if(
+        fabsf(targetCorrection - outputHysteresisCorrection) >=
+        (float)outputHysteresis
+    )
+    {
+        outputHysteresisCorrection = targetCorrection;
+    }
+
+    return outputHysteresisCorrection;
+}
+
+
 void GyroController::setGain(float value)
 {
-    gyroGain = constrain(
-        value,
-        0.0f,
-        6.0f
+    gyroGain = OpenDriftParameters::clamp(
+        OpenDriftParameters::Id::GYRO_GAIN,
+        value
     );
 }
 
@@ -1669,10 +1716,9 @@ float GyroController::getGain()
 
 void GyroController::setDeadband(float value)
 {
-    deadband = constrain(
-        value,
-        0.0f,
-        100.0f
+    deadband = OpenDriftParameters::clamp(
+        OpenDriftParameters::Id::DEADBAND,
+        value
     );
 }
 
@@ -1685,10 +1731,9 @@ float GyroController::getDeadband()
 
 void GyroController::setSmoothing(float value)
 {
-    smoothing = constrain(
-        value,
-        0.0f,
-        1.0f
+    smoothing = OpenDriftParameters::clamp(
+        OpenDriftParameters::Id::SMOOTHING,
+        value
     );
 }
 
@@ -1729,10 +1774,9 @@ int GyroController::getRequestedCorrection()
 
 void GyroController::setIntegralGain(float value)
 {
-    integralGain = constrain(
-        value,
-        0.0f,
-        20.0f
+    integralGain = OpenDriftParameters::clamp(
+        OpenDriftParameters::Id::DRIFT_MEMORY,
+        value
     );
 
     if(integralGain <= 0.0f)
@@ -1751,10 +1795,9 @@ float GyroController::getIntegralGain()
 
 void GyroController::setIntegralLimit(int value)
 {
-    integralLimit = constrain(
-        value,
-        0,
-        500
+    integralLimit = OpenDriftParameters::clamp(
+        OpenDriftParameters::Id::MEMORY_LIMIT,
+        value
     );
 
     if(integralLimit <= 0)
@@ -1778,10 +1821,9 @@ int GyroController::getIntegralCorrection()
 
 void GyroController::setHoldBoost(int value)
 {
-    holdBoost = constrain(
-        value,
-        0,
-        100
+    holdBoost = OpenDriftParameters::clamp(
+        OpenDriftParameters::Id::HOLD_ASSIST,
+        value
     );
 }
 
@@ -1793,7 +1835,10 @@ int GyroController::getHoldBoost()
 
 void GyroController::setCounterSteerAssist(int value)
 {
-    counterSteerAssist = constrain(value, 0, 100);
+    counterSteerAssist = OpenDriftParameters::clamp(
+        OpenDriftParameters::Id::COUNTERSTEER,
+        value
+    );
 
     if(counterSteerAssist <= 0)
     {
@@ -1813,7 +1858,10 @@ int GyroController::getCounterSteerCorrection()
 
 void GyroController::setTransitionSpeed(int value)
 {
-    transitionSpeed = constrain(value, 0, 100);
+    transitionSpeed = OpenDriftParameters::clamp(
+        OpenDriftParameters::Id::TRANSITION_SPEED,
+        value
+    );
 }
 
 int GyroController::getTransitionSpeed()
@@ -1829,10 +1877,9 @@ float GyroController::getTransitionSpeedBlend()
 
 void GyroController::setPredictionStrength(int value)
 {
-    predictionStrength = constrain(
-        value,
-        0,
-        100
+    predictionStrength = OpenDriftParameters::clamp(
+        OpenDriftParameters::Id::PREDICTION,
+        value
     );
 }
 
@@ -1845,7 +1892,10 @@ int GyroController::getPredictionStrength()
 
 void GyroController::setDriverPriority(int value)
 {
-    driverPriority = constrain(value, 0, 50);
+    driverPriority = OpenDriftParameters::clamp(
+        OpenDriftParameters::Id::DRIVER_PRIORITY,
+        value
+    );
 
     if(driverPriority == 0)
     {
@@ -1874,13 +1924,55 @@ float GyroController::getEffectiveDirectGain()
 
 void GyroController::setHuntStrength(int value)
 {
-    huntStrength = constrain(value, 0, 100);
+    huntStrength = OpenDriftParameters::clamp(
+        OpenDriftParameters::Id::ANTI_WOBBLE,
+        value
+    );
 }
 
 
 int GyroController::getHuntStrength()
 {
     return huntStrength;
+}
+
+
+void GyroController::setOutputHysteresis(int value)
+{
+    int normalizedValue = OpenDriftParameters::clamp(
+        OpenDriftParameters::Id::GYRO_HYSTERESIS,
+        value
+    );
+
+    if(normalizedValue == outputHysteresis)
+    {
+        return;
+    }
+
+    outputHysteresis = normalizedValue;
+
+    if(outputHysteresis == 0)
+    {
+        outputHysteresisReady = false;
+    }
+}
+
+
+int GyroController::getOutputHysteresis()
+{
+    return outputHysteresis;
+}
+
+
+float GyroController::getPreHysteresisCorrection()
+{
+    return preHysteresisCorrectionTelemetry;
+}
+
+
+float GyroController::getPostHysteresisCorrection()
+{
+    return postHysteresisCorrectionTelemetry;
 }
 
 

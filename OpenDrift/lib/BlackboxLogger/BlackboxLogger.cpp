@@ -6,7 +6,7 @@
 namespace
 {
     const char* BLACKBOX_HEADER =
-        "time_ms,yaw,filtered_yaw,gyro_x_dps,gyro_y_dps,accel_x_g,accel_y_g,accel_z_g,accel_mag_g,accel_delta_g,tilt_rate_dps,surface_disturbance,gyro_requested_us,gyro_limited_us,gyro_applied_us,correction_saturated,steering_raw_us,steering_cmd_us,servo_us,servo_quiet,throttle_raw_us,gain_raw_us,gain,driver_priority_pct,driver_priority_scale,effective_direct_gain,deadband,max_corr_pct,smooth,gyro_lpf_mode,drift_memory,memory_limit,memory_feedback_us,hold_assist,countersteer_assist,prediction_strength,predicted_yaw,drift_reference_yaw,reference_error,reference_lock,throttle_prediction,direct_correction_us,countersteer_us,memory_feedback_copy_us,driver_activity_blend,throttle_prediction_blend,steering_activity_us_s,control_phase,settled_blend,throttle_transient,steering_signal,throttle_signal,gain_signal,pin18_throttle_out,transition_speed,transition_speed_blend,transition_slew_us,hunt_suppression,hunt_frequency_hz,transition_authority_blend,throttle_lift_blend,transition_prediction_scale,hunt_residual_dps,hunt_removed_us,hunt_consistent_half_cycles,hunt_latch,anti_wobble,hunt_residual_envelope_dps,hunt_notch_center_hz";
+        "time_ms,yaw,filtered_yaw,gyro_x_dps,gyro_y_dps,accel_x_g,accel_y_g,accel_z_g,accel_mag_g,accel_delta_g,tilt_rate_dps,surface_disturbance,gyro_requested_us,gyro_limited_us,gyro_applied_us,correction_saturated,steering_raw_us,steering_cmd_us,servo_us,servo_quiet,throttle_raw_us,gain_raw_us,gain,driver_priority_pct,driver_priority_scale,effective_direct_gain,deadband,max_corr_pct,smooth,gyro_lpf_mode,drift_memory,memory_limit,memory_feedback_us,hold_assist,countersteer_assist,prediction_strength,predicted_yaw,drift_reference_yaw,reference_error,reference_lock,throttle_prediction,direct_correction_us,countersteer_us,memory_feedback_copy_us,driver_activity_blend,throttle_prediction_blend,steering_activity_us_s,control_phase,settled_blend,throttle_transient,steering_signal,throttle_signal,gain_signal,pin18_throttle_out,transition_speed,transition_speed_blend,transition_slew_us,hunt_suppression,hunt_frequency_hz,transition_authority_blend,throttle_lift_blend,transition_prediction_scale,hunt_residual_dps,hunt_removed_us,hunt_consistent_half_cycles,hunt_latch,anti_wobble,hunt_residual_envelope_dps,hunt_notch_center_hz,gyro_output_hysteresis_us,gyro_pre_hysteresis_us,gyro_post_hysteresis_us";
 }
 
 
@@ -97,10 +97,13 @@ void BlackboxLogger::log(
     float huntLatch,
     int huntStrength,
     float huntResidualEnvelope,
-    float huntNotchCenter
+    float huntNotchCenter,
+    int gyroOutputHysteresis,
+    float preHysteresisCorrection,
+    float postHysteresisCorrection
 )
 {
-    if(!ready || capacity == 0)
+    if(!ready || paused || capacity == 0)
     {
         return;
     }
@@ -197,7 +200,10 @@ void BlackboxLogger::log(
         huntLatch,
         huntStrength,
         huntResidualEnvelope,
-        huntNotchCenter
+        huntNotchCenter,
+        gyroOutputHysteresis,
+        preHysteresisCorrection,
+        postHysteresisCorrection
     };
 
     writeIndex =
@@ -295,8 +301,81 @@ size_t BlackboxLogger::formatCsvRecord(
         return 0;
     }
 
-    const Record* record =
-        getRecord(logicalIndex);
+    return formatRecord(
+        getRecord(logicalIndex),
+        output,
+        outputSize
+    );
+}
+
+
+size_t BlackboxLogger::getBinaryRecordSize() const
+{
+    return sizeof(Record);
+}
+
+
+bool BlackboxLogger::copyBinaryRecord(
+    size_t logicalIndex,
+    void* output,
+    size_t outputSize
+) const
+{
+    const Record* record = getRecord(logicalIndex);
+
+    if(record == nullptr || output == nullptr || outputSize < sizeof(Record))
+    {
+        return false;
+    }
+
+    memcpy(output, record, sizeof(Record));
+    return true;
+}
+
+
+size_t BlackboxLogger::formatBinaryRecord(
+    const void* record,
+    size_t recordSize,
+    char* output,
+    size_t outputSize
+) const
+{
+    if(record == nullptr || recordSize != sizeof(Record))
+    {
+        if(output != nullptr && outputSize > 0) output[0] = '\0';
+        return 0;
+    }
+
+    return formatRecord(
+        static_cast<const Record*>(record),
+        output,
+        outputSize
+    );
+}
+
+
+void BlackboxLogger::setPaused(bool value)
+{
+    paused = value;
+}
+
+
+bool BlackboxLogger::isPaused() const
+{
+    return paused;
+}
+
+
+size_t BlackboxLogger::formatRecord(
+    const Record* record,
+    char* output,
+    size_t outputSize
+) const
+{
+    if(output == nullptr || outputSize == 0)
+    {
+        return 0;
+    }
 
     if(record == nullptr)
     {
@@ -307,7 +386,7 @@ size_t BlackboxLogger::formatCsvRecord(
     int formatted = snprintf(
         output,
         outputSize,
-        "%lu,%.3f,%.3f,%.3f,%.3f,%.4f,%.4f,%.4f,%.4f,%.4f,%.3f,%.3f,%ld,%ld,%ld,%d,%ld,%ld,%ld,%ld,%ld,%ld,%.3f,%ld,%.3f,%.3f,%.2f,%ld,%.3f,%ld,%.3f,%ld,%ld,%ld,%ld,%ld,%.3f,%.3f,%.3f,%.3f,%.3f,%.3f,%ld,%.3f,%.3f,%.3f,%.3f,%ld,%.3f,%.3f,%d,%d,%d,%d,%ld,%.3f,%.3f,%.3f,%.3f,%.3f,%.3f,%.3f,%.3f,%.3f,%ld,%.3f,%ld,%.3f,%.3f\n",
+        "%lu,%.3f,%.3f,%.3f,%.3f,%.4f,%.4f,%.4f,%.4f,%.4f,%.3f,%.3f,%ld,%ld,%ld,%d,%ld,%ld,%ld,%ld,%ld,%ld,%.3f,%ld,%.3f,%.3f,%.2f,%ld,%.3f,%ld,%.3f,%ld,%ld,%ld,%ld,%ld,%.3f,%.3f,%.3f,%.3f,%.3f,%.3f,%ld,%.3f,%.3f,%.3f,%.3f,%ld,%.3f,%.3f,%d,%d,%d,%d,%ld,%.3f,%.3f,%.3f,%.3f,%.3f,%.3f,%.3f,%.3f,%.3f,%ld,%.3f,%ld,%.3f,%.3f,%ld,%.3f,%.3f\n",
         (unsigned long)record->timeMs,
         record->yaw,
         record->filteredYaw,
@@ -376,7 +455,10 @@ size_t BlackboxLogger::formatCsvRecord(
         record->huntLatch,
         (long)record->huntStrength,
         record->huntResidualEnvelope,
-        record->huntNotchCenter
+        record->huntNotchCenter,
+        (long)record->gyroOutputHysteresis,
+        record->preHysteresisCorrection,
+        record->postHysteresisCorrection
     );
 
     if(formatted <= 0)

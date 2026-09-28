@@ -78,7 +78,10 @@ public:
         float huntLatch,
         int huntStrength,
         float huntResidualEnvelope,
-        float huntNotchCenter
+        float huntNotchCenter,
+        int gyroOutputHysteresis,
+        float preHysteresisCorrection,
+        float postHysteresisCorrection
     );
 
     void clear();
@@ -104,6 +107,25 @@ public:
         char* output,
         size_t outputSize
     ) const;
+
+    size_t getBinaryRecordSize() const;
+
+    bool copyBinaryRecord(
+        size_t logicalIndex,
+        void* output,
+        size_t outputSize
+    ) const;
+
+    size_t formatBinaryRecord(
+        const void* record,
+        size_t recordSize,
+        char* output,
+        size_t outputSize
+    ) const;
+
+    void setPaused(bool value);
+
+    bool isPaused() const;
 
 private:
 
@@ -174,6 +196,9 @@ private:
         int32_t huntStrength;
         float huntResidualEnvelope;
         float huntNotchCenter;
+        int32_t gyroOutputHysteresis;
+        float preHysteresisCorrection;
+        float postHysteresisCorrection;
     };
 
     static const size_t preferredBufferBytes =
@@ -199,9 +224,17 @@ private:
 
     bool ready = false;
 
+    volatile bool paused = false;
+
     bool allocateBuffer();
 
     const Record* getRecord(
         size_t logicalIndex
+    ) const;
+
+    size_t formatRecord(
+        const Record* record,
+        char* output,
+        size_t outputSize
     ) const;
 };

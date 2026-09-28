@@ -3,6 +3,8 @@
 #include <Arduino.h>
 #include <Preferences.h>
 
+#include "ParameterCatalog.h"
+
 class Settings
 {
 public:
@@ -16,20 +18,20 @@ public:
         uint32_t version = 11;
         char name[PROFILE_NAME_LENGTH] = {0};
 
-        float gain = 1.5f;
-        float deadband = 2.0f;
-        float gyroSmoothing = 0.10f;
-        float gyroIntegralGain = 0.0f;
+        float gain = OpenDriftParameters::Defaults::GYRO_GAIN;
+        float deadband = OpenDriftParameters::Defaults::DEADBAND;
+        float gyroSmoothing = OpenDriftParameters::Defaults::SMOOTHING;
+        float gyroIntegralGain = OpenDriftParameters::Defaults::DRIFT_MEMORY;
 
-        int32_t gyroMaxCorrection = 100;
-        int32_t gyroIntegralLimit = 120;
-        int32_t gyroHoldBoost = 0;
-        int32_t predictionStrength = 0;
-        int32_t radioSteeringTravel = 100;
-        int32_t gyroCounterSteerAssist = 100;
-        int32_t gyroTransitionSpeed = 50;
-        int32_t gyroHuntStrength = 50;
-        int32_t driverPriority = 0;
+        int32_t gyroMaxCorrection = OpenDriftParameters::Defaults::MAX_CORRECTION;
+        int32_t gyroIntegralLimit = OpenDriftParameters::Defaults::MEMORY_LIMIT;
+        int32_t gyroHoldBoost = OpenDriftParameters::Defaults::HOLD_ASSIST;
+        int32_t predictionStrength = OpenDriftParameters::Defaults::PREDICTION;
+        int32_t radioSteeringTravel = OpenDriftParameters::Defaults::STEERING_TRAVEL;
+        int32_t gyroCounterSteerAssist = OpenDriftParameters::Defaults::COUNTERSTEER;
+        int32_t gyroTransitionSpeed = OpenDriftParameters::Defaults::TRANSITION_SPEED;
+        int32_t gyroHuntStrength = OpenDriftParameters::Defaults::ANTI_WOBBLE;
+        int32_t driverPriority = OpenDriftParameters::Defaults::DRIVER_PRIORITY;
     };
 
     struct SteeringCalibration
@@ -95,6 +97,11 @@ public:
     // moves away from center. Zero preserves the existing controller exactly.
     int getDriverPriority();
     void setDriverPriority(int value);
+
+    // Experimental gyro-only output hysteresis in microseconds. Zero keeps
+    // the full-resolution 1.0.9 output path unchanged.
+    int getGyroOutputHysteresis();
+    void setGyroOutputHysteresis(int value);
 
     // 0 = 1/10 scale steering resonance, 1 = micro scale resonance.
     uint8_t getAntiWobbleScale();
@@ -233,43 +240,45 @@ private:
 
     // Stored values
 
-    float gain = 1.5f;
+    float gain = OpenDriftParameters::Defaults::GYRO_GAIN;
 
-    float deadband = 2.0f;
+    float deadband = OpenDriftParameters::Defaults::DEADBAND;
 
     bool gyroReverse = false;
 
-    int gyroMaxCorrection = 100;
+    int gyroMaxCorrection = OpenDriftParameters::Defaults::MAX_CORRECTION;
 
-    float gyroSmoothing = 0.10f;
+    float gyroSmoothing = OpenDriftParameters::Defaults::SMOOTHING;
 
     uint8_t gyroLpfMode = 0;
 
-    float gyroIntegralGain = 0.0f;
+    float gyroIntegralGain = OpenDriftParameters::Defaults::DRIFT_MEMORY;
 
-    int gyroIntegralLimit = 120;
+    int gyroIntegralLimit = OpenDriftParameters::Defaults::MEMORY_LIMIT;
 
-    int gyroHoldBoost = 0;
+    int gyroHoldBoost = OpenDriftParameters::Defaults::HOLD_ASSIST;
 
-    int gyroCounterSteerAssist = 100;
+    int gyroCounterSteerAssist = OpenDriftParameters::Defaults::COUNTERSTEER;
 
-    int gyroTransitionSpeed = 50;
+    int gyroTransitionSpeed = OpenDriftParameters::Defaults::TRANSITION_SPEED;
 
-    int predictionStrength = 0;
+    int predictionStrength = OpenDriftParameters::Defaults::PREDICTION;
 
-    int gyroHuntStrength = 50;
+    int gyroHuntStrength = OpenDriftParameters::Defaults::ANTI_WOBBLE;
 
-    int driverPriority = 0;
+    int driverPriority = OpenDriftParameters::Defaults::DRIVER_PRIORITY;
+
+    int gyroOutputHysteresis = OpenDriftParameters::Defaults::GYRO_HYSTERESIS;
 
     uint8_t antiWobbleScale = 0;
 
-    int servoCenter = 1500;
+    int servoCenter = OpenDriftParameters::Defaults::SERVO_CENTER;
 
     bool servoReverse = false;
 
-    int servoTravel = 100;
+    int servoTravel = OpenDriftParameters::Defaults::SERVO_TRAVEL;
 
-    int servoQuiet = 0;
+    int servoQuiet = OpenDriftParameters::Defaults::SERVO_QUIET;
 
     uint16_t controlLoopHz = 250;
 
@@ -311,15 +320,15 @@ private:
 
     int steeringCapturedInputPulses[3] = {1000, 1500, 2000};
 
-    int radioSteeringTravel = 100;
+    int radioSteeringTravel = OpenDriftParameters::Defaults::STEERING_TRAVEL;
 
     int gainMin = 1000;
 
     int gainMax = 2000;
 
-    float channel3GainMin = 0.5f;
+    float channel3GainMin = OpenDriftParameters::Defaults::CHANNEL_3_GAIN_MIN;
 
-    float channel3GainMax = 3.0f;
+    float channel3GainMax = OpenDriftParameters::Defaults::CHANNEL_3_GAIN_MAX;
 
     bool throttleOutputEnabled = false;
 

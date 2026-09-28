@@ -7,6 +7,8 @@
 #include "RadioInput.h"
 #include "Settings.h"
 #include "Servo.h"
+#include "BlackboxArchive.h"
+#include "ParameterCatalog.h"
 
 
 class CrsfParameterDevice
@@ -25,11 +27,16 @@ public:
 
     bool consumeSettingsChanged();
 
+    void setBlackboxArchive(
+        BlackboxArchive& archive
+    );
+
 
 private:
 
     static constexpr uint8_t DEVICE_ADDRESS = 0xC8;
-    static constexpr uint8_t PARAMETER_COUNT = 39;
+    static constexpr uint8_t PARAMETER_COUNT =
+        OpenDriftParameters::MAX_PUBLISHED_ID;
 
     static constexpr uint8_t TYPE_PARAMETER_PING = 0x28;
     static constexpr uint8_t TYPE_DEVICE_INFO = 0x29;
@@ -42,19 +49,6 @@ private:
     static constexpr uint8_t DATA_FOLDER = 0x0B;
     static constexpr uint8_t DATA_OUT_OF_RANGE = 0x7F;
 
-public:
-
-    struct FloatDefinition
-    {
-        const char* name;
-        int32_t minimum;
-        int32_t maximum;
-        int32_t defaultValue;
-        uint8_t decimals;
-        int32_t step;
-        const char* unit;
-    };
-
 private:
 
     CrsfInput* crsf = nullptr;
@@ -62,6 +56,7 @@ private:
     GyroController* gyro = nullptr;
     RadioInput* steeringRadio = nullptr;
     ServoOutput* steeringServo = nullptr;
+    BlackboxArchive* blackboxArchive = nullptr;
     bool settingsChanged = false;
 
     void processFrame(
@@ -91,10 +86,6 @@ private:
     void setScaledValue(
         uint8_t parameter,
         int32_t value
-    );
-
-    static const FloatDefinition* getFloatDefinition(
-        uint8_t parameter
     );
 
     static void appendByte(

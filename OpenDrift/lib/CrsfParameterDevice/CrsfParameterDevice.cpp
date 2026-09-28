@@ -3,43 +3,6 @@
 #include <math.h>
 
 
-namespace
-{
-    const CrsfParameterDevice::FloatDefinition FLOAT_PARAMETERS[] =
-    {
-        {"Saved Gain",        0,  600, 150, 2,   5, "x"},
-        {"Deadband",          0, 1000,  20, 1,   1, "dps"},
-        {"Max Correction",    0,  100, 100, 0,   1, "%"},
-        {"Smoothing",         0,  100,  10, 2,   1, ""},
-        {"Drift Memory",      0, 2000,   0, 2,   1, ""},
-        {"Memory Limit",      0,  500, 120, 0,   5, "us"},
-        {"Hold Assist",       0,  100,   0, 0,   1, "%"},
-        {"Countersteer",      0,  100, 100, 0,   1, "%"},
-        {"Transition Speed",  0,  100,  50, 0,   1, "%"},
-        {"Prediction",        0,  100,   0, 0,   1, "%"},
-        {"Servo Quiet",       0,   50,   0, 0,   1, "us"},
-        {"Steering Travel",   0,  100, 100, 0,   1, "%"},
-        {"Servo Travel",      1,  100, 100, 0,   1, "%"},
-        {"Servo Center",   1000, 2000,1500, 0,   1, "us"}
-    };
-
-    const CrsfParameterDevice::FloatDefinition ANTI_WOBBLE_PARAMETER =
-        {"Anti Wobble", 0, 100, 50, 0, 1, "%"};
-
-    const CrsfParameterDevice::FloatDefinition CHANNEL_3_GAIN_MIN_PARAMETER =
-        {"CH3 Gain Min", 0, 600, 50, 2, 5, "x"};
-
-    const CrsfParameterDevice::FloatDefinition CHANNEL_3_GAIN_MAX_PARAMETER =
-        {"CH3 Gain Max", 0, 600, 300, 2, 5, "x"};
-
-    const CrsfParameterDevice::FloatDefinition LIVE_GAIN_PARAMETER =
-        {"Live Gain", 0, 600, 150, 2, 5, "x"};
-
-    const CrsfParameterDevice::FloatDefinition DRIVER_PRIORITY_PARAMETER =
-        {"Driver Priority", 0, 50, 0, 0, 1, "%"};
-}
-
-
 void CrsfParameterDevice::begin(
     CrsfInput& input,
     Settings& storedSettings,
@@ -74,6 +37,14 @@ void CrsfParameterDevice::update()
         processFrame(frame);
         processed++;
     }
+}
+
+
+void CrsfParameterDevice::setBlackboxArchive(
+    BlackboxArchive& archive
+)
+{
+    blackboxArchive = &archive;
 }
 
 
@@ -167,208 +138,116 @@ void CrsfParameterDevice::sendParameter(
         appendByte(payload, length, DATA_FOLDER);
         appendString(payload, length, "ROOT");
 
-        for(uint8_t child = 1; child <= 16; child++)
+        for(uint8_t child = 1; child <= PARAMETER_COUNT; child++)
         {
-            appendByte(payload, length, child);
+            const OpenDriftParameters::Definition* definition =
+                OpenDriftParameters::find(child);
+
+            if(
+                definition != nullptr &&
+                OpenDriftParameters::isAvailable(*definition)
+            )
+            {
+                appendByte(payload, length, child);
+            }
         }
-
-        #if defined(OPENDRIFT_BOARD_AMOLED_164)
-        for(uint8_t child = 17; child <= 24; child++)
-        {
-            appendByte(payload, length, child);
-        }
-        #endif
-
-        appendByte(payload, length, 25);
-        appendByte(payload, length, 26);
-
-        for(uint8_t child = 27; child <= 31; child++)
-        {
-            appendByte(payload, length, child);
-        }
-
-        appendByte(payload, length, 32);
-        appendByte(payload, length, 33);
-        appendByte(payload, length, 34);
-        appendByte(payload, length, 37);
-        appendByte(payload, length, 38);
-        appendByte(payload, length, 39);
-
-        #if defined(OPENDRIFT_BOARD_MATRIX) || defined(OPENDRIFT_BOARD_AMOLED_164)
-        appendByte(payload, length, 35);
-        appendByte(payload, length, 36);
-        #endif
 
         appendByte(payload, length, 0xFF);
     }
-    else if(
-        (parameter >= 1 && parameter <= 14) ||
-        parameter == 26 ||
-        parameter == 33 ||
-        parameter == 34 ||
-        parameter == 37 ||
-        parameter == 38
-    )
+    else
     {
-        const FloatDefinition* definition =
-            getFloatDefinition(parameter);
+        const OpenDriftParameters::Definition* definition =
+            OpenDriftParameters::find(parameter);
 
-        appendByte(payload, length, 0);
-        appendByte(payload, length, DATA_FLOAT);
-        appendString(payload, length, definition->name);
-        appendInt32(payload, length, getScaledValue(parameter));
-        appendInt32(payload, length, definition->minimum);
-        appendInt32(payload, length, definition->maximum);
-        appendInt32(payload, length, definition->defaultValue);
-        appendByte(payload, length, definition->decimals);
-        appendInt32(payload, length, definition->step);
-        appendString(payload, length, definition->unit);
-    }
-    else if(
-        parameter == 15 ||
-        parameter == 16 ||
-        parameter == 25 ||
-        parameter == 39 ||
-        parameter == 32 ||
-        #if defined(OPENDRIFT_BOARD_MATRIX) || defined(OPENDRIFT_BOARD_AMOLED_164)
-        parameter == 35 ||
-        parameter == 36 ||
-        #endif
-        (parameter >= 27 && parameter <= 31)
-        #if defined(OPENDRIFT_BOARD_AMOLED_164)
-        || (parameter >= 17 && parameter <= 24)
-        #endif
-    )
-    {
-        appendByte(payload, length, 0);
-        appendByte(payload, length, DATA_SELECTION);
+        if(
+            definition == nullptr ||
+            !OpenDriftParameters::isAvailable(*definition)
+        )
+        {
+            appendByte(payload, length, 0);
+            appendByte(payload, length, DATA_OUT_OF_RANGE);
+        }
+        else if(definition->type == OpenDriftParameters::Type::NUMBER)
+        {
+            appendByte(payload, length, 0);
+            appendByte(payload, length, DATA_FLOAT);
+            appendString(payload, length, definition->name);
+            appendInt32(payload, length, getScaledValue(parameter));
+            appendInt32(
+                payload,
+                length,
+                OpenDriftParameters::scaledMinimum(*definition)
+            );
+            appendInt32(
+                payload,
+                length,
+                OpenDriftParameters::scaledMaximum(*definition)
+            );
+            appendInt32(
+                payload,
+                length,
+                OpenDriftParameters::scaledDefault(*definition)
+            );
+            appendByte(payload, length, definition->decimals);
+            appendInt32(
+                payload,
+                length,
+                OpenDriftParameters::scaledStep(*definition)
+            );
+            appendString(payload, length, definition->unit);
+        }
+        else
+        {
+            const char* choices = definition->choices;
+            uint8_t minimum = (uint8_t)definition->minimum;
+            uint8_t maximum = (uint8_t)definition->maximum;
+            uint8_t defaultValue = (uint8_t)definition->defaultValue;
+            uint8_t currentValue = (uint8_t)getScaledValue(parameter);
 
-        if(parameter == 32)
-        {
-            appendString(payload, length, "Gyro LPF");
-            appendString(payload, length, "24 Hz;120 Hz;Off");
-            appendByte(payload, length, getScaledValue(parameter));
-            appendByte(payload, length, 0);
-            appendByte(payload, length, 2);
-            appendByte(payload, length, 0);
-        }
-        else if(parameter == 35)
-        {
-            appendString(payload, length, "Display Rotation");
-
-            #if defined(OPENDRIFT_BOARD_MATRIX)
-            appendString(payload, length, "0 deg;90 CW;180 deg;90 CCW");
-            appendByte(payload, length, getScaledValue(parameter));
-            appendByte(payload, length, 0);
-            appendByte(payload, length, 3);
-            appendByte(payload, length, 3);
-            #else
-            appendString(payload, length, "Normal;180 deg");
-            appendByte(payload, length, getScaledValue(parameter));
-            appendByte(payload, length, 0);
-            appendByte(payload, length, 1);
-            appendByte(payload, length, 0);
-            #endif
-        }
-        else if(parameter == 36)
-        {
-            appendString(payload, length, "Anti Wobble Scale");
-            appendString(payload, length, "1/10;Micro");
-            appendByte(payload, length, getScaledValue(parameter));
-            appendByte(payload, length, 0);
-            appendByte(payload, length, 1);
-            appendByte(payload, length, 0);
-        }
-        else if(parameter == 27)
-        {
-            appendString(payload, length, "Endpoints");
-            appendString(payload, length, "NOT CAL;PARTIAL;CALIBRATED");
-            appendByte(payload, length, getScaledValue(parameter));
-            appendByte(payload, length, 0);
-            appendByte(payload, length, 2);
-            appendByte(payload, length, 0);
-        }
-        else if(parameter >= 28 && parameter <= 31)
-        {
-            const char* name =
-                parameter == 28
-                ? "Capture Left"
-                : (parameter == 29
-                    ? "Capture Center"
-                    : (parameter == 30 ? "Capture Right" : "Reset Cal"));
-
-            appendString(payload, length, name);
-            appendString(payload, length, "READY;CAPTURE");
-            appendByte(payload, length, 0);
-            appendByte(payload, length, 0);
-            appendByte(payload, length, 1);
-            appendByte(payload, length, 0);
-        }
-        else if(parameter == 25)
-        {
-            appendString(payload, length, "Servo Rate*");
-            appendString(payload, length, "250 Hz;333 Hz");
-            appendByte(payload, length, getScaledValue(parameter));
-            appendByte(payload, length, 0);
-            appendByte(payload, length, 1);
-            appendByte(payload, length, 0);
-        }
-        else if(parameter == 39)
-        {
-            appendString(payload, length, "Throttle Rate*");
-            appendString(payload, length, "50 Hz;250 Hz;333 Hz");
-            appendByte(payload, length, getScaledValue(parameter));
-            appendByte(payload, length, 0);
-            appendByte(payload, length, 2);
-            appendByte(payload, length, 0);
-        }
-        #if defined(OPENDRIFT_BOARD_AMOLED_164)
-        else if(parameter >= 17)
-        {
-            uint8_t gpio = parameter - 16;
-            bool available =
+            if((definition->flags & OpenDriftParameters::GPIO_OUTPUT) != 0)
+            {
+                const uint8_t gpio = parameter - 16;
+                bool gpioAvailable =
                 #if defined(OPENDRIFT_AMOLED_V2)
-                gpio >= 3;
+                gpio >= 3
+                #if defined(OPENDRIFT_CRSF_V2_THROTTLE_GPIO8)
+                && gpio != 8
+                #endif
+                ;
                 #else
                 true;
                 #endif
 
-            char name[8];
-            snprintf(
-                name,
-                sizeof(name),
-                "GPIO%u",
-                gpio
-            );
+                if(!gpioAvailable)
+                {
+                    choices = "RES";
+                    maximum = 0;
+                    currentValue = 0;
+                }
+            }
 
-            appendString(payload, length, name);
-            appendString(payload, length, available ? "-;1;2;3;4;5;6;7;8;9;10;11;12;13;14;15;16" : "RES");
-            appendByte(payload, length, available ? getScaledValue(parameter) : 0);
-            appendByte(payload, length, 0);
-            appendByte(payload, length, available ? 16 : 0);
-            appendByte(payload, length, 0);
-        }
-        else
-        #endif
-        {
-            appendString(
-                payload,
-                length,
-                parameter == 15 ? "Servo Reverse" : "Gyro Reverse"
-            );
-            appendString(payload, length, "Off;On");
-            appendByte(payload, length, getScaledValue(parameter));
-            appendByte(payload, length, 0);
-            appendByte(payload, length, 1);
-            appendByte(payload, length, 0);
-        }
+            if(parameter == (uint8_t)OpenDriftParameters::Id::DISPLAY_ROTATION)
+            {
+                #if defined(OPENDRIFT_BOARD_MATRIX)
+                defaultValue = 3;
+                #else
+                choices = "Normal;180 deg";
+                maximum = 1;
+                defaultValue = 0;
+                #endif
+            }
 
-        appendString(payload, length, "");
-    }
-    else
-    {
-        appendByte(payload, length, 0);
-        appendByte(payload, length, DATA_OUT_OF_RANGE);
+            appendByte(payload, length, 0);
+            appendByte(payload, length, DATA_SELECTION);
+            appendString(payload, length, definition->name);
+            appendString(payload, length, choices != nullptr ? choices : "");
+            appendByte(payload, length, currentValue);
+            appendByte(payload, length, minimum);
+            appendByte(payload, length, maximum);
+            appendByte(payload, length, defaultValue);
+
+            appendString(payload, length, "");
+        }
     }
 
     crsf->sendExtendedFrame(
@@ -390,16 +269,14 @@ void CrsfParameterDevice::writeParameter(
 {
     int32_t value = 0;
     uint8_t valueLength = 0;
+    const OpenDriftParameters::Definition* definition =
+        OpenDriftParameters::find(parameter);
 
     if(
-        (
-            parameter >= 1 && parameter <= 14
-            || parameter == 26
-            || parameter == 33
-            || parameter == 34
-            || parameter == 37
-            || parameter == 38
-        ) &&
+        definition != nullptr &&
+        OpenDriftParameters::isAvailable(*definition) &&
+        OpenDriftParameters::isWritable(*definition) &&
+        definition->type == OpenDriftParameters::Type::NUMBER &&
         length >= 4
     )
     {
@@ -407,20 +284,10 @@ void CrsfParameterDevice::writeParameter(
         valueLength = 4;
     }
     else if(
-        (
-            parameter == 15 ||
-            parameter == 16 ||
-            parameter == 25 ||
-            parameter == 32 ||
-            #if defined(OPENDRIFT_BOARD_MATRIX) || defined(OPENDRIFT_BOARD_AMOLED_164)
-            parameter == 35 ||
-            parameter == 36 ||
-            #endif
-            (parameter >= 27 && parameter <= 31)
-            #if defined(OPENDRIFT_BOARD_AMOLED_164)
-            || (parameter >= 17 && parameter <= 24)
-            #endif
-        ) &&
+        definition != nullptr &&
+        OpenDriftParameters::isAvailable(*definition) &&
+        OpenDriftParameters::isWritable(*definition) &&
+        definition->type != OpenDriftParameters::Type::NUMBER &&
         length >= 1
     )
     {
@@ -432,7 +299,11 @@ void CrsfParameterDevice::writeParameter(
         return;
     }
 
-    if(parameter != 37)
+    if(parameter == (uint8_t)OpenDriftParameters::Id::ARCHIVE_LOG)
+    {
+        setScaledValue(parameter, value);
+    }
+    else
     {
         setScaledValue(parameter, value);
         settingsChanged = true;
@@ -526,6 +397,11 @@ int32_t CrsfParameterDevice::getScaledValue(
             uint16_t rate = settings->getThrottleOutputHz();
             return rate == 333 ? 2 : (rate == 250 ? 1 : 0);
         }
+        case 40:
+            return blackboxArchive != nullptr
+                ? (int32_t)blackboxArchive->getStatus()
+                : (int32_t)BlackboxArchive::UNAVAILABLE;
+        case 41: return settings->getGyroOutputHysteresis();
         #if defined(OPENDRIFT_BOARD_MATRIX)
         case 35: return settings->getDisplayRotation();
         #elif defined(OPENDRIFT_BOARD_AMOLED_164)
@@ -544,21 +420,15 @@ void CrsfParameterDevice::setScaledValue(
     int32_t value
 )
 {
-    if(
-        (parameter >= 1 && parameter <= 14) ||
-        parameter == 26 ||
-        parameter == 33 ||
-        parameter == 34 ||
-        parameter == 38
-    )
-    {
-        const FloatDefinition* definition =
-            getFloatDefinition(parameter);
+    const OpenDriftParameters::Definition* definition =
+        OpenDriftParameters::find(parameter);
 
+    if(definition != nullptr)
+    {
         value = constrain(
             value,
-            definition->minimum,
-            definition->maximum
+            OpenDriftParameters::scaledMinimum(*definition),
+            OpenDriftParameters::scaledMaximum(*definition)
         );
     }
 
@@ -593,7 +463,12 @@ void CrsfParameterDevice::setScaledValue(
             uint8_t gpio = parameter - 16;
 
             #if defined(OPENDRIFT_AMOLED_V2)
-            if(gpio < 3)
+            if(
+                gpio < 3
+                #if defined(OPENDRIFT_CRSF_V2_THROTTLE_GPIO8)
+                || gpio == 8
+                #endif
+            )
             {
                 value = 0;
             }
@@ -613,6 +488,12 @@ void CrsfParameterDevice::setScaledValue(
             settings->setThrottleOutputHz(
                 value == 2 ? 333 : (value == 1 ? 250 : 50)
             );
+            break;
+        case 40:
+            if(value == 1 && blackboxArchive != nullptr)
+            {
+                blackboxArchive->requestSave();
+            }
             break;
         case 26:
             settings->setGyroHuntStrength(value);
@@ -671,6 +552,15 @@ void CrsfParameterDevice::setScaledValue(
                 );
             }
             break;
+        case 41:
+            settings->setGyroOutputHysteresis(value);
+            if(gyro != nullptr)
+            {
+                gyro->setOutputHysteresis(
+                    settings->getGyroOutputHysteresis()
+                );
+            }
+            break;
         #if defined(OPENDRIFT_BOARD_MATRIX)
         case 35:
             settings->setDisplayRotation(constrain(value, 0, 3));
@@ -692,40 +582,6 @@ void CrsfParameterDevice::setScaledValue(
             break;
         #endif
     }
-}
-
-
-const CrsfParameterDevice::FloatDefinition*
-CrsfParameterDevice::getFloatDefinition(
-    uint8_t parameter
-)
-{
-    if(parameter == 26)
-    {
-        return &ANTI_WOBBLE_PARAMETER;
-    }
-
-    if(parameter == 37)
-    {
-        return &LIVE_GAIN_PARAMETER;
-    }
-
-    if(parameter == 38)
-    {
-        return &DRIVER_PRIORITY_PARAMETER;
-    }
-
-    if(parameter == 33)
-    {
-        return &CHANNEL_3_GAIN_MIN_PARAMETER;
-    }
-
-    if(parameter == 34)
-    {
-        return &CHANNEL_3_GAIN_MAX_PARAMETER;
-    }
-
-    return &FLOAT_PARAMETERS[parameter - 1];
 }
 
 

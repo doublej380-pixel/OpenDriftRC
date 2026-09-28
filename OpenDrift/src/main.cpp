@@ -31,6 +31,7 @@
 #include "BlackboxLogger.h"
 #if defined(OPENDRIFT_BOARD_AMOLED_164)
 #include "Backgrounds.h"
+#include "BlackboxArchive.h"
 #endif
 
 #if !defined(OPENDRIFT_HEADLESS)
@@ -78,6 +79,7 @@ BlackboxLogger blackbox;
 
 #if defined(OPENDRIFT_BOARD_AMOLED_164)
 Backgrounds backgrounds;
+BlackboxArchive blackboxArchive;
 #endif
 
 unsigned long lastBlackboxLog = 0;
@@ -148,7 +150,11 @@ TaskHandle_t crsfTaskHandle = nullptr;
 #define SERVO_OUTPUT_PIN 15
 #define CRSF_RX_PIN 1
 #define CRSF_TX_PIN 2
+#if defined(OPENDRIFT_CRSF_V2_THROTTLE_GPIO8)
+#define CRSF_THROTTLE_OUTPUT_PIN 8
+#else
 #define CRSF_THROTTLE_OUTPUT_PIN 16
+#endif
 #else
 #define SERVO_OUTPUT_PIN 15
 #define CRSF_RX_PIN 17
@@ -380,6 +386,8 @@ public:
             #if defined(OPENDRIFT_INPUT_CRSF)
             #if defined(OPENDRIFT_CRSF_OOPS_SWAPPED_PINS)
             "OpenDrift PERSONAL OOPS boot",
+            #elif defined(OPENDRIFT_CRSF_V2_THROTTLE_GPIO8)
+            "OpenDrift GPIO8 OOPS boot",
             #else
             "OpenDrift CRSF verbose boot",
             #endif
@@ -396,6 +404,8 @@ public:
             #if defined(OPENDRIFT_INPUT_CRSF)
             #if defined(OPENDRIFT_CRSF_OOPS_SWAPPED_PINS)
             "WARNING swapped pins: 15E 16S 17T 18R",
+            #elif defined(OPENDRIFT_CRSF_V2_THROTTLE_GPIO8)
+            "WARNING V2 throttle rerouted to GPIO8",
             #else
             "control kernel 1.0.9 crsf ttyOD0",
             #endif
@@ -971,6 +981,10 @@ void runControlIteration()
         settings.getDriverPriority()
     );
 
+    gyro.setOutputHysteresis(
+        settings.getGyroOutputHysteresis()
+    );
+
     gyro.setHuntStrength(
         settings.getGyroHuntStrength()
     );
@@ -1114,7 +1128,8 @@ void runControlIteration()
         (int)roundf(gyroCorrection);
     int appliedGyroCorrection = 0;
     bool correctionSaturated =
-        requestedGyroCorrection != limitedGyroCorrection;
+        requestedGyroCorrection !=
+        (int)roundf(gyro.getPreHysteresisCorrection());
 
     float servoCommand =
         steeringServo.getPosition();
@@ -1525,6 +1540,8 @@ void setup()
     );
 
     webConfig.setBackgroundStore(backgrounds);
+    blackboxArchive.begin(blackbox);
+    webConfig.setBlackboxArchive(blackboxArchive);
     ui.setBackgroundStore(backgrounds);
     #endif
 
@@ -1735,6 +1752,10 @@ void setup()
         steeringServo
     );
 
+    #if defined(OPENDRIFT_BOARD_AMOLED_164)
+    crsfParameters.setBlackboxArchive(blackboxArchive);
+    #endif
+
     bool steeringRadioOk = steeringRadio.beginExternal();
     bool throttleRadioOk = throttleRadio.beginExternal();
     bool gainRadioOk = gainRadio.beginExternal();
@@ -1807,6 +1828,8 @@ void setup()
     bootConsole.log(
         #if defined(OPENDRIFT_BOARD_MATRIX)
         "ledc: esc neutral output attached on gpio2",
+        #elif defined(OPENDRIFT_CRSF_V2_THROTTLE_GPIO8)
+        "ledc: esc neutral output attached on gpio8",
         #else
         "ledc: esc neutral output attached on gpio16",
         #endif
@@ -1920,6 +1943,10 @@ void setup()
 
     gyro.setDriverPriority(
         settings.getDriverPriority()
+    );
+
+    gyro.setOutputHysteresis(
+        settings.getGyroOutputHysteresis()
     );
 
     gyro.setHuntStrength(
@@ -2397,6 +2424,45 @@ void loop()
         &controlTelemetryMux
     );
 
+    #if defined(OPENDRIFT_BOARD_AMOLED_164)
+    static uint32_t parkedCandidateSinceMs = 0;
+    const float archiveThrottlePulse =
+        #if defined(OPENDRIFT_INPUT_CRSF)
+        crsfThrottlePulseSnapshot;
+        #else
+        throttleRadio.hasSignal()
+            ? throttleRadio.getPulseWidthFloat()
+            : 1500.0f;
+        #endif
+
+    const bool archiveParkCandidate =
+        settings.getBlackboxEnabled() &&
+        telemetry.steeringSignal &&
+        telemetry.throttleSignal &&
+        fabsf(archiveThrottlePulse - 1500.0f) <= 30.0f &&
+        fabsf(telemetry.yaw) <= 4.0f &&
+        imu.getAccelDelta() <= 0.025f &&
+        gyro.getControlPhase() == 0;
+
+    if(archiveParkCandidate)
+    {
+        if(parkedCandidateSinceMs == 0)
+        {
+            parkedCandidateSinceMs = millis();
+        }
+    }
+    else
+    {
+        parkedCandidateSinceMs = 0;
+    }
+
+    const bool archiveParked =
+        parkedCandidateSinceMs != 0 &&
+        millis() - parkedCandidateSinceMs >= 2000;
+
+    blackboxArchive.update(archiveParked);
+    #endif
+
     #if defined(OPENDRIFT_BOARD_MATRIX)
     matrixStatus.update(
         telemetry.steeringSignal,
@@ -2488,7 +2554,10 @@ void loop()
             gyro.getHuntLatch(),
             settings.getGyroHuntStrength(),
             gyro.getHuntResidualEnvelope(),
-            gyro.getHuntNotchCenter()
+            gyro.getHuntNotchCenter(),
+            settings.getGyroOutputHysteresis(),
+            gyro.getPreHysteresisCorrection(),
+            gyro.getPostHysteresisCorrection()
         );
     }
 

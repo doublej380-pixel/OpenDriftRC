@@ -2,6 +2,8 @@
 
 #include <Arduino.h>
 
+#include "ParameterCatalog.h"
+
 
 class GyroController
 {
@@ -86,6 +88,13 @@ public:
     void setHuntStrength(int value);
     int getHuntStrength();
 
+    // Experimental post-controller hysteresis. This acts only on the gyro
+    // correction, leaving the driver's steering command at full resolution.
+    void setOutputHysteresis(int value);
+    int getOutputHysteresis();
+    float getPreHysteresisCorrection();
+    float getPostHysteresisCorrection();
+
     // 0 preserves the proven 1/10-scale 3.2 Hz notch. Micro mode follows
     // the substantially faster steering resonance found on 1/24 hardware.
     void setAntiWobbleScale(uint8_t value);
@@ -124,21 +133,24 @@ public:
     float getFilteredYaw();
 private:
 
-    float gyroGain = 1.5f;
+    float gyroGain = OpenDriftParameters::Defaults::GYRO_GAIN;
     float gyroOffset = 0.0f;
-    float deadband = 2.0f;
-    float smoothing = 0.10f;
+    float deadband = OpenDriftParameters::Defaults::DEADBAND;
+    float smoothing = OpenDriftParameters::Defaults::SMOOTHING;
     int maxCorrection = 250;
 
-    float integralGain = 0.0f;
-    int integralLimit = 120;
-    int holdBoost = 0;
-    int counterSteerAssist = 0;
-    int transitionSpeed = 50;
-    int predictionStrength = 0;
-    int huntStrength = 50;
-    int driverPriority = 0;
+    float integralGain = OpenDriftParameters::Defaults::DRIFT_MEMORY;
+    int integralLimit = OpenDriftParameters::Defaults::MEMORY_LIMIT;
+    int holdBoost = OpenDriftParameters::Defaults::HOLD_ASSIST;
+    int counterSteerAssist = OpenDriftParameters::Defaults::COUNTERSTEER;
+    int transitionSpeed = OpenDriftParameters::Defaults::TRANSITION_SPEED;
+    int predictionStrength = OpenDriftParameters::Defaults::PREDICTION;
+    int huntStrength = OpenDriftParameters::Defaults::ANTI_WOBBLE;
+    int driverPriority = OpenDriftParameters::Defaults::DRIVER_PRIORITY;
     float driverPriorityScale = 1.0f;
+    int outputHysteresis = OpenDriftParameters::Defaults::GYRO_HYSTERESIS;
+    float outputHysteresisCorrection = 0.0f;
+    bool outputHysteresisReady = false;
 
     float filteredYaw = 0.0f;
     float previousFilteredYaw = 0.0f;
@@ -231,6 +243,8 @@ private:
     float transitionSlewCorrectionTelemetry = 0.0f;
     float driverPriorityScaleTelemetry = 1.0f;
     float effectiveDirectGainTelemetry = 1.5f;
+    float preHysteresisCorrectionTelemetry = 0.0f;
+    float postHysteresisCorrectionTelemetry = 0.0f;
 
     int requestedCorrectionOutput = 0;
     float correctionOutput = 0.0f;
@@ -247,4 +261,11 @@ private:
 
     void resetDynamicState();
     void configureHuntNotch(float centerHz, bool resetHistory);
+    float calculateEffectiveDirectGain(
+        int steeringCommand,
+        bool steeringSignal,
+        float dt
+    );
+    float calculateSteadyAssistCorrection() const;
+    float applyOutputHysteresis(float targetCorrection);
 };

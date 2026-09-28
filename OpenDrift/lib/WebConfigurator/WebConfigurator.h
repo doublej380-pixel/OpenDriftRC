@@ -10,6 +10,7 @@
 
 #if defined(OPENDRIFT_BOARD_AMOLED_164)
 #include "Backgrounds.h"
+#include "BlackboxArchive.h"
 #endif
 
 
@@ -33,6 +34,10 @@ public:
     #if defined(OPENDRIFT_BOARD_AMOLED_164)
     void setBackgroundStore(
         Backgrounds& store
+    );
+
+    void setBlackboxArchive(
+        BlackboxArchive& archive
     );
     #endif
 
@@ -59,6 +64,7 @@ private:
 
     #if defined(OPENDRIFT_BOARD_AMOLED_164)
     Backgrounds* backgrounds = nullptr;
+    BlackboxArchive* blackboxArchive = nullptr;
     bool backgroundUploadOk = false;
     #endif
 
@@ -93,6 +99,8 @@ private:
     void handleBackgroundUploadChunk();
     void handleBackgroundUse();
     void handleBackgroundDelete();
+    void handleArchivedLogDownload();
+    void handleArchivedLogClear();
     #endif
 
     void handleNotFound();
@@ -103,6 +111,13 @@ private:
         String value,
         const char* type = "number",
         const char* step = "1"
+    );
+
+    String parameterInput(
+        OpenDriftParameters::Id id,
+        const char* name,
+        String value,
+        const char* label = nullptr
     );
 
     String checkbox(
