@@ -160,6 +160,7 @@ private:
     bool driftReferenceReady = false;
     int8_t driftDirection = 0;
     int8_t lastDefiniteDirection = 0;
+    float definiteDirectionSeconds = 0.0f;
     float quietSeconds = 0.0f;
     float transitionTime = 0.0f;
 

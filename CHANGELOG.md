@@ -13,6 +13,10 @@
   sharper reversal, and Gyro Gain no longer masks the adjustment as strongly.
 - Smooths gyro correction as yaw settles back toward center, removing the hard
   final snap without slowing active drift correction or driver input.
+- Prevents wheel-wobble zero-crossings from repeatedly arming transition mode.
+  A reversal now requires the previous yaw direction to have remained definite
+  for 0.25 seconds, allowing Anti Wobble to stay fully engaged instead of being
+  held near its shallow transition guard depth.
 - Adds selectable **1/10** and **Micro** Anti Wobble frequency ranges. The
   original 2.5-3.6 Hz mode remains the 1/10 default; Micro targets faster
   5-15 Hz steering oscillations found in 1/24-1/28 chassis.
@@ -133,7 +137,9 @@
 
 - Theme-engine foundations and selected quality-of-life/reliability concepts
   were contributed by [J3vb](https://github.com/J3vb), including work reviewed
-  from PR #4 and then integrated into OpenDrift's current architecture.
+  from PR #4 and then integrated into OpenDrift's current architecture. J3vb
+  also identified and contributed the transition/wobble zero-crossing fix in
+  [PR #7](https://github.com/J3vb/OpenDriftRC/pull/7).
 - Driver Priority, latency/control-loop analysis, and valuable saturation and
   response testing were contributed by
   [uarenotreal](https://github.com/uarenotreal).
