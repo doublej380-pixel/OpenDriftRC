@@ -155,12 +155,6 @@ pio run -e waveshare_amoled_164_v2
 pio run -e waveshare_amoled_164_v2_crsf
 ```
 
-The frozen round-board environment remains available for local experimentation:
-
-```sh
-pio run -e waveshare_128
-```
-
 CRSF builds are intentionally separate:
 
 ```sh
@@ -174,7 +168,6 @@ Main dependencies are managed in `OpenDrift/platformio.ini`:
 - SensorLib
 - LovyanGFX
 - ESP32Servo
-- CST816S (deprecated round-board build only)
 
 ## First Power-On
 

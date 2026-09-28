@@ -4,6 +4,7 @@
 #include <Preferences.h>
 
 #include "ParameterCatalog.h"
+#include "ParameterStore.h"
 
 class Settings
 {
@@ -15,23 +16,9 @@ public:
 
     struct DrivingProfile
     {
-        uint32_t version = 11;
+        uint32_t version = 12;
         char name[PROFILE_NAME_LENGTH] = {0};
-
-        float gain = OpenDriftParameters::Defaults::GYRO_GAIN;
-        float deadband = OpenDriftParameters::Defaults::DEADBAND;
-        float gyroSmoothing = OpenDriftParameters::Defaults::SMOOTHING;
-        float gyroIntegralGain = OpenDriftParameters::Defaults::DRIFT_MEMORY;
-
-        int32_t gyroMaxCorrection = OpenDriftParameters::Defaults::MAX_CORRECTION;
-        int32_t gyroIntegralLimit = OpenDriftParameters::Defaults::MEMORY_LIMIT;
-        int32_t gyroHoldBoost = OpenDriftParameters::Defaults::HOLD_ASSIST;
-        int32_t predictionStrength = OpenDriftParameters::Defaults::PREDICTION;
-        int32_t radioSteeringTravel = OpenDriftParameters::Defaults::STEERING_TRAVEL;
-        int32_t gyroCounterSteerAssist = OpenDriftParameters::Defaults::COUNTERSTEER;
-        int32_t gyroTransitionSpeed = OpenDriftParameters::Defaults::TRANSITION_SPEED;
-        int32_t gyroHuntStrength = OpenDriftParameters::Defaults::ANTI_WOBBLE;
-        int32_t driverPriority = OpenDriftParameters::Defaults::DRIVER_PRIORITY;
+        float values[ParameterStore::VALUE_COUNT] = {0.0f};
     };
 
     struct SteeringCalibration
@@ -46,11 +33,38 @@ public:
         int inputMax = 2000;
     };
 
+    struct ControllerSnapshot
+    {
+        float gain;
+        float deadband;
+        float smoothing;
+        float driftMemory;
+        int maxCorrection;
+        int memoryLimit;
+        int holdAssist;
+        int countersteer;
+        int transitionSpeed;
+        int prediction;
+        int driverPriority;
+        int antiWobble;
+        uint8_t antiWobbleScale;
+        uint8_t gyroLpfMode;
+        bool gyroReverse;
+    };
+
     bool begin();
 
     void update();
 
     void factoryReset();
+
+    float getParameterValue(OpenDriftParameters::Id id) const;
+    bool setParameterValue(OpenDriftParameters::Id id, float value);
+    uint32_t getParameterGeneration() const;
+    bool getControllerSnapshot(
+        uint32_t& lastGeneration,
+        ControllerSnapshot& snapshot
+    ) const;
 
     // Gyro
     float getGain();
@@ -97,11 +111,6 @@ public:
     // moves away from center. Zero preserves the existing controller exactly.
     int getDriverPriority();
     void setDriverPriority(int value);
-
-    // Experimental gyro-only output hysteresis in microseconds. Zero keeps
-    // the full-resolution 1.0.9 output path unchanged.
-    int getGyroOutputHysteresis();
-    void setGyroOutputHysteresis(int value);
 
     // 0 = 1/10 scale steering resonance, 1 = micro scale resonance.
     uint8_t getAntiWobbleScale();
@@ -223,6 +232,10 @@ public:
     int8_t getActiveProfileIndex();
     const char* getActiveProfileName();
     const DrivingProfile* getProfile(uint8_t index);
+    float getProfileValue(
+        const DrivingProfile& profile,
+        OpenDriftParameters::Id id
+    ) const;
 
     int8_t createProfile(const String& name);
     bool activateProfile(uint8_t index);
@@ -233,6 +246,8 @@ private:
     portMUX_TYPE settingsMux = portMUX_INITIALIZER_UNLOCKED;
 
     Preferences prefs;
+
+    ParameterStore parameterStore;
 
     bool dirty = false;
 
@@ -267,8 +282,6 @@ private:
     int gyroHuntStrength = OpenDriftParameters::Defaults::ANTI_WOBBLE;
 
     int driverPriority = OpenDriftParameters::Defaults::DRIVER_PRIORITY;
-
-    int gyroOutputHysteresis = OpenDriftParameters::Defaults::GYRO_HYSTERESIS;
 
     uint8_t antiWobbleScale = 0;
 

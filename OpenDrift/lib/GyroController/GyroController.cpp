@@ -100,8 +100,6 @@ void GyroController::resetDynamicState()
     centerReturnCorrection = 0.0f;
     centerReturnReady = false;
     driverPriorityScale = 1.0f;
-    outputHysteresisCorrection = 0.0f;
-    outputHysteresisReady = false;
     lastSteeringCommand = 1500;
     steeringReady = false;
 
@@ -162,8 +160,6 @@ void GyroController::resetDynamicState()
     transitionSlewCorrectionTelemetry = 0.0f;
     driverPriorityScaleTelemetry = 1.0f;
     effectiveDirectGainTelemetry = gyroGain;
-    preHysteresisCorrectionTelemetry = 0.0f;
-    postHysteresisCorrectionTelemetry = 0.0f;
 
     requestedCorrectionOutput = 0;
     correctionOutput = 0;
@@ -1585,17 +1581,6 @@ float GyroController::update(
             (float)effectiveMaxCorrection
         );
 
-    // The high-resolution PWM path intentionally preserves sub-microsecond
-    // driver motion, but it also lets a tiny alternating gyro correction keep
-    // re-exciting the steering resonance after the notch has removed most of
-    // its energy. This experimental gate holds only the gyro correction until
-    // its accumulated change reaches the selected threshold. Zero is a true
-    // bypass and preserves the current 1.0.9 response exactly.
-    preHysteresisCorrectionTelemetry = -targetCorrection;
-
-    targetCorrection = applyOutputHysteresis(targetCorrection);
-    postHysteresisCorrectionTelemetry = -targetCorrection;
-
     // Expose a signed correction, not a fake centered servo command. The
     // controller's sign convention is opposite the servo mix convention.
     // The caller combines this with driver input and performs the one final
@@ -1693,25 +1678,6 @@ float GyroController::calculateSteadyAssistCorrection() const
         * (counterSteerAssist / 100.0f)
         * settledBlend
         * (1.0f - 0.75f * transitionAuthorityBlend);
-}
-
-
-float GyroController::applyOutputHysteresis(float targetCorrection)
-{
-    if(!outputHysteresisReady || outputHysteresis <= 0)
-    {
-        outputHysteresisCorrection = targetCorrection;
-        outputHysteresisReady = true;
-    }
-    else if(
-        fabsf(targetCorrection - outputHysteresisCorrection) >=
-        (float)outputHysteresis
-    )
-    {
-        outputHysteresisCorrection = targetCorrection;
-    }
-
-    return outputHysteresisCorrection;
 }
 
 
@@ -1950,45 +1916,6 @@ void GyroController::setHuntStrength(int value)
 int GyroController::getHuntStrength()
 {
     return huntStrength;
-}
-
-
-void GyroController::setOutputHysteresis(int value)
-{
-    int normalizedValue = OpenDriftParameters::clamp(
-        OpenDriftParameters::Id::GYRO_HYSTERESIS,
-        value
-    );
-
-    if(normalizedValue == outputHysteresis)
-    {
-        return;
-    }
-
-    outputHysteresis = normalizedValue;
-
-    if(outputHysteresis == 0)
-    {
-        outputHysteresisReady = false;
-    }
-}
-
-
-int GyroController::getOutputHysteresis()
-{
-    return outputHysteresis;
-}
-
-
-float GyroController::getPreHysteresisCorrection()
-{
-    return preHysteresisCorrectionTelemetry;
-}
-
-
-float GyroController::getPostHysteresisCorrection()
-{
-    return postHysteresisCorrectionTelemetry;
 }
 
 

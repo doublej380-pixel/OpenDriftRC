@@ -2,6 +2,50 @@
 
 namespace
 {
+    void setProfileValue(
+        Settings::DrivingProfile& profile,
+        OpenDriftParameters::Id id,
+        float value
+    )
+    {
+        profile.values[(uint8_t)id] = value;
+    }
+
+    void initializeProfileDefaults(Settings::DrivingProfile& profile)
+    {
+        profile = Settings::DrivingProfile();
+        const OpenDriftParameters::Definition* definitions =
+            OpenDriftParameters::definitions();
+
+        for(size_t index = 0; index < OpenDriftParameters::definitionCount(); index++)
+        {
+            const OpenDriftParameters::Definition& definition = definitions[index];
+            if((definition.flags & OpenDriftParameters::PROFILE) != 0)
+            {
+                profile.values[(uint8_t)definition.id] = definition.defaultValue;
+            }
+        }
+    }
+
+    struct DrivingProfileV11
+    {
+        uint32_t version;
+        char name[Settings::PROFILE_NAME_LENGTH];
+        float gain;
+        float deadband;
+        float gyroSmoothing;
+        float gyroIntegralGain;
+        int32_t gyroMaxCorrection;
+        int32_t gyroIntegralLimit;
+        int32_t gyroHoldBoost;
+        int32_t predictionStrength;
+        int32_t radioSteeringTravel;
+        int32_t gyroCounterSteerAssist;
+        int32_t gyroTransitionSpeed;
+        int32_t gyroHuntStrength;
+        int32_t driverPriority;
+    };
+
     int legacyMaxCorrectionToPercent(int value)
     {
         // Legacy values used center-to-endpoint microseconds. The current
@@ -170,11 +214,7 @@ namespace
 
 bool Settings::begin()
 {
-    #if defined(OPENDRIFT_ROUND_LOG51_TUNE)
-    // Private round-display recovery build. Keep its calibration and tuning
-    // isolated from both the normal CRSF and PWM firmware namespaces.
-    prefs.begin("OpenDriftR51", false);
-    #elif defined(OPENDRIFT_BOARD_MATRIX) && defined(OPENDRIFT_INPUT_CRSF)
+    #if defined(OPENDRIFT_BOARD_MATRIX) && defined(OPENDRIFT_INPUT_CRSF)
     // The private Matrix experiments must not inherit actuator calibration or
     // tuning from any display-equipped OpenDrift build.
     prefs.begin("ODMatrixCRSF", false);
@@ -396,11 +436,6 @@ bool Settings::begin()
         prefs.getInt(OpenDriftParameters::key(OpenDriftParameters::Id::DRIVER_PRIORITY), OpenDriftParameters::Defaults::DRIVER_PRIORITY)
     );
 
-    gyroOutputHysteresis = OpenDriftParameters::clamp(
-        OpenDriftParameters::Id::GYRO_HYSTERESIS,
-        prefs.getInt(OpenDriftParameters::key(OpenDriftParameters::Id::GYRO_HYSTERESIS), OpenDriftParameters::Defaults::GYRO_HYSTERESIS)
-    );
-
     antiWobbleScale = constrain(
         prefs.getUChar(OpenDriftParameters::key(OpenDriftParameters::Id::ANTI_WOBBLE_SCALE), 0),
         0,
@@ -409,7 +444,7 @@ bool Settings::begin()
 
     const char* retiredKeys[] = {
         "gyroAttack", "gyroReturn", "gyroWob", "gyroHunt",
-        "strDamp", "huntSense", "terrainAssist"
+        "strDamp", "huntSense", "terrainAssist", "gyroHyst"
     };
 
     for(const char* key : retiredKeys)
@@ -442,9 +477,18 @@ bool Settings::begin()
         ? 333
         : 250;
 
-    setThrottleOutputHz(
-        prefs.getUShort(OpenDriftParameters::key(OpenDriftParameters::Id::THROTTLE_RATE), 50)
-    );
+    // Keep this in the legacy scratch field until ParameterStore migration
+    // below. Calling the public setter here would write the new store before
+    // we have decided whether a store blob already exists.
+    {
+        uint16_t storedThrottleRate = prefs.getUShort(
+            OpenDriftParameters::key(OpenDriftParameters::Id::THROTTLE_RATE),
+            50
+        );
+        throttleOutputHz = storedThrottleRate == 333
+            ? 333
+            : (storedThrottleRate == 250 ? 250 : 50);
+    }
 
     // Loading a valid stored value is not a user edit.
     dirty = false;
@@ -568,43 +612,56 @@ bool Settings::begin()
         );
     }
 
-    #if defined(OPENDRIFT_ROUND_LOG51_TUNE)
-    // Seed the proven blackbox-51 tune once. Subsequent UI, web, or EdgeTX
-    // adjustments persist normally and are not overwritten on each boot.
-    // Steering and servo calibration values are deliberately left untouched.
-    if(!prefs.getBool("log51Preset", false))
+    // v1.0.9 introduces a single catalog-backed runtime store. On the first
+    // boot, import the values loaded through the legacy per-key schema so
+    // existing tunes survive unchanged. Later boots load the coherent blob.
+    if(!parameterStore.load(prefs))
     {
-        gain = 1.85f;
-        deadband = 2.0f;
-        // 37% on the full-span scale preserves the old 74% authority.
-        gyroMaxCorrection = 37;
-        gyroSmoothing = 0.01f;
-        gyroIntegralGain = 0.0f;
-        gyroIntegralLimit = 120;
-        gyroHoldBoost = 0;
-        gyroCounterSteerAssist = 95;
-        predictionStrength = 30;
-        servoQuiet = 4;
-        gyroTransitionSpeed = 25;
-        gyroHuntStrength = 75;
-        controlLoopHz = 333;
+        parameterStore.setInitial(OpenDriftParameters::Id::GYRO_GAIN, gain);
+        parameterStore.setInitial(OpenDriftParameters::Id::DEADBAND, deadband);
+        parameterStore.setInitial(OpenDriftParameters::Id::GYRO_REVERSE, gyroReverse ? 1.0f : 0.0f);
+        parameterStore.setInitial(OpenDriftParameters::Id::MAX_CORRECTION, gyroMaxCorrection);
+        parameterStore.setInitial(OpenDriftParameters::Id::SMOOTHING, gyroSmoothing);
+        parameterStore.setInitial(OpenDriftParameters::Id::GYRO_LPF, gyroLpfMode);
+        parameterStore.setInitial(OpenDriftParameters::Id::DRIFT_MEMORY, gyroIntegralGain);
+        parameterStore.setInitial(OpenDriftParameters::Id::MEMORY_LIMIT, gyroIntegralLimit);
+        parameterStore.setInitial(OpenDriftParameters::Id::HOLD_ASSIST, gyroHoldBoost);
+        parameterStore.setInitial(OpenDriftParameters::Id::COUNTERSTEER, gyroCounterSteerAssist);
+        parameterStore.setInitial(OpenDriftParameters::Id::TRANSITION_SPEED, gyroTransitionSpeed);
+        parameterStore.setInitial(OpenDriftParameters::Id::PREDICTION, predictionStrength);
+        parameterStore.setInitial(OpenDriftParameters::Id::ANTI_WOBBLE, gyroHuntStrength);
+        parameterStore.setInitial(OpenDriftParameters::Id::DRIVER_PRIORITY, driverPriority);
+        parameterStore.setInitial(OpenDriftParameters::Id::ANTI_WOBBLE_SCALE, antiWobbleScale);
+        parameterStore.setInitial(OpenDriftParameters::Id::SERVO_CENTER, servoCenter);
+        parameterStore.setInitial(OpenDriftParameters::Id::SERVO_REVERSE, servoReverse ? 1.0f : 0.0f);
+        parameterStore.setInitial(OpenDriftParameters::Id::SERVO_TRAVEL, servoTravel);
+        parameterStore.setInitial(OpenDriftParameters::Id::SERVO_QUIET, servoQuiet);
+        parameterStore.setInitial(OpenDriftParameters::Id::SERVO_RATE, controlLoopHz == 333 ? 1.0f : 0.0f);
+        parameterStore.setInitial(OpenDriftParameters::Id::THROTTLE_RATE, throttleOutputHz == 333 ? 2.0f : (throttleOutputHz == 250 ? 1.0f : 0.0f));
+        parameterStore.setInitial(OpenDriftParameters::Id::DISPLAY_ROTATION, displayRotation);
+        parameterStore.setInitial(OpenDriftParameters::Id::STEERING_TRAVEL, radioSteeringTravel);
+        parameterStore.setInitial(OpenDriftParameters::Id::CHANNEL_3_GAIN_MIN, channel3GainMin);
+        parameterStore.setInitial(OpenDriftParameters::Id::CHANNEL_3_GAIN_MAX, channel3GainMax);
 
-        prefs.putFloat("gain", gain);
-        prefs.putFloat("deadband", deadband);
-        prefs.putInt("gyroMaxPct", gyroMaxCorrection);
-        prefs.putFloat("gyroSmooth", gyroSmoothing);
-        prefs.putFloat("gyroIGain", gyroIntegralGain);
-        prefs.putInt("gyroILim", gyroIntegralLimit);
-        prefs.putInt("gyroHold", gyroHoldBoost);
-        prefs.putInt("counterAssist", gyroCounterSteerAssist);
-        prefs.putInt("prediction", predictionStrength);
-        prefs.putInt("quiet", servoQuiet);
-        prefs.putInt("tailSpeedC", gyroTransitionSpeed);
-        prefs.putInt("huntStrength", gyroHuntStrength);
-        prefs.putUShort("loopHz", controlLoopHz);
-        prefs.putBool("log51Preset", true);
+        for(uint8_t index = 0; index < 8; index++)
+        {
+            parameterStore.setInitial(
+                static_cast<OpenDriftParameters::Id>(
+                    (uint8_t)OpenDriftParameters::Id::GPIO_1 + index
+                ),
+                auxChannels[index]
+            );
+        }
+
+        parameterStore.save(prefs);
     }
-    #endif
+
+    // Board-specific constraints remain explicit hardware policy.
+    setDisplayRotation(parameterStore.getInt(OpenDriftParameters::Id::DISPLAY_ROTATION));
+    setChannel3GainMin(parameterStore.get(OpenDriftParameters::Id::CHANNEL_3_GAIN_MIN));
+    setChannel3GainMax(parameterStore.get(OpenDriftParameters::Id::CHANNEL_3_GAIN_MAX));
+    if(parameterStore.hasDirtyValues()) parameterStore.save(prefs);
+    dirty = false;
 
     loadProfiles();
 
@@ -625,125 +682,13 @@ void Settings::update()
 void Settings::factoryReset()
 {
     prefs.clear();
+    parameterStore.resetDefaults();
     dirty = false;
 }
 
 void Settings::save()
 {
-    prefs.putFloat(
-        OpenDriftParameters::key(OpenDriftParameters::Id::GYRO_GAIN),
-        gain
-    );
-
-    prefs.putFloat(
-        OpenDriftParameters::key(OpenDriftParameters::Id::DEADBAND),
-        deadband
-    );
-
-    prefs.putBool(
-        OpenDriftParameters::key(OpenDriftParameters::Id::GYRO_REVERSE),
-        gyroReverse
-    );
-
-    prefs.putInt(
-        OpenDriftParameters::key(OpenDriftParameters::Id::MAX_CORRECTION),
-        gyroMaxCorrection
-    );
-
-    prefs.putFloat(
-        OpenDriftParameters::key(OpenDriftParameters::Id::SMOOTHING),
-        gyroSmoothing
-    );
-
-    prefs.putUChar(
-        OpenDriftParameters::key(OpenDriftParameters::Id::GYRO_LPF),
-        gyroLpfMode
-    );
-
-    prefs.putFloat(
-        OpenDriftParameters::key(OpenDriftParameters::Id::DRIFT_MEMORY),
-        gyroIntegralGain
-    );
-
-    prefs.putInt(
-        OpenDriftParameters::key(OpenDriftParameters::Id::MEMORY_LIMIT),
-        gyroIntegralLimit
-    );
-
-    prefs.putInt(
-        OpenDriftParameters::key(OpenDriftParameters::Id::HOLD_ASSIST),
-        gyroHoldBoost
-    );
-
-    prefs.putInt(
-        OpenDriftParameters::key(OpenDriftParameters::Id::COUNTERSTEER),
-        gyroCounterSteerAssist
-    );
-
-    prefs.putInt(
-        OpenDriftParameters::key(OpenDriftParameters::Id::TRANSITION_SPEED),
-        gyroTransitionSpeed
-    );
-
-    prefs.putInt(
-        OpenDriftParameters::key(OpenDriftParameters::Id::PREDICTION),
-        predictionStrength
-    );
-
-    prefs.putInt(
-        OpenDriftParameters::key(OpenDriftParameters::Id::ANTI_WOBBLE),
-        gyroHuntStrength
-    );
-
-    prefs.putInt(
-        OpenDriftParameters::key(OpenDriftParameters::Id::DRIVER_PRIORITY),
-        driverPriority
-    );
-
-    prefs.putInt(
-        OpenDriftParameters::key(OpenDriftParameters::Id::GYRO_HYSTERESIS),
-        gyroOutputHysteresis
-    );
-
-    prefs.putUChar(
-        OpenDriftParameters::key(OpenDriftParameters::Id::ANTI_WOBBLE_SCALE),
-        antiWobbleScale
-    );
-
-    prefs.putInt(
-        OpenDriftParameters::key(OpenDriftParameters::Id::SERVO_CENTER),
-        servoCenter
-    );
-
-    prefs.putBool(
-        OpenDriftParameters::key(OpenDriftParameters::Id::SERVO_REVERSE),
-        servoReverse
-    );
-
-    prefs.putInt(
-        OpenDriftParameters::key(OpenDriftParameters::Id::SERVO_TRAVEL),
-        servoTravel
-    );
-
-    prefs.putInt(
-        OpenDriftParameters::key(OpenDriftParameters::Id::SERVO_QUIET),
-        servoQuiet
-    );
-
-    prefs.putUShort(
-        OpenDriftParameters::key(OpenDriftParameters::Id::SERVO_RATE),
-        controlLoopHz
-    );
-
-    prefs.putUShort(
-        OpenDriftParameters::key(OpenDriftParameters::Id::THROTTLE_RATE),
-        throttleOutputHz
-    );
-
-    prefs.putUChar(
-        OpenDriftParameters::key(OpenDriftParameters::Id::DISPLAY_ROTATION),
-        displayRotation
-    );
+    parameterStore.save(prefs);
 
     prefs.putUChar(
         "dispBright",
@@ -800,11 +745,6 @@ void Settings::save()
     prefs.putInt("servoInR", steeringCapturedInputPulses[2]);
 
     prefs.putInt(
-        OpenDriftParameters::key(OpenDriftParameters::Id::STEERING_TRAVEL),
-        radioSteeringTravel
-    );
-
-    prefs.putInt(
         "gainMin",
         gainMin
     );
@@ -814,37 +754,10 @@ void Settings::save()
         gainMax
     );
 
-    prefs.putFloat(
-        OpenDriftParameters::key(OpenDriftParameters::Id::CHANNEL_3_GAIN_MIN),
-        channel3GainMin
-    );
-
-    prefs.putFloat(
-        OpenDriftParameters::key(OpenDriftParameters::Id::CHANNEL_3_GAIN_MAX),
-        channel3GainMax
-    );
-
     prefs.putBool(
         "thrOut",
         throttleOutputEnabled
     );
-
-    for(uint8_t index = 0; index < 8; index++)
-    {
-        char key[10];
-
-        snprintf(
-            key,
-            sizeof(key),
-            "auxCh%u",
-            index + 1
-        );
-
-        prefs.putUChar(
-            key,
-            auxChannels[index]
-        );
-    }
 
     if(
         activeProfileIndex >= 0 &&
@@ -879,230 +792,205 @@ void Settings::save()
 // Gyro
 // --------------------
 
+float Settings::getParameterValue(OpenDriftParameters::Id id) const
+{
+    return parameterStore.get(id);
+}
+
+
+bool Settings::setParameterValue(OpenDriftParameters::Id id, float value)
+{
+    bool changed = parameterStore.set(id, value);
+    if(changed) dirty = true;
+    return changed;
+}
+
+
+uint32_t Settings::getParameterGeneration() const
+{
+    return parameterStore.generation();
+}
+
+
+bool Settings::getControllerSnapshot(
+    uint32_t& lastGeneration,
+    ControllerSnapshot& snapshot
+) const
+{
+    float values[ParameterStore::VALUE_COUNT];
+    if(!parameterStore.snapshot(
+        lastGeneration,
+        values,
+        ParameterStore::VALUE_COUNT
+    )) return false;
+
+    snapshot.gain = values[(uint8_t)OpenDriftParameters::Id::GYRO_GAIN];
+    snapshot.deadband = values[(uint8_t)OpenDriftParameters::Id::DEADBAND];
+    snapshot.smoothing = values[(uint8_t)OpenDriftParameters::Id::SMOOTHING];
+    snapshot.driftMemory = values[(uint8_t)OpenDriftParameters::Id::DRIFT_MEMORY];
+    snapshot.maxCorrection = lroundf(values[(uint8_t)OpenDriftParameters::Id::MAX_CORRECTION]);
+    snapshot.memoryLimit = lroundf(values[(uint8_t)OpenDriftParameters::Id::MEMORY_LIMIT]);
+    snapshot.holdAssist = lroundf(values[(uint8_t)OpenDriftParameters::Id::HOLD_ASSIST]);
+    snapshot.countersteer = lroundf(values[(uint8_t)OpenDriftParameters::Id::COUNTERSTEER]);
+    snapshot.transitionSpeed = lroundf(values[(uint8_t)OpenDriftParameters::Id::TRANSITION_SPEED]);
+    snapshot.prediction = lroundf(values[(uint8_t)OpenDriftParameters::Id::PREDICTION]);
+    snapshot.driverPriority = lroundf(values[(uint8_t)OpenDriftParameters::Id::DRIVER_PRIORITY]);
+    snapshot.antiWobble = lroundf(values[(uint8_t)OpenDriftParameters::Id::ANTI_WOBBLE]);
+    snapshot.antiWobbleScale = lroundf(values[(uint8_t)OpenDriftParameters::Id::ANTI_WOBBLE_SCALE]);
+    snapshot.gyroLpfMode = lroundf(values[(uint8_t)OpenDriftParameters::Id::GYRO_LPF]);
+    snapshot.gyroReverse = values[(uint8_t)OpenDriftParameters::Id::GYRO_REVERSE] >= 0.5f;
+    return true;
+}
+
 float Settings::getGain()
 {
-    return gain;
+    return parameterStore.get(OpenDriftParameters::Id::GYRO_GAIN);
 }
 
 void Settings::setGain(float value)
 {
-    gain = OpenDriftParameters::clamp(
-        OpenDriftParameters::Id::GYRO_GAIN,
-        value
-    );
-    dirty = true;
+    setParameterValue(OpenDriftParameters::Id::GYRO_GAIN, value);
 }
 
 float Settings::getDeadband()
 {
-    return deadband;
+    return parameterStore.get(OpenDriftParameters::Id::DEADBAND);
 }
 
 void Settings::setDeadband(float value)
 {
-    deadband = OpenDriftParameters::clamp(
-        OpenDriftParameters::Id::DEADBAND,
-        value
-    );
-    dirty = true;
+    setParameterValue(OpenDriftParameters::Id::DEADBAND, value);
 }
 
 bool Settings::getGyroReverse()
 {
-    return gyroReverse;
+    return parameterStore.getBool(OpenDriftParameters::Id::GYRO_REVERSE);
 }
 
 void Settings::setGyroReverse(bool value)
 {
-    gyroReverse = value;
-    dirty = true;
+    setParameterValue(OpenDriftParameters::Id::GYRO_REVERSE, value ? 1.0f : 0.0f);
 }
 
 int Settings::getGyroMaxCorrection()
 {
-    return gyroMaxCorrection;
+    return parameterStore.getInt(OpenDriftParameters::Id::MAX_CORRECTION);
 }
 
 void Settings::setGyroMaxCorrection(int value)
 {
-    gyroMaxCorrection = OpenDriftParameters::clamp(
-        OpenDriftParameters::Id::MAX_CORRECTION,
-        value
-    );
-
-    dirty = true;
+    setParameterValue(OpenDriftParameters::Id::MAX_CORRECTION, value);
 }
 
 float Settings::getGyroSmoothing()
 {
-    return gyroSmoothing;
+    return parameterStore.get(OpenDriftParameters::Id::SMOOTHING);
 }
 
 void Settings::setGyroSmoothing(float value)
 {
-    gyroSmoothing = OpenDriftParameters::clamp(
-        OpenDriftParameters::Id::SMOOTHING,
-        value
-    );
-
-    dirty = true;
+    setParameterValue(OpenDriftParameters::Id::SMOOTHING, value);
 }
 
 uint8_t Settings::getGyroLpfMode()
 {
-    return gyroLpfMode;
+    return parameterStore.getInt(OpenDriftParameters::Id::GYRO_LPF);
 }
 
 void Settings::setGyroLpfMode(uint8_t value)
 {
-    gyroLpfMode = OpenDriftParameters::clamp(
-        OpenDriftParameters::Id::GYRO_LPF,
-        (int)value
-    );
-    dirty = true;
+    setParameterValue(OpenDriftParameters::Id::GYRO_LPF, value);
 }
 
 float Settings::getGyroIntegralGain()
 {
-    return gyroIntegralGain;
+    return parameterStore.get(OpenDriftParameters::Id::DRIFT_MEMORY);
 }
 
 void Settings::setGyroIntegralGain(float value)
 {
-    gyroIntegralGain = OpenDriftParameters::clamp(
-        OpenDriftParameters::Id::DRIFT_MEMORY,
-        value
-    );
-
-    dirty = true;
+    setParameterValue(OpenDriftParameters::Id::DRIFT_MEMORY, value);
 }
 
 int Settings::getGyroIntegralLimit()
 {
-    return gyroIntegralLimit;
+    return parameterStore.getInt(OpenDriftParameters::Id::MEMORY_LIMIT);
 }
 
 void Settings::setGyroIntegralLimit(int value)
 {
-    gyroIntegralLimit = OpenDriftParameters::clamp(
-        OpenDriftParameters::Id::MEMORY_LIMIT,
-        value
-    );
-
-    dirty = true;
+    setParameterValue(OpenDriftParameters::Id::MEMORY_LIMIT, value);
 }
 
 int Settings::getGyroHoldBoost()
 {
-    return gyroHoldBoost;
+    return parameterStore.getInt(OpenDriftParameters::Id::HOLD_ASSIST);
 }
 
 int Settings::getGyroCounterSteerAssist()
 {
-    return gyroCounterSteerAssist;
+    return parameterStore.getInt(OpenDriftParameters::Id::COUNTERSTEER);
 }
 
 void Settings::setGyroCounterSteerAssist(int value)
 {
-    gyroCounterSteerAssist = OpenDriftParameters::clamp(
-        OpenDriftParameters::Id::COUNTERSTEER,
-        value
-    );
-    dirty = true;
+    setParameterValue(OpenDriftParameters::Id::COUNTERSTEER, value);
 }
 
 int Settings::getGyroTransitionSpeed()
 {
-    return gyroTransitionSpeed;
+    return parameterStore.getInt(OpenDriftParameters::Id::TRANSITION_SPEED);
 }
 
 void Settings::setGyroTransitionSpeed(int value)
 {
-    gyroTransitionSpeed = OpenDriftParameters::clamp(
-        OpenDriftParameters::Id::TRANSITION_SPEED,
-        value
-    );
-    dirty = true;
+    setParameterValue(OpenDriftParameters::Id::TRANSITION_SPEED, value);
 }
 
 void Settings::setGyroHoldBoost(int value)
 {
-    gyroHoldBoost = OpenDriftParameters::clamp(
-        OpenDriftParameters::Id::HOLD_ASSIST,
-        value
-    );
-
-    dirty = true;
+    setParameterValue(OpenDriftParameters::Id::HOLD_ASSIST, value);
 }
 
 int Settings::getPredictionStrength()
 {
-    return predictionStrength;
+    return parameterStore.getInt(OpenDriftParameters::Id::PREDICTION);
 }
 
 void Settings::setPredictionStrength(int value)
 {
-    predictionStrength = OpenDriftParameters::clamp(
-        OpenDriftParameters::Id::PREDICTION,
-        value
-    );
-
-    dirty = true;
+    setParameterValue(OpenDriftParameters::Id::PREDICTION, value);
 }
 
 int Settings::getGyroHuntStrength()
 {
-    return gyroHuntStrength;
+    return parameterStore.getInt(OpenDriftParameters::Id::ANTI_WOBBLE);
 }
 
 void Settings::setGyroHuntStrength(int value)
 {
-    gyroHuntStrength = OpenDriftParameters::clamp(
-        OpenDriftParameters::Id::ANTI_WOBBLE,
-        value
-    );
-    dirty = true;
+    setParameterValue(OpenDriftParameters::Id::ANTI_WOBBLE, value);
 }
 
 int Settings::getDriverPriority()
 {
-    return driverPriority;
+    return parameterStore.getInt(OpenDriftParameters::Id::DRIVER_PRIORITY);
 }
 
 void Settings::setDriverPriority(int value)
 {
-    driverPriority = OpenDriftParameters::clamp(
-        OpenDriftParameters::Id::DRIVER_PRIORITY,
-        value
-    );
-    dirty = true;
+    setParameterValue(OpenDriftParameters::Id::DRIVER_PRIORITY, value);
 }
 
-
-int Settings::getGyroOutputHysteresis()
-{
-    return gyroOutputHysteresis;
-}
-
-
-void Settings::setGyroOutputHysteresis(int value)
-{
-    gyroOutputHysteresis = OpenDriftParameters::clamp(
-        OpenDriftParameters::Id::GYRO_HYSTERESIS,
-        value
-    );
-    dirty = true;
-}
 
 uint8_t Settings::getAntiWobbleScale()
 {
-    return antiWobbleScale;
+    return parameterStore.getInt(OpenDriftParameters::Id::ANTI_WOBBLE_SCALE);
 }
 
 void Settings::setAntiWobbleScale(uint8_t value)
 {
-    antiWobbleScale = value == 1 ? 1 : 0;
-    dirty = true;
+    setParameterValue(OpenDriftParameters::Id::ANTI_WOBBLE_SCALE, value == 1 ? 1.0f : 0.0f);
 }
 
 
@@ -1112,7 +1000,7 @@ void Settings::setAntiWobbleScale(uint8_t value)
 
 int Settings::getServoCenter()
 {
-    return servoCenter;
+    return parameterStore.getInt(OpenDriftParameters::Id::SERVO_CENTER);
 }
 
 void Settings::setServoCenter(int value)
@@ -1122,12 +1010,12 @@ void Settings::setServoCenter(int value)
         value
     );
 
-    if(servoCenter == value)
+    if(getServoCenter() == value)
     {
         return;
     }
 
-    servoCenter = value;
+    parameterStore.set(OpenDriftParameters::Id::SERVO_CENTER, value);
     // Physical endpoint calibration is authoritative once captured. Center
     // is retained as the fallback used only when calibration is explicitly
     // reset; changing it must not silently discard safe physical limits.
@@ -1136,12 +1024,12 @@ void Settings::setServoCenter(int value)
 
 bool Settings::getServoReverse()
 {
-    return servoReverse;
+    return parameterStore.getBool(OpenDriftParameters::Id::SERVO_REVERSE);
 }
 
 void Settings::setServoReverse(bool value)
 {
-    if(servoReverse == value)
+    if(getServoReverse() == value)
     {
         return;
     }
@@ -1159,7 +1047,10 @@ void Settings::setServoReverse(bool value)
         steeringCapturedPulses[2] = steeringMax;
     }
 
-    servoReverse = value;
+    parameterStore.set(
+        OpenDriftParameters::Id::SERVO_REVERSE,
+        value ? 1.0f : 0.0f
+    );
     portEXIT_CRITICAL(&settingsMux);
 
     dirty = true;
@@ -1172,7 +1063,7 @@ void Settings::setServoReverse(bool value)
 
 int Settings::getServoTravel()
 {
-    return servoTravel;
+    return parameterStore.getInt(OpenDriftParameters::Id::SERVO_TRAVEL);
 }
 
 void Settings::setServoTravel(int value)
@@ -1182,12 +1073,12 @@ void Settings::setServoTravel(int value)
         value
     );
 
-    if(servoTravel == value)
+    if(getServoTravel() == value)
     {
         return;
     }
 
-    servoTravel = value;
+    parameterStore.set(OpenDriftParameters::Id::SERVO_TRAVEL, value);
     // Travel is likewise a fallback. Do not make an incidental UI or CRSF
     // write capable of disabling the calibrated hard stops while driving.
     dirty = true;
@@ -1195,59 +1086,57 @@ void Settings::setServoTravel(int value)
 
 int Settings::getServoQuiet()
 {
-    return servoQuiet;
+    return parameterStore.getInt(OpenDriftParameters::Id::SERVO_QUIET);
 }
 
 void Settings::setServoQuiet(int value)
 {
-    servoQuiet = OpenDriftParameters::clamp(
-        OpenDriftParameters::Id::SERVO_QUIET,
-        value
-    );
-
-    dirty = true;
+    setParameterValue(OpenDriftParameters::Id::SERVO_QUIET, value);
 }
 
 uint16_t Settings::getControlLoopHz()
 {
-    return controlLoopHz;
+    return parameterStore.getInt(OpenDriftParameters::Id::SERVO_RATE) == 1
+        ? 333
+        : 250;
 }
 
 void Settings::setControlLoopHz(uint16_t value)
 {
-    controlLoopHz = value == 333 ? 333 : 250;
-    dirty = true;
+    setParameterValue(
+        OpenDriftParameters::Id::SERVO_RATE,
+        value == 333 ? 1.0f : 0.0f
+    );
 }
 
 uint16_t Settings::getThrottleOutputHz()
 {
-    return throttleOutputHz;
+    int selection = parameterStore.getInt(OpenDriftParameters::Id::THROTTLE_RATE);
+    return selection == 2 ? 333 : (selection == 1 ? 250 : 50);
 }
 
 void Settings::setThrottleOutputHz(uint16_t value)
 {
-    throttleOutputHz =
-        value == 333
-        ? 333
-        : (value == 250 ? 250 : 50);
-
-    dirty = true;
+    setParameterValue(
+        OpenDriftParameters::Id::THROTTLE_RATE,
+        value == 333 ? 2.0f : (value == 250 ? 1.0f : 0.0f)
+    );
 }
 
 uint8_t Settings::getDisplayRotation()
 {
-    return displayRotation;
+    return parameterStore.getInt(OpenDriftParameters::Id::DISPLAY_ROTATION);
 }
 
 void Settings::setDisplayRotation(uint8_t value)
 {
     #if defined(OPENDRIFT_BOARD_MATRIX)
-    displayRotation = constrain(value, 0, 3);
+    value = constrain(value, 0, 3);
     #else
-    displayRotation = value == 2 ? 2 : 0;
+    value = value == 2 ? 2 : 0;
     #endif
 
-    dirty = true;
+    setParameterValue(OpenDriftParameters::Id::DISPLAY_ROTATION, value);
 }
 
 uint8_t Settings::getDisplayBrightness()
@@ -1760,17 +1649,12 @@ void Settings::persistSteeringCalibration()
 
 int Settings::getRadioSteeringTravel()
 {
-    return radioSteeringTravel;
+    return parameterStore.getInt(OpenDriftParameters::Id::STEERING_TRAVEL);
 }
 
 void Settings::setRadioSteeringTravel(int value)
 {
-    radioSteeringTravel = OpenDriftParameters::clamp(
-        OpenDriftParameters::Id::STEERING_TRAVEL,
-        value
-    );
-
-    dirty = true;
+    setParameterValue(OpenDriftParameters::Id::STEERING_TRAVEL, value);
 }
 
 int Settings::getGainMin()
@@ -1807,42 +1691,40 @@ void Settings::setGainMax(int value)
 
 float Settings::getChannel3GainMin()
 {
-    return channel3GainMin;
+    return parameterStore.get(OpenDriftParameters::Id::CHANNEL_3_GAIN_MIN);
 }
 
 void Settings::setChannel3GainMin(float value)
 {
-    channel3GainMin = OpenDriftParameters::clamp(
+    value = OpenDriftParameters::clamp(
         OpenDriftParameters::Id::CHANNEL_3_GAIN_MIN,
         value
     );
+    setParameterValue(OpenDriftParameters::Id::CHANNEL_3_GAIN_MIN, value);
 
-    if(channel3GainMax < channel3GainMin)
+    if(getChannel3GainMax() < value)
     {
-        channel3GainMax = channel3GainMin;
+        setParameterValue(OpenDriftParameters::Id::CHANNEL_3_GAIN_MAX, value);
     }
-
-    dirty = true;
 }
 
 float Settings::getChannel3GainMax()
 {
-    return channel3GainMax;
+    return parameterStore.get(OpenDriftParameters::Id::CHANNEL_3_GAIN_MAX);
 }
 
 void Settings::setChannel3GainMax(float value)
 {
-    channel3GainMax = OpenDriftParameters::clamp(
+    value = OpenDriftParameters::clamp(
         OpenDriftParameters::Id::CHANNEL_3_GAIN_MAX,
         value
     );
+    setParameterValue(OpenDriftParameters::Id::CHANNEL_3_GAIN_MAX, value);
 
-    if(channel3GainMin > channel3GainMax)
+    if(getChannel3GainMin() > value)
     {
-        channel3GainMin = channel3GainMax;
+        setParameterValue(OpenDriftParameters::Id::CHANNEL_3_GAIN_MIN, value);
     }
-
-    dirty = true;
 }
 
 bool Settings::getThrottleOutputEnabled()
@@ -1863,7 +1745,11 @@ uint8_t Settings::getAuxChannelForGpio(uint8_t gpio)
         return 0;
     }
 
-    return auxChannels[gpio - 1];
+    return parameterStore.getInt(
+        static_cast<OpenDriftParameters::Id>(
+            (uint8_t)OpenDriftParameters::Id::GPIO_1 + gpio - 1
+        )
+    );
 }
 
 void Settings::setAuxChannelForGpio(
@@ -1876,13 +1762,12 @@ void Settings::setAuxChannelForGpio(
         return;
     }
 
-    auxChannels[gpio - 1] = constrain(
-        channel,
-        (uint8_t)0,
-        (uint8_t)16
+    setParameterValue(
+        static_cast<OpenDriftParameters::Id>(
+            (uint8_t)OpenDriftParameters::Id::GPIO_1 + gpio - 1
+        ),
+        channel
     );
-
-    dirty = true;
 }
 
 // --------------------
@@ -1924,6 +1809,18 @@ const Settings::DrivingProfile* Settings::getProfile(
     return &profiles[index];
 }
 
+
+float Settings::getProfileValue(
+    const DrivingProfile& profile,
+    OpenDriftParameters::Id id
+) const
+{
+    uint8_t index = (uint8_t)id;
+    return index < ParameterStore::VALUE_COUNT
+        ? profile.values[index]
+        : 0.0f;
+}
+
 int8_t Settings::createProfile(
     const String& requestedName
 )
@@ -1957,7 +1854,7 @@ int8_t Settings::createProfile(
     DrivingProfile& profile =
         profiles[profileCount];
 
-    profile = DrivingProfile();
+    initializeProfileDefaults(profile);
 
     name.toCharArray(
         profile.name,
@@ -2083,19 +1980,10 @@ void Settings::clampProfile(
     DrivingProfile& profile
 )
 {
-    profile.gain = constrain(profile.gain, 0.0f, 6.0f);
-    profile.deadband = constrain(profile.deadband, 0.0f, 100.0f);
-    profile.gyroSmoothing = constrain(profile.gyroSmoothing, 0.0f, 1.0f);
-    profile.gyroIntegralGain = constrain(profile.gyroIntegralGain, 0.0f, 20.0f);
-    profile.gyroMaxCorrection = constrain(profile.gyroMaxCorrection, 0, 100);
-    profile.gyroIntegralLimit = constrain(profile.gyroIntegralLimit, 0, 500);
-    profile.gyroHoldBoost = constrain(profile.gyroHoldBoost, 0, 100);
-    profile.predictionStrength = constrain(profile.predictionStrength, 0, 100);
-    profile.radioSteeringTravel = constrain(profile.radioSteeringTravel, 0, 100);
-    profile.gyroCounterSteerAssist = constrain(profile.gyroCounterSteerAssist, 0, 100);
-    profile.gyroTransitionSpeed = constrain(profile.gyroTransitionSpeed, 0, 100);
-    profile.gyroHuntStrength = constrain(profile.gyroHuntStrength, 0, 100);
-    profile.driverPriority = constrain(profile.driverPriority, 0, 50);
+    parameterStore.clampProfile(
+        profile.values,
+        ParameterStore::VALUE_COUNT
+    );
 }
 
 void Settings::loadProfiles()
@@ -2133,13 +2021,43 @@ void Settings::loadProfiles()
             if(
                 prefs.getBytes(key, &stored, sizeof(stored)) == sizeof(stored) &&
                 stored.name[0] != '\0' &&
-                stored.version == 11
+                stored.version == 12
             )
             {
                 DrivingProfile& profile = profiles[loadedCount];
                 profile = stored;
-                profile.version = 11;
+                profile.version = 12;
                 profile.name[PROFILE_NAME_LENGTH - 1] = '\0';
+                loadedCount++;
+            }
+        }
+        else if(storedSize == sizeof(DrivingProfileV11))
+        {
+            DrivingProfileV11 legacy = {};
+
+            if(
+                prefs.getBytes(key, &legacy, sizeof(legacy)) == sizeof(legacy) &&
+                legacy.name[0] != '\0' &&
+                legacy.version == 11
+            )
+            {
+                DrivingProfile& profile = profiles[loadedCount];
+                initializeProfileDefaults(profile);
+                memcpy(profile.name, legacy.name, PROFILE_NAME_LENGTH);
+                profile.name[PROFILE_NAME_LENGTH - 1] = '\0';
+                setProfileValue(profile, OpenDriftParameters::Id::GYRO_GAIN, legacy.gain);
+                setProfileValue(profile, OpenDriftParameters::Id::DEADBAND, legacy.deadband);
+                setProfileValue(profile, OpenDriftParameters::Id::SMOOTHING, legacy.gyroSmoothing);
+                setProfileValue(profile, OpenDriftParameters::Id::DRIFT_MEMORY, legacy.gyroIntegralGain);
+                setProfileValue(profile, OpenDriftParameters::Id::MAX_CORRECTION, legacy.gyroMaxCorrection);
+                setProfileValue(profile, OpenDriftParameters::Id::MEMORY_LIMIT, legacy.gyroIntegralLimit);
+                setProfileValue(profile, OpenDriftParameters::Id::HOLD_ASSIST, legacy.gyroHoldBoost);
+                setProfileValue(profile, OpenDriftParameters::Id::PREDICTION, legacy.predictionStrength);
+                setProfileValue(profile, OpenDriftParameters::Id::STEERING_TRAVEL, legacy.radioSteeringTravel);
+                setProfileValue(profile, OpenDriftParameters::Id::COUNTERSTEER, legacy.gyroCounterSteerAssist);
+                setProfileValue(profile, OpenDriftParameters::Id::TRANSITION_SPEED, legacy.gyroTransitionSpeed);
+                setProfileValue(profile, OpenDriftParameters::Id::ANTI_WOBBLE, legacy.gyroHuntStrength);
+                setProfileValue(profile, OpenDriftParameters::Id::DRIVER_PRIORITY, legacy.driverPriority);
                 loadedCount++;
             }
         }
@@ -2154,35 +2072,37 @@ void Settings::loadProfiles()
             )
             {
                 DrivingProfile& profile = profiles[loadedCount];
-                profile = DrivingProfile();
+                initializeProfileDefaults(profile);
                 memcpy(profile.name, legacy.name, PROFILE_NAME_LENGTH);
                 profile.name[PROFILE_NAME_LENGTH - 1] = '\0';
-                profile.gain = legacy.gain;
-                profile.deadband = legacy.deadband;
-                profile.gyroSmoothing = legacy.gyroSmoothing;
-                profile.gyroIntegralGain = legacy.gyroIntegralGain;
-                profile.gyroMaxCorrection = legacy.gyroMaxCorrection;
-                profile.gyroIntegralLimit = legacy.gyroIntegralLimit;
-                profile.gyroHoldBoost = legacy.gyroHoldBoost;
-                profile.predictionStrength = legacy.predictionStrength;
-                profile.radioSteeringTravel = legacy.radioSteeringTravel;
-                profile.gyroCounterSteerAssist = legacy.gyroCounterSteerAssist;
-                profile.gyroTransitionSpeed = legacy.gyroTransitionSpeed;
-                profile.gyroHuntStrength = legacy.gyroHuntStrength;
+                setProfileValue(profile, OpenDriftParameters::Id::GYRO_GAIN, legacy.gain);
+                setProfileValue(profile, OpenDriftParameters::Id::DEADBAND, legacy.deadband);
+                setProfileValue(profile, OpenDriftParameters::Id::SMOOTHING, legacy.gyroSmoothing);
+                setProfileValue(profile, OpenDriftParameters::Id::DRIFT_MEMORY, legacy.gyroIntegralGain);
+                setProfileValue(profile, OpenDriftParameters::Id::MAX_CORRECTION, legacy.gyroMaxCorrection);
+                setProfileValue(profile, OpenDriftParameters::Id::MEMORY_LIMIT, legacy.gyroIntegralLimit);
+                setProfileValue(profile, OpenDriftParameters::Id::HOLD_ASSIST, legacy.gyroHoldBoost);
+                setProfileValue(profile, OpenDriftParameters::Id::PREDICTION, legacy.predictionStrength);
+                setProfileValue(profile, OpenDriftParameters::Id::STEERING_TRAVEL, legacy.radioSteeringTravel);
+                setProfileValue(profile, OpenDriftParameters::Id::COUNTERSTEER, legacy.gyroCounterSteerAssist);
+                setProfileValue(profile, OpenDriftParameters::Id::TRANSITION_SPEED, legacy.gyroTransitionSpeed);
+                setProfileValue(profile, OpenDriftParameters::Id::ANTI_WOBBLE, legacy.gyroHuntStrength);
 
                 if(legacy.version == 9)
                 {
-                    profile.gyroMaxCorrection =
-                        centerSpanPercentToFullSpanPercent(
-                            legacy.gyroMaxCorrection
-                        );
+                    setProfileValue(
+                        profile,
+                        OpenDriftParameters::Id::MAX_CORRECTION,
+                        centerSpanPercentToFullSpanPercent(legacy.gyroMaxCorrection)
+                    );
                 }
                 else if(legacy.version == 8)
                 {
-                    profile.gyroMaxCorrection =
-                        legacyMaxCorrectionToPercent(
-                            legacy.gyroMaxCorrection
-                        );
+                    setProfileValue(
+                        profile,
+                        OpenDriftParameters::Id::MAX_CORRECTION,
+                        legacyMaxCorrectionToPercent(legacy.gyroMaxCorrection)
+                    );
                 }
 
                 loadedCount++;
@@ -2199,21 +2119,21 @@ void Settings::loadProfiles()
             )
             {
                 DrivingProfile& profile = profiles[loadedCount];
-                profile = DrivingProfile();
+                initializeProfileDefaults(profile);
                 memcpy(profile.name, legacy.name, PROFILE_NAME_LENGTH);
                 profile.name[PROFILE_NAME_LENGTH - 1] = '\0';
-                profile.gain = legacy.gain;
-                profile.deadband = legacy.deadband;
-                profile.gyroSmoothing = legacy.gyroSmoothing;
-                profile.gyroIntegralGain = legacy.gyroIntegralGain;
-                profile.gyroMaxCorrection = legacyMaxCorrectionToPercent(legacy.gyroMaxCorrection);
-                profile.gyroIntegralLimit = legacy.gyroIntegralLimit;
-                profile.gyroHoldBoost = legacy.gyroHoldBoost;
-                profile.predictionStrength = legacy.predictionStrength;
-                profile.radioSteeringTravel = legacy.radioSteeringTravel;
-                profile.gyroCounterSteerAssist = legacy.gyroCounterSteerAssist;
-                profile.gyroTransitionSpeed = legacy.gyroTransitionSpeed;
-                profile.gyroHuntStrength = legacy.gyroHuntStrength;
+                setProfileValue(profile, OpenDriftParameters::Id::GYRO_GAIN, legacy.gain);
+                setProfileValue(profile, OpenDriftParameters::Id::DEADBAND, legacy.deadband);
+                setProfileValue(profile, OpenDriftParameters::Id::SMOOTHING, legacy.gyroSmoothing);
+                setProfileValue(profile, OpenDriftParameters::Id::DRIFT_MEMORY, legacy.gyroIntegralGain);
+                setProfileValue(profile, OpenDriftParameters::Id::MAX_CORRECTION, legacyMaxCorrectionToPercent(legacy.gyroMaxCorrection));
+                setProfileValue(profile, OpenDriftParameters::Id::MEMORY_LIMIT, legacy.gyroIntegralLimit);
+                setProfileValue(profile, OpenDriftParameters::Id::HOLD_ASSIST, legacy.gyroHoldBoost);
+                setProfileValue(profile, OpenDriftParameters::Id::PREDICTION, legacy.predictionStrength);
+                setProfileValue(profile, OpenDriftParameters::Id::STEERING_TRAVEL, legacy.radioSteeringTravel);
+                setProfileValue(profile, OpenDriftParameters::Id::COUNTERSTEER, legacy.gyroCounterSteerAssist);
+                setProfileValue(profile, OpenDriftParameters::Id::TRANSITION_SPEED, legacy.gyroTransitionSpeed);
+                setProfileValue(profile, OpenDriftParameters::Id::ANTI_WOBBLE, legacy.gyroHuntStrength);
                 loadedCount++;
             }
         }
@@ -2228,21 +2148,21 @@ void Settings::loadProfiles()
             )
             {
                 DrivingProfile& profile = profiles[loadedCount];
-                profile = DrivingProfile();
+                initializeProfileDefaults(profile);
                 memcpy(profile.name, legacy.name, PROFILE_NAME_LENGTH);
                 profile.name[PROFILE_NAME_LENGTH - 1] = '\0';
-                profile.gain = legacy.gain;
-                profile.deadband = legacy.deadband;
-                profile.gyroSmoothing = legacy.gyroSmoothing;
-                profile.gyroIntegralGain = legacy.gyroIntegralGain;
-                profile.gyroMaxCorrection = legacyMaxCorrectionToPercent(legacy.gyroMaxCorrection);
-                profile.gyroIntegralLimit = legacy.gyroIntegralLimit;
-                profile.gyroHoldBoost = legacy.gyroHoldBoost;
-                profile.predictionStrength = legacy.predictionStrength;
-                profile.radioSteeringTravel = legacy.radioSteeringTravel;
-                profile.gyroCounterSteerAssist = legacy.gyroCounterSteerAssist;
-                profile.gyroTransitionSpeed = legacy.gyroTransitionSpeed;
-                profile.gyroHuntStrength = 50;
+                setProfileValue(profile, OpenDriftParameters::Id::GYRO_GAIN, legacy.gain);
+                setProfileValue(profile, OpenDriftParameters::Id::DEADBAND, legacy.deadband);
+                setProfileValue(profile, OpenDriftParameters::Id::SMOOTHING, legacy.gyroSmoothing);
+                setProfileValue(profile, OpenDriftParameters::Id::DRIFT_MEMORY, legacy.gyroIntegralGain);
+                setProfileValue(profile, OpenDriftParameters::Id::MAX_CORRECTION, legacyMaxCorrectionToPercent(legacy.gyroMaxCorrection));
+                setProfileValue(profile, OpenDriftParameters::Id::MEMORY_LIMIT, legacy.gyroIntegralLimit);
+                setProfileValue(profile, OpenDriftParameters::Id::HOLD_ASSIST, legacy.gyroHoldBoost);
+                setProfileValue(profile, OpenDriftParameters::Id::PREDICTION, legacy.predictionStrength);
+                setProfileValue(profile, OpenDriftParameters::Id::STEERING_TRAVEL, legacy.radioSteeringTravel);
+                setProfileValue(profile, OpenDriftParameters::Id::COUNTERSTEER, legacy.gyroCounterSteerAssist);
+                setProfileValue(profile, OpenDriftParameters::Id::TRANSITION_SPEED, legacy.gyroTransitionSpeed);
+                setProfileValue(profile, OpenDriftParameters::Id::ANTI_WOBBLE, 50);
                 loadedCount++;
             }
         }
@@ -2257,20 +2177,20 @@ void Settings::loadProfiles()
             )
             {
                 DrivingProfile& profile = profiles[loadedCount];
-                profile = DrivingProfile();
+                initializeProfileDefaults(profile);
                 memcpy(profile.name, legacy.name, PROFILE_NAME_LENGTH);
                 profile.name[PROFILE_NAME_LENGTH - 1] = '\0';
-                profile.gain = legacy.gain;
-                profile.deadband = legacy.deadband;
-                profile.gyroSmoothing = legacy.gyroSmoothing;
-                profile.gyroIntegralGain = legacy.gyroIntegralGain;
-                profile.gyroMaxCorrection = legacyMaxCorrectionToPercent(legacy.gyroMaxCorrection);
-                profile.gyroIntegralLimit = legacy.gyroIntegralLimit;
-                profile.gyroHoldBoost = legacy.gyroHoldBoost;
-                profile.predictionStrength = legacy.predictionStrength;
-                profile.radioSteeringTravel = legacy.radioSteeringTravel;
-                profile.gyroCounterSteerAssist = legacy.gyroCounterSteerAssist;
-                profile.gyroTransitionSpeed = legacy.gyroTransitionSpeed;
+                setProfileValue(profile, OpenDriftParameters::Id::GYRO_GAIN, legacy.gain);
+                setProfileValue(profile, OpenDriftParameters::Id::DEADBAND, legacy.deadband);
+                setProfileValue(profile, OpenDriftParameters::Id::SMOOTHING, legacy.gyroSmoothing);
+                setProfileValue(profile, OpenDriftParameters::Id::DRIFT_MEMORY, legacy.gyroIntegralGain);
+                setProfileValue(profile, OpenDriftParameters::Id::MAX_CORRECTION, legacyMaxCorrectionToPercent(legacy.gyroMaxCorrection));
+                setProfileValue(profile, OpenDriftParameters::Id::MEMORY_LIMIT, legacy.gyroIntegralLimit);
+                setProfileValue(profile, OpenDriftParameters::Id::HOLD_ASSIST, legacy.gyroHoldBoost);
+                setProfileValue(profile, OpenDriftParameters::Id::PREDICTION, legacy.predictionStrength);
+                setProfileValue(profile, OpenDriftParameters::Id::STEERING_TRAVEL, legacy.radioSteeringTravel);
+                setProfileValue(profile, OpenDriftParameters::Id::COUNTERSTEER, legacy.gyroCounterSteerAssist);
+                setProfileValue(profile, OpenDriftParameters::Id::TRANSITION_SPEED, legacy.gyroTransitionSpeed);
                 loadedCount++;
             }
         }
@@ -2285,20 +2205,20 @@ void Settings::loadProfiles()
             )
             {
                 DrivingProfile& profile = profiles[loadedCount];
-                profile = DrivingProfile();
+                initializeProfileDefaults(profile);
                 memcpy(profile.name, legacy.name, PROFILE_NAME_LENGTH);
                 profile.name[PROFILE_NAME_LENGTH - 1] = '\0';
-                profile.gain = legacy.gain;
-                profile.deadband = legacy.deadband;
-                profile.gyroSmoothing = legacy.gyroSmoothing;
-                profile.gyroIntegralGain = legacy.gyroIntegralGain;
-                profile.gyroMaxCorrection = legacyMaxCorrectionToPercent(legacy.gyroMaxCorrection);
-                profile.gyroIntegralLimit = legacy.gyroIntegralLimit;
-                profile.gyroHoldBoost = legacy.gyroHoldBoost;
-                profile.predictionStrength = legacy.gyroHuntDamping;
-                profile.radioSteeringTravel = legacy.radioSteeringTravel;
-                profile.gyroCounterSteerAssist = legacy.gyroCounterSteerAssist;
-                profile.gyroTransitionSpeed = legacy.gyroTailSlideSpeed;
+                setProfileValue(profile, OpenDriftParameters::Id::GYRO_GAIN, legacy.gain);
+                setProfileValue(profile, OpenDriftParameters::Id::DEADBAND, legacy.deadband);
+                setProfileValue(profile, OpenDriftParameters::Id::SMOOTHING, legacy.gyroSmoothing);
+                setProfileValue(profile, OpenDriftParameters::Id::DRIFT_MEMORY, legacy.gyroIntegralGain);
+                setProfileValue(profile, OpenDriftParameters::Id::MAX_CORRECTION, legacyMaxCorrectionToPercent(legacy.gyroMaxCorrection));
+                setProfileValue(profile, OpenDriftParameters::Id::MEMORY_LIMIT, legacy.gyroIntegralLimit);
+                setProfileValue(profile, OpenDriftParameters::Id::HOLD_ASSIST, legacy.gyroHoldBoost);
+                setProfileValue(profile, OpenDriftParameters::Id::PREDICTION, legacy.gyroHuntDamping);
+                setProfileValue(profile, OpenDriftParameters::Id::STEERING_TRAVEL, legacy.radioSteeringTravel);
+                setProfileValue(profile, OpenDriftParameters::Id::COUNTERSTEER, legacy.gyroCounterSteerAssist);
+                setProfileValue(profile, OpenDriftParameters::Id::TRANSITION_SPEED, legacy.gyroTailSlideSpeed);
                 loadedCount++;
             }
         }
@@ -2313,23 +2233,23 @@ void Settings::loadProfiles()
             )
             {
                 DrivingProfile& profile = profiles[loadedCount];
-                profile = DrivingProfile();
+                initializeProfileDefaults(profile);
                 memcpy(profile.name, legacy.name, PROFILE_NAME_LENGTH);
                 profile.name[PROFILE_NAME_LENGTH - 1] = '\0';
-                profile.gain = legacy.gain;
-                profile.deadband = legacy.deadband;
-                profile.gyroSmoothing = legacy.gyroSmoothing;
-                profile.gyroIntegralGain = legacy.gyroIntegralGain;
-                profile.gyroMaxCorrection = legacyMaxCorrectionToPercent(legacy.gyroMaxCorrection);
-                profile.gyroIntegralLimit = legacy.gyroIntegralLimit;
-                profile.gyroHoldBoost = legacy.gyroHoldBoost;
-                profile.predictionStrength = legacy.gyroHuntDamping;
-                profile.radioSteeringTravel = legacy.radioSteeringTravel;
-                profile.gyroCounterSteerAssist = legacy.gyroCounterSteerAssist;
-                profile.gyroTransitionSpeed = constrain(
-                    50 + legacy.gyroTailSlideSpeed / 2,
-                    50,
-                    100
+                setProfileValue(profile, OpenDriftParameters::Id::GYRO_GAIN, legacy.gain);
+                setProfileValue(profile, OpenDriftParameters::Id::DEADBAND, legacy.deadband);
+                setProfileValue(profile, OpenDriftParameters::Id::SMOOTHING, legacy.gyroSmoothing);
+                setProfileValue(profile, OpenDriftParameters::Id::DRIFT_MEMORY, legacy.gyroIntegralGain);
+                setProfileValue(profile, OpenDriftParameters::Id::MAX_CORRECTION, legacyMaxCorrectionToPercent(legacy.gyroMaxCorrection));
+                setProfileValue(profile, OpenDriftParameters::Id::MEMORY_LIMIT, legacy.gyroIntegralLimit);
+                setProfileValue(profile, OpenDriftParameters::Id::HOLD_ASSIST, legacy.gyroHoldBoost);
+                setProfileValue(profile, OpenDriftParameters::Id::PREDICTION, legacy.gyroHuntDamping);
+                setProfileValue(profile, OpenDriftParameters::Id::STEERING_TRAVEL, legacy.radioSteeringTravel);
+                setProfileValue(profile, OpenDriftParameters::Id::COUNTERSTEER, legacy.gyroCounterSteerAssist);
+                setProfileValue(
+                    profile,
+                    OpenDriftParameters::Id::TRANSITION_SPEED,
+                    constrain(50 + legacy.gyroTailSlideSpeed / 2, 50, 100)
                 );
                 loadedCount++;
             }
@@ -2345,20 +2265,20 @@ void Settings::loadProfiles()
             )
             {
                 DrivingProfile& profile = profiles[loadedCount];
-                profile = DrivingProfile();
+                initializeProfileDefaults(profile);
                 memcpy(profile.name, legacy.name, PROFILE_NAME_LENGTH);
                 profile.name[PROFILE_NAME_LENGTH - 1] = '\0';
-                profile.gain = legacy.gain;
-                profile.deadband = legacy.deadband;
-                profile.gyroSmoothing = legacy.gyroSmoothing;
-                profile.gyroIntegralGain = legacy.gyroIntegralGain;
-                profile.gyroMaxCorrection = legacyMaxCorrectionToPercent(legacy.gyroMaxCorrection);
-                profile.gyroIntegralLimit = legacy.gyroIntegralLimit;
-                profile.gyroHoldBoost = legacy.gyroHoldBoost;
-                profile.predictionStrength = legacy.gyroHuntDamping;
-                profile.radioSteeringTravel = legacy.radioSteeringTravel;
-                profile.gyroCounterSteerAssist = legacy.gyroCounterSteerAssist;
-                profile.gyroTransitionSpeed = 50;
+                setProfileValue(profile, OpenDriftParameters::Id::GYRO_GAIN, legacy.gain);
+                setProfileValue(profile, OpenDriftParameters::Id::DEADBAND, legacy.deadband);
+                setProfileValue(profile, OpenDriftParameters::Id::SMOOTHING, legacy.gyroSmoothing);
+                setProfileValue(profile, OpenDriftParameters::Id::DRIFT_MEMORY, legacy.gyroIntegralGain);
+                setProfileValue(profile, OpenDriftParameters::Id::MAX_CORRECTION, legacyMaxCorrectionToPercent(legacy.gyroMaxCorrection));
+                setProfileValue(profile, OpenDriftParameters::Id::MEMORY_LIMIT, legacy.gyroIntegralLimit);
+                setProfileValue(profile, OpenDriftParameters::Id::HOLD_ASSIST, legacy.gyroHoldBoost);
+                setProfileValue(profile, OpenDriftParameters::Id::PREDICTION, legacy.gyroHuntDamping);
+                setProfileValue(profile, OpenDriftParameters::Id::STEERING_TRAVEL, legacy.radioSteeringTravel);
+                setProfileValue(profile, OpenDriftParameters::Id::COUNTERSTEER, legacy.gyroCounterSteerAssist);
+                setProfileValue(profile, OpenDriftParameters::Id::TRANSITION_SPEED, 50);
                 loadedCount++;
             }
         }
@@ -2373,20 +2293,20 @@ void Settings::loadProfiles()
             )
             {
                 DrivingProfile& profile = profiles[loadedCount];
-                profile = DrivingProfile();
+                initializeProfileDefaults(profile);
                 memcpy(profile.name, legacy.name, PROFILE_NAME_LENGTH);
                 profile.name[PROFILE_NAME_LENGTH - 1] = '\0';
-                profile.gain = legacy.gain;
-                profile.deadband = legacy.deadband;
-                profile.gyroSmoothing = legacy.gyroSmoothing;
-                profile.gyroIntegralGain = legacy.gyroIntegralGain;
-                profile.gyroMaxCorrection = legacyMaxCorrectionToPercent(legacy.gyroMaxCorrection);
-                profile.gyroIntegralLimit = legacy.gyroIntegralLimit;
-                profile.gyroHoldBoost = legacy.gyroHoldBoost;
-                profile.predictionStrength = legacy.gyroHuntDamping;
-                profile.radioSteeringTravel = legacy.radioSteeringTravel;
-                profile.gyroCounterSteerAssist = 0;
-                profile.gyroTransitionSpeed = 50;
+                setProfileValue(profile, OpenDriftParameters::Id::GYRO_GAIN, legacy.gain);
+                setProfileValue(profile, OpenDriftParameters::Id::DEADBAND, legacy.deadband);
+                setProfileValue(profile, OpenDriftParameters::Id::SMOOTHING, legacy.gyroSmoothing);
+                setProfileValue(profile, OpenDriftParameters::Id::DRIFT_MEMORY, legacy.gyroIntegralGain);
+                setProfileValue(profile, OpenDriftParameters::Id::MAX_CORRECTION, legacyMaxCorrectionToPercent(legacy.gyroMaxCorrection));
+                setProfileValue(profile, OpenDriftParameters::Id::MEMORY_LIMIT, legacy.gyroIntegralLimit);
+                setProfileValue(profile, OpenDriftParameters::Id::HOLD_ASSIST, legacy.gyroHoldBoost);
+                setProfileValue(profile, OpenDriftParameters::Id::PREDICTION, legacy.gyroHuntDamping);
+                setProfileValue(profile, OpenDriftParameters::Id::STEERING_TRAVEL, legacy.radioSteeringTravel);
+                setProfileValue(profile, OpenDriftParameters::Id::COUNTERSTEER, 0);
+                setProfileValue(profile, OpenDriftParameters::Id::TRANSITION_SPEED, 50);
                 loadedCount++;
             }
         }
@@ -2421,39 +2341,24 @@ void Settings::captureProfile(
     DrivingProfile& profile
 )
 {
-    profile.version = 11;
-    profile.gain = gain;
-    profile.deadband = deadband;
-    profile.gyroSmoothing = gyroSmoothing;
-    profile.gyroIntegralGain = gyroIntegralGain;
-    profile.gyroMaxCorrection = gyroMaxCorrection;
-    profile.gyroIntegralLimit = gyroIntegralLimit;
-    profile.gyroHoldBoost = gyroHoldBoost;
-    profile.predictionStrength = predictionStrength;
-    profile.radioSteeringTravel = radioSteeringTravel;
-    profile.gyroCounterSteerAssist = gyroCounterSteerAssist;
-    profile.gyroTransitionSpeed = gyroTransitionSpeed;
-    profile.gyroHuntStrength = gyroHuntStrength;
-    profile.driverPriority = driverPriority;
+    profile.version = 12;
+    parameterStore.captureProfile(
+        profile.values,
+        ParameterStore::VALUE_COUNT
+    );
 }
 
 void Settings::applyProfile(
     const DrivingProfile& profile
 )
 {
-    gain = constrain(profile.gain, 0.0f, 6.0f);
-    deadband = constrain(profile.deadband, 0.0f, 100.0f);
-    gyroSmoothing = constrain(profile.gyroSmoothing, 0.0f, 1.0f);
-    gyroIntegralGain = constrain(profile.gyroIntegralGain, 0.0f, 20.0f);
-    gyroMaxCorrection = constrain(profile.gyroMaxCorrection, 0, 100);
-    gyroIntegralLimit = constrain(profile.gyroIntegralLimit, 0, 500);
-    gyroHoldBoost = constrain(profile.gyroHoldBoost, 0, 100);
-    predictionStrength = constrain(profile.predictionStrength, 0, 100);
-    radioSteeringTravel = constrain(profile.radioSteeringTravel, 0, 100);
-    gyroCounterSteerAssist = constrain(profile.gyroCounterSteerAssist, 0, 100);
-    gyroTransitionSpeed = constrain(profile.gyroTransitionSpeed, 0, 100);
-    gyroHuntStrength = constrain(profile.gyroHuntStrength, 0, 100);
-    driverPriority = constrain(profile.driverPriority, 0, 50);
+    if(parameterStore.applyProfile(
+        profile.values,
+        ParameterStore::VALUE_COUNT
+    ))
+    {
+        dirty = true;
+    }
 }
 
 bool Settings::persistProfile(

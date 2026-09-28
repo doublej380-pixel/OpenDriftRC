@@ -3,49 +3,19 @@
 local DEVICE = 0xC8
 local RADIO = 0xEA
 
-local fields = {
-  { 1, "Saved Gain",       0,  600,   5, 2 },
-  {37, "Live Gain",        0,  600,   5, 2, false, false, false, false, false, false, false, false, true},
-  {33, "CH3 Gain Min",     0,  600,   5, 2 },
-  {34, "CH3 Gain Max",     0,  600,   5, 2 },
-  { 2, "Deadband",         0, 1000,   1, 1 },
-  { 3, "Max Corr %",       0,  100,   1, 0 },
-  { 4, "Smoothing",        0,  100,   1, 2 },
-  {32, "Gyro LPF",         0,    2,   1, 0, true, false, false, false, false, true},
-  { 5, "Drift Memory",     0, 2000,   1, 2 },
-  { 6, "Memory Limit",     0,  500,   5, 0 },
-  { 7, "Hold Assist",      0,  100,   1, 0 },
-  { 8, "Countersteer",     0,  100,   1, 0 },
-  { 9, "Transition Speed", 0,  100,   1, 0 },
-  {38, "Driver Priority",  0,   50,   1, 0 },
-  {10, "Prediction",       0,  100,   1, 0 },
-  {26, "Anti Wobble",      0,  100,   1, 0 },
-  {41, "Gyro Hyst.",       0,    4,   1, 0 },
-  {36, "Wobble Scale",     0,    1,   1, 0, true, false, false, false, false, false, false, true},
-  {11, "Servo Quiet",      0,   50,   1, 0 },
-  {12, "Steering Travel",  0,  100,   1, 0 },
-  {27, "Endpoints",        0,    2,   1, 0, true, false, false, true, false},
-  {28, "Capture Left",     0,    1,   1, 0, true, false, false, false, true},
-  {29, "Capture Center",   0,    1,   1, 0, true, false, false, false, true},
-  {30, "Capture Right",    0,    1,   1, 0, true, false, false, false, true},
-  {31, "Reset Cal",        0,    1,   1, 0, true, false, false, false, true},
-  {13, "Servo Travel",     1,  100,   1, 0 },
-  {14, "Servo Center",  1000, 2000,   1, 0 },
-  {15, "Servo Reverse",    0,    1,   1, 0, true},
-  {16, "Gyro Reverse",     0,    1,   1, 0, true},
-  {17, "GPIO 1 Output",    0,   16,   1, 0, true, true},
-  {18, "GPIO 2 Output",    0,   16,   1, 0, true, true},
-  {19, "GPIO 3 Output",    0,   16,   1, 0, true, true},
-  {20, "GPIO 4 Output",    0,   16,   1, 0, true, true},
-  {21, "GPIO 5 Output",    0,   16,   1, 0, true, true},
-  {22, "GPIO 6 Output",    0,   16,   1, 0, true, true},
-  {23, "GPIO 7 Output",    0,   16,   1, 0, true, true},
-  {24, "GPIO 8 Output",    0,   16,   1, 0, true, true},
-  {25, "Servo Rate*",      0,    1,   1, 0, true, false, true},
-  {39, "Throttle Rate*",   0,    2,   1, 0, true, false, false, false, false, false, false, false, false, true},
-  {35, "Display Rotate",   0,    3,   1, 0, true, false, false, false, false, false, true},
-  {40, "Archive Log",      0,    8,   1, 0, true, false, false, false, false, false, false, false, false, false, true}
-}
+-- Fields are discovered from the firmware's CRSF parameter catalog. Only
+-- action/read-only presentation remains ID-specific; normal parameters need
+-- no Lua edit when their catalog definition changes.
+local fields = {}
+
+local function newField(id)
+  local field = {id, "Parameter " .. tostring(id), 0, 0, 1, 0, false}
+  if id == 27 then field[10] = true end                 -- derived status
+  if id >= 28 and id <= 31 then field[11] = true end   -- calibration action
+  if id == 37 then field[15] = true end                -- derived live gain
+  if id == 40 then field[17] = true end                -- archive action/status
+  return field
+end
 
 local selected = 1
 local scroll = 1
@@ -115,8 +85,24 @@ local function consumeTelemetry()
     if command == nil then break end
 
     if command == 0x2B and #data >= 7 and data[1] == RADIO and data[2] == DEVICE then
-      local field = findField(data[3])
-      if field then
+      local parameterId = data[3]
+      if parameterId == 0 then
+        local index = 7
+        while index <= #data and data[index] ~= 0 do index = index + 1 end
+        index = index + 1
+        fields = {}
+        while index <= #data and data[index] ~= 0xFF do
+          fields[#fields + 1] = newField(data[index])
+          index = index + 1
+        end
+        selected = 1
+        scroll = 1
+        requestIndex = 1
+        connected = true
+        lastRx = getTime()
+      else
+        local field = findField(parameterId)
+        if field then
         local keepValue = editing and field == fields[selected]
         local dataType = data[6]
         local index = 7
@@ -138,7 +124,15 @@ local function consumeTelemetry()
             field[7] = false
           end
         elseif dataType == 0x09 then
-          while index <= #data and data[index] ~= 0 do index = index + 1 end
+          local choices = ""
+          while index <= #data and data[index] ~= 0 do
+            choices = choices .. string.char(data[index])
+            index = index + 1
+          end
+          field.choices = {}
+          for choice in string.gmatch(choices .. ";", "([^;]*);") do
+            field.choices[#field.choices + 1] = choice
+          end
           index = index + 1
           if index <= #data and not keepValue then field.value = data[index] end
           if index + 2 <= #data then
@@ -151,6 +145,7 @@ local function consumeTelemetry()
         end
         connected = true
         lastRx = getTime()
+        end
       end
     elseif command == 0x2D and #data >= 4 and data[1] == RADIO and data[2] == DEVICE then
       local field = findField(data[3])
@@ -170,6 +165,9 @@ end
 
 local function valueText(field)
   if field.value == nil then return "---" end
+  if field.choices then
+    return field.choices[field.value + 1] or "---"
+  end
   if field[17] then
     local states = {"PARK CAR", "PRESS", "SAVING", "SAVED", "NO LOG", "NO SPACE", "FAILED", "CANCELLED", "UNAVAILABLE"}
     return states[field.value + 1] or "---"
@@ -226,13 +224,16 @@ local function adjust(step)
 end
 
 local function init()
-  for i = 1, #fields do fields[i].value = nil end
+  fields = {}
+  selected = 1
+  scroll = 1
   requestIndex = 1
   nextRequest = 0
   nextGainRequest = 0
   nextCalibrationRequest = 0
   nextArchiveRequest = 0
   pushFailed = 0
+  requestField({0})
 end
 
 local function run(event)
@@ -241,6 +242,14 @@ local function run(event)
 
   local now = getTime()
   if now - lastRx > 200 then connected = false end
+
+  if #fields == 0 then
+    if now >= nextRequest and requestField({0}) then nextRequest = now + 50 end
+    lcd.clear()
+    lcd.drawText(1, 0, "OpenDrift CRSF", INVERS)
+    lcd.drawText(64, 25, "DISCOVERING...", CENTER)
+    return 0
+  end
 
   local right = event == EVT_ROT_RIGHT or event == EVT_VIRTUAL_NEXT
   local left = event == EVT_ROT_LEFT or event == EVT_VIRTUAL_PREV
@@ -314,7 +323,9 @@ local function run(event)
     elseif calibration and calibration.value == 1 then calibrationText = "END: PART"
     elseif calibration and calibration.value == 0 then calibrationText = "END: NO" end
     lcd.drawText(1, 10, calibrationText, 0)
-    lcd.drawText(127, 10, "CH3 GAIN", RIGHT)
+    local liveGain = findField(37)
+    local liveGainText = liveGain and valueText(liveGain) or "---"
+    lcd.drawText(127, 10, "GAIN " .. liveGainText, RIGHT)
   end
 
   for row = 0, 3 do

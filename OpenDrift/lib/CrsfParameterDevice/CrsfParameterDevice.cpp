@@ -339,36 +339,11 @@ int32_t CrsfParameterDevice::getScaledValue(
     uint8_t parameter
 )
 {
+    const OpenDriftParameters::Definition* definition =
+        OpenDriftParameters::find(parameter);
+
     switch(parameter)
     {
-        case 1: return lroundf(settings->getGain() * 100.0f);
-        case 2: return lroundf(settings->getDeadband() * 10.0f);
-        case 3: return settings->getGyroMaxCorrection();
-        case 4: return lroundf(settings->getGyroSmoothing() * 100.0f);
-        case 5: return lroundf(settings->getGyroIntegralGain() * 100.0f);
-        case 6: return settings->getGyroIntegralLimit();
-        case 7: return settings->getGyroHoldBoost();
-        case 8: return settings->getGyroCounterSteerAssist();
-        case 9: return settings->getGyroTransitionSpeed();
-        case 10: return settings->getPredictionStrength();
-        case 11: return settings->getServoQuiet();
-        case 12: return settings->getRadioSteeringTravel();
-        case 13: return settings->getServoTravel();
-        case 14: return settings->getServoCenter();
-        case 15: return settings->getServoReverse() ? 1 : 0;
-        case 16: return settings->getGyroReverse() ? 1 : 0;
-        #if defined(OPENDRIFT_BOARD_AMOLED_164)
-        case 17: return settings->getAuxChannelForGpio(1);
-        case 18: return settings->getAuxChannelForGpio(2);
-        case 19: return settings->getAuxChannelForGpio(3);
-        case 20: return settings->getAuxChannelForGpio(4);
-        case 21: return settings->getAuxChannelForGpio(5);
-        case 22: return settings->getAuxChannelForGpio(6);
-        case 23: return settings->getAuxChannelForGpio(7);
-        case 24: return settings->getAuxChannelForGpio(8);
-        #endif
-        case 25: return settings->getControlLoopHz() == 333 ? 1 : 0;
-        case 26: return settings->getGyroHuntStrength();
         case 27:
         {
             uint8_t mask =
@@ -383,34 +358,25 @@ int32_t CrsfParameterDevice::getScaledValue(
         case 30:
         case 31:
             return 0;
-        case 32: return settings->getGyroLpfMode();
-        case 33: return lroundf(settings->getChannel3GainMin() * 100.0f);
-        case 34: return lroundf(settings->getChannel3GainMax() * 100.0f);
         case 37:
             return lroundf(
                 (gyro != nullptr ? gyro->getGain() : settings->getGain())
                 * 100.0f
             );
-        case 38: return settings->getDriverPriority();
-        case 39:
-        {
-            uint16_t rate = settings->getThrottleOutputHz();
-            return rate == 333 ? 2 : (rate == 250 ? 1 : 0);
-        }
         case 40:
             return blackboxArchive != nullptr
                 ? (int32_t)blackboxArchive->getStatus()
                 : (int32_t)BlackboxArchive::UNAVAILABLE;
-        case 41: return settings->getGyroOutputHysteresis();
-        #if defined(OPENDRIFT_BOARD_MATRIX)
-        case 35: return settings->getDisplayRotation();
-        #elif defined(OPENDRIFT_BOARD_AMOLED_164)
+        #if defined(OPENDRIFT_BOARD_AMOLED_164) && !defined(OPENDRIFT_BOARD_MATRIX)
         case 35: return settings->getDisplayRotation() == 2 ? 1 : 0;
         #endif
-        #if defined(OPENDRIFT_BOARD_MATRIX) || defined(OPENDRIFT_BOARD_AMOLED_164)
-        case 36: return settings->getAntiWobbleScale();
-        #endif
-        default: return 0;
+        default:
+            return definition != nullptr
+                ? OpenDriftParameters::scaleValue(
+                    *definition,
+                    settings->getParameterValue(definition->id)
+                )
+                : 0;
     }
 }
 
@@ -434,22 +400,7 @@ void CrsfParameterDevice::setScaledValue(
 
     switch(parameter)
     {
-        case 1: settings->setGain(value / 100.0f); break;
-        case 2: settings->setDeadband(value / 10.0f); break;
-        case 3: settings->setGyroMaxCorrection(value); break;
-        case 4: settings->setGyroSmoothing(value / 100.0f); break;
-        case 5: settings->setGyroIntegralGain(value / 100.0f); break;
-        case 6: settings->setGyroIntegralLimit(value); break;
-        case 7: settings->setGyroHoldBoost(value); break;
-        case 8: settings->setGyroCounterSteerAssist(value); break;
-        case 9: settings->setGyroTransitionSpeed(value); break;
-        case 10: settings->setPredictionStrength(value); break;
-        case 11: settings->setServoQuiet(value); break;
-        case 12: settings->setRadioSteeringTravel(value); break;
-        case 13: settings->setServoTravel(value); break;
-        case 14: settings->setServoCenter(value); break;
         case 15: settings->setServoReverse(value != 0); break;
-        case 16: settings->setGyroReverse(value != 0); break;
         #if defined(OPENDRIFT_BOARD_AMOLED_164)
         case 17:
         case 18:
@@ -481,27 +432,10 @@ void CrsfParameterDevice::setScaledValue(
             break;
         }
         #endif
-        case 25:
-            settings->setControlLoopHz(value == 1 ? 333 : 250);
-            break;
-        case 39:
-            settings->setThrottleOutputHz(
-                value == 2 ? 333 : (value == 1 ? 250 : 50)
-            );
-            break;
         case 40:
             if(value == 1 && blackboxArchive != nullptr)
             {
                 blackboxArchive->requestSave();
-            }
-            break;
-        case 26:
-            settings->setGyroHuntStrength(value);
-            if(gyro != nullptr)
-            {
-                gyro->setHuntStrength(
-                    settings->getGyroHuntStrength()
-                );
             }
             break;
         case 27:
@@ -532,34 +466,11 @@ void CrsfParameterDevice::setScaledValue(
                 settings->clearSteeringCalibration();
             }
             break;
-        case 32:
-            settings->setGyroLpfMode(
-                constrain(value, 0, 2)
-            );
-            break;
         case 33:
             settings->setChannel3GainMin(value / 100.0f);
             break;
         case 34:
             settings->setChannel3GainMax(value / 100.0f);
-            break;
-        case 38:
-            settings->setDriverPriority(value);
-            if(gyro != nullptr)
-            {
-                gyro->setDriverPriority(
-                    settings->getDriverPriority()
-                );
-            }
-            break;
-        case 41:
-            settings->setGyroOutputHysteresis(value);
-            if(gyro != nullptr)
-            {
-                gyro->setOutputHysteresis(
-                    settings->getGyroOutputHysteresis()
-                );
-            }
             break;
         #if defined(OPENDRIFT_BOARD_MATRIX)
         case 35:
@@ -570,17 +481,15 @@ void CrsfParameterDevice::setScaledValue(
             settings->setDisplayRotation(value == 1 ? 2 : 0);
             break;
         #endif
-        #if defined(OPENDRIFT_BOARD_MATRIX) || defined(OPENDRIFT_BOARD_AMOLED_164)
-        case 36:
-            settings->setAntiWobbleScale(value);
-            if(gyro != nullptr)
+        default:
+            if(definition != nullptr)
             {
-                gyro->setAntiWobbleScale(
-                    settings->getAntiWobbleScale()
+                settings->setParameterValue(
+                    definition->id,
+                    OpenDriftParameters::unscaleValue(*definition, value)
                 );
             }
             break;
-        #endif
     }
 }
 

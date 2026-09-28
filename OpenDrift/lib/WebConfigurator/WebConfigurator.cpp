@@ -278,9 +278,7 @@ void WebConfigurator::handleRoot()
     html += String(throttleRadio->getPulseWidth());
     html += throttleRadio->hasSignal() ? F(" OK") : F(" NO SIGNAL");
     #if defined(OPENDRIFT_INPUT_CRSF)
-    #if defined(OPENDRIFT_CRSF_OOPS_SWAPPED_PINS)
-    html += F("</div><div class='pill'>CRSF OOPS: receiver TX to GPIO 17 / RX to GPIO 18");
-    #elif defined(OPENDRIFT_CRSF_V2_THROTTLE_GPIO8)
+    #if defined(OPENDRIFT_CRSF_V2_THROTTLE_GPIO8)
     html += F("</div><div class='pill'>CRSF: GPIO 1 RX / 2 TX &middot; ESC: GPIO 8");
     #elif defined(OPENDRIFT_BOARD_MATRIX)
     html += F("</div><div class='pill'>CRSF: GPIO 3 RX / 4 TX");
@@ -327,19 +325,19 @@ void WebConfigurator::handleRoot()
         html += F("'><div><strong>");
         html += profile->name;
         html += F("</strong><small>Gain ");
-        html += String(profile->gain, 2);
+        html += String(settings->getProfileValue(*profile, OpenDriftParameters::Id::GYRO_GAIN), 2);
         html += F(" &middot; Prediction ");
-        html += String(profile->predictionStrength);
+        html += String((int)settings->getProfileValue(*profile, OpenDriftParameters::Id::PREDICTION));
         html += F(" &middot; Hold ");
-        html += String(profile->gyroHoldBoost);
+        html += String((int)settings->getProfileValue(*profile, OpenDriftParameters::Id::HOLD_ASSIST));
         html += F(" &middot; Countersteer ");
-        html += String(profile->gyroCounterSteerAssist);
+        html += String((int)settings->getProfileValue(*profile, OpenDriftParameters::Id::COUNTERSTEER));
         html += F(" &middot; Transition speed ");
-        html += String(profile->gyroTransitionSpeed);
+        html += String((int)settings->getProfileValue(*profile, OpenDriftParameters::Id::TRANSITION_SPEED));
         html += F(" &middot; Driver priority ");
-        html += String(profile->driverPriority);
+        html += String((int)settings->getProfileValue(*profile, OpenDriftParameters::Id::DRIVER_PRIORITY));
         html += F(" &middot; Anti Wobble ");
-        html += String(profile->gyroHuntStrength);
+        html += String((int)settings->getProfileValue(*profile, OpenDriftParameters::Id::ANTI_WOBBLE));
         html += F("</small></div>");
 
         html += F("<form method='post' action='/activate-profile'><input type='hidden' name='profile' value='");
@@ -388,13 +386,12 @@ void WebConfigurator::handleRoot()
     html += F(">Off - raw bandwidth</option></select>");
     html += parameterInput(OpenDriftParameters::Id::PREDICTION, "predictionStrength", String(settings->getPredictionStrength()));
     html += parameterInput(OpenDriftParameters::Id::ANTI_WOBBLE, "huntStrength", String(settings->getGyroHuntStrength()));
-    html += parameterInput(OpenDriftParameters::Id::GYRO_HYSTERESIS, "gyroOutputHysteresis", String(settings->getGyroOutputHysteresis()));
     html += F("<label>Anti Wobble scale</label><select name='antiWobbleScale'><option value='0'");
     if(settings->getAntiWobbleScale() == 0) html += F(" selected");
     html += F(">1/10 scale</option><option value='1'");
     if(settings->getAntiWobbleScale() == 1) html += F(" selected");
     html += F(">Micro (1/24-1/28)</option></select>");
-    html += F("<p class='sub'>Anti Wobble controls the depth of OpenDrift's narrow, phase-aware wheel-wobble notch. Use 1/10 for the proven 2.5-3.6 Hz steering mode, or Micro for faster 5-15 Hz steering systems. Gyro output hysteresis is an experimental diagnostic that holds only tiny gyro-correction changes; it never reduces driver steering resolution. Leave it at zero for the unchanged 1.0.9 response.</p>");
+    html += F("<p class='sub'>Anti Wobble controls the depth of OpenDrift's narrow, phase-aware wheel-wobble notch. Use 1/10 for the proven 2.5-3.6 Hz steering mode, or Micro for faster 5-15 Hz steering systems.</p>");
     html += F("</div></div>");
 
     html += F("<div class='card'><h2>Transition &amp; Driver Priority</h2><p class='sub'>Transition Speed controls how quickly gyro correction reverses during a direction change. Driver Priority progressively reduces only fast direct gyro gain as you hold more steering, giving the driver more authority near full lock. Start at 0 and test 10-20; steady Countersteer Assist, Drift Memory, and Max Correction remain unchanged.</p><div class='row'>");
@@ -485,9 +482,7 @@ void WebConfigurator::handleRoot()
 
     html += F("<div class='card'><h2>Gain Channel Calibration</h2><div class='row'>");
     #if defined(OPENDRIFT_INPUT_CRSF)
-    #if defined(OPENDRIFT_CRSF_OOPS_SWAPPED_PINS)
-    html += F("Personal swapped-pin build: CRSF channel 3 controls gyro gain. GPIO 16 drives the steering servo. GPIO 15 actively outputs neutral throttle during failsafe and passes throttle only after a valid neutral hold. Receiver TX feeds GPIO 17; receiver RX connects to GPIO 18.");
-    #elif defined(OPENDRIFT_CRSF_V2_THROTTLE_GPIO8)
+    #if defined(OPENDRIFT_CRSF_V2_THROTTLE_GPIO8)
     html += F("Personal V2 GPIO8 recovery build: CRSF channel 3 controls gyro gain. GPIO 15 drives the steering servo. GPIO 8 actively outputs neutral throttle during failsafe and passes throttle only after a valid neutral hold. Receiver TX feeds GPIO 1; receiver RX connects to GPIO 2. GPIO 8 is reserved and unavailable as an auxiliary output.");
     #elif defined(OPENDRIFT_BOARD_MATRIX)
     html += F("CRSF channel 3 controls gyro gain. GPIO 1 drives the steering servo. GPIO 2 actively outputs neutral throttle during failsafe and passes throttle only after a valid neutral hold. Receiver TX feeds GPIO 3; receiver RX connects to GPIO 4.");
@@ -863,13 +858,6 @@ void WebConfigurator::handleSave()
         getIntArg(
             "huntStrength",
             settings->getGyroHuntStrength()
-        )
-    );
-
-    settings->setGyroOutputHysteresis(
-        getIntArg(
-            "gyroOutputHysteresis",
-            settings->getGyroOutputHysteresis()
         )
     );
 

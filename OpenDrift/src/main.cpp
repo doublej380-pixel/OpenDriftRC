@@ -134,12 +134,7 @@ TaskHandle_t crsfTaskHandle = nullptr;
 #endif
 
 #if defined(OPENDRIFT_INPUT_CRSF)
-#if defined(OPENDRIFT_CRSF_OOPS_SWAPPED_PINS)
-#define SERVO_OUTPUT_PIN 16
-#define CRSF_RX_PIN 17
-#define CRSF_TX_PIN 18
-#define CRSF_THROTTLE_OUTPUT_PIN 15
-#elif defined(OPENDRIFT_BOARD_MATRIX)
+#if defined(OPENDRIFT_BOARD_MATRIX)
 #define SERVO_OUTPUT_PIN 1
 #define CRSF_RX_PIN 3
 #define CRSF_TX_PIN 4
@@ -384,9 +379,7 @@ public:
         canvas.setTextSize(2);
         canvas.drawString(
             #if defined(OPENDRIFT_INPUT_CRSF)
-            #if defined(OPENDRIFT_CRSF_OOPS_SWAPPED_PINS)
-            "OpenDrift PERSONAL OOPS boot",
-            #elif defined(OPENDRIFT_CRSF_V2_THROTTLE_GPIO8)
+            #if defined(OPENDRIFT_CRSF_V2_THROTTLE_GPIO8)
             "OpenDrift GPIO8 OOPS boot",
             #else
             "OpenDrift CRSF verbose boot",
@@ -402,9 +395,7 @@ public:
         canvas.setTextColor(0x7BEF);
         canvas.drawString(
             #if defined(OPENDRIFT_INPUT_CRSF)
-            #if defined(OPENDRIFT_CRSF_OOPS_SWAPPED_PINS)
-            "WARNING swapped pins: 15E 16S 17T 18R",
-            #elif defined(OPENDRIFT_CRSF_V2_THROTTLE_GPIO8)
+            #if defined(OPENDRIFT_CRSF_V2_THROTTLE_GPIO8)
             "WARNING V2 throttle rerouted to GPIO8",
             #else
             "control kernel 1.0.9 crsf ttyOD0",
@@ -922,6 +913,30 @@ void runControlIteration()
     }
     #endif
 
+    static Settings::ControllerSnapshot controllerSettings = {};
+    static uint32_t controllerSettingsGeneration = UINT32_MAX;
+
+    bool controllerSettingsChanged = settings.getControllerSnapshot(
+        controllerSettingsGeneration,
+        controllerSettings
+    );
+
+    if(controllerSettingsChanged)
+    {
+        gyro.setDeadband(controllerSettings.deadband);
+        gyro.setSmoothing(controllerSettings.smoothing);
+        gyro.setMaxCorrection(controllerSettings.maxCorrection * 10);
+        gyro.setIntegralGain(controllerSettings.driftMemory);
+        gyro.setIntegralLimit(controllerSettings.memoryLimit);
+        gyro.setHoldBoost(controllerSettings.holdAssist);
+        gyro.setCounterSteerAssist(controllerSettings.countersteer);
+        gyro.setTransitionSpeed(controllerSettings.transitionSpeed);
+        gyro.setPredictionStrength(controllerSettings.prediction);
+        gyro.setDriverPriority(controllerSettings.driverPriority);
+        gyro.setHuntStrength(controllerSettings.antiWobble);
+        gyro.setAntiWobbleScale(controllerSettings.antiWobbleScale);
+    }
+
     if(
         !pin18ThrottleOutputMode &&
         gainRadio.hasSignal()
@@ -936,62 +951,8 @@ void runControlIteration()
     }
     else
     {
-        gyro.setGain(
-            settings.getGain()
-        );
+        gyro.setGain(controllerSettings.gain);
     }
-
-    gyro.setDeadband(
-        settings.getDeadband()
-    );
-
-    gyro.setSmoothing(
-        settings.getGyroSmoothing()
-    );
-
-    gyro.setMaxCorrection(
-        settings.getGyroMaxCorrection() * 10
-    );
-
-    gyro.setIntegralGain(
-        settings.getGyroIntegralGain()
-    );
-
-    gyro.setIntegralLimit(
-        settings.getGyroIntegralLimit()
-    );
-
-    gyro.setHoldBoost(
-        settings.getGyroHoldBoost()
-    );
-
-    gyro.setCounterSteerAssist(
-        settings.getGyroCounterSteerAssist()
-    );
-
-    gyro.setTransitionSpeed(
-        settings.getGyroTransitionSpeed()
-    );
-
-    gyro.setPredictionStrength(
-        settings.getPredictionStrength()
-    );
-
-    gyro.setDriverPriority(
-        settings.getDriverPriority()
-    );
-
-    gyro.setOutputHysteresis(
-        settings.getGyroOutputHysteresis()
-    );
-
-    gyro.setHuntStrength(
-        settings.getGyroHuntStrength()
-    );
-
-    gyro.setAntiWobbleScale(
-        settings.getAntiWobbleScale()
-    );
 
     static uint8_t i2cMisses = 0;
     static float lastYaw = 0.0f;
@@ -1007,9 +968,10 @@ void runControlIteration()
     {
         i2cMisses = 0;
 
-        imu.setGyroLpfMode(
-            settings.getGyroLpfMode()
-        );
+        if(controllerSettingsChanged)
+        {
+            imu.setGyroLpfMode(controllerSettings.gyroLpfMode);
+        }
 
         imu.update();
 
@@ -1098,10 +1060,9 @@ void runControlIteration()
         yaw = lastYaw;
     }
 
-    static bool lastGyroReverse =
-        settings.getGyroReverse();
+    static bool lastGyroReverse = controllerSettings.gyroReverse;
 
-    bool gyroReverse = settings.getGyroReverse();
+    bool gyroReverse = controllerSettings.gyroReverse;
 
     if(gyroReverse != lastGyroReverse)
     {
@@ -1128,8 +1089,7 @@ void runControlIteration()
         (int)roundf(gyroCorrection);
     int appliedGyroCorrection = 0;
     bool correctionSaturated =
-        requestedGyroCorrection !=
-        (int)roundf(gyro.getPreHysteresisCorrection());
+        requestedGyroCorrection != limitedGyroCorrection;
 
     float servoCommand =
         steeringServo.getPosition();
@@ -1716,9 +1676,7 @@ void setup()
 
     bootConsole.log(
         #if defined(OPENDRIFT_INPUT_CRSF)
-        #if defined(OPENDRIFT_CRSF_OOPS_SWAPPED_PINS)
-        "ledc: steering servo output attached on gpio16"
-        #elif defined(OPENDRIFT_BOARD_MATRIX)
+        #if defined(OPENDRIFT_BOARD_MATRIX)
         "ledc: steering servo output attached on gpio1"
         #elif defined(OPENDRIFT_AMOLED_V2)
         "ledc: steering servo output attached on gpio15"
@@ -1943,10 +1901,6 @@ void setup()
 
     gyro.setDriverPriority(
         settings.getDriverPriority()
-    );
-
-    gyro.setOutputHysteresis(
-        settings.getGyroOutputHysteresis()
     );
 
     gyro.setHuntStrength(
@@ -2554,10 +2508,7 @@ void loop()
             gyro.getHuntLatch(),
             settings.getGyroHuntStrength(),
             gyro.getHuntResidualEnvelope(),
-            gyro.getHuntNotchCenter(),
-            settings.getGyroOutputHysteresis(),
-            gyro.getPreHysteresisCorrection(),
-            gyro.getPostHysteresisCorrection()
+            gyro.getHuntNotchCenter()
         );
     }
 

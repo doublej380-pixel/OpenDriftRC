@@ -1,5 +1,6 @@
 #pragma once
 
+#include <stddef.h>
 #include <stdint.h>
 
 
@@ -48,7 +49,9 @@ namespace OpenDriftParameters
         DRIVER_PRIORITY = 38,
         THROTTLE_RATE = 39,
         ARCHIVE_LOG = 40,
-        GYRO_HYSTERESIS = 41
+        // Published CRSF IDs are permanent. ID 41 belonged to the retired
+        // gyro-output hysteresis experiment and must never be reused.
+        RETIRED_GYRO_HYSTERESIS = 41
     };
 
     enum class Type : uint8_t
@@ -66,7 +69,8 @@ namespace OpenDriftParameters
         READ_ONLY = 1 << 1,
         AMOLED_ONLY = 1 << 2,
         DISPLAY_BOARD_ONLY = 1 << 3,
-        GPIO_OUTPUT = 1 << 4
+        GPIO_OUTPUT = 1 << 4,
+        PROFILE = 1 << 5
     };
 
     struct Definition
@@ -91,6 +95,8 @@ namespace OpenDriftParameters
 
     const Definition* find(Id id);
     const Definition* find(uint8_t id);
+    const Definition* definitions();
+    size_t definitionCount();
     const char* key(Id id);
     bool isAvailable(const Definition& definition);
     bool isWritable(const Definition& definition);
@@ -98,6 +104,8 @@ namespace OpenDriftParameters
     int32_t scaledMaximum(const Definition& definition);
     int32_t scaledDefault(const Definition& definition);
     int32_t scaledStep(const Definition& definition);
+    int32_t scaleValue(const Definition& definition, float value);
+    float unscaleValue(const Definition& definition, int32_t value);
     float clamp(Id id, float value);
     int clamp(Id id, int value);
 
@@ -122,6 +130,5 @@ namespace OpenDriftParameters
         static constexpr float CHANNEL_3_GAIN_MIN = 0.5f;
         static constexpr float CHANNEL_3_GAIN_MAX = 3.0f;
         static constexpr int DRIVER_PRIORITY = 0;
-        static constexpr int GYRO_HYSTERESIS = 0;
     }
 }

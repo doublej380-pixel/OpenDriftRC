@@ -78,10 +78,7 @@ public:
         float huntLatch,
         int huntStrength,
         float huntResidualEnvelope,
-        float huntNotchCenter,
-        int gyroOutputHysteresis,
-        float preHysteresisCorrection,
-        float postHysteresisCorrection
+        float huntNotchCenter
     );
 
     void clear();
@@ -196,9 +193,6 @@ private:
         int32_t huntStrength;
         float huntResidualEnvelope;
         float huntNotchCenter;
-        int32_t gyroOutputHysteresis;
-        float preHysteresisCorrection;
-        float postHysteresisCorrection;
     };
 
     static const size_t preferredBufferBytes =

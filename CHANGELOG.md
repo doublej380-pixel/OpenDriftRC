@@ -20,9 +20,8 @@
 - Adds selectable **1/10** and **Micro** Anti Wobble frequency ranges. The
   original 2.5-3.6 Hz mode remains the 1/10 default; Micro targets faster
   5-15 Hz steering oscillations found in 1/24-1/28 chassis.
-- Adds an experimental gyro-only output hysteresis diagnostic from `0-4 us`.
-  A value of `0` is a true bypass and preserves the normal full-resolution
-  control path.
+- Removes the temporary gyro-output hysteresis experiment after the transition
+  zero-crossing fix restored Anti Wobble at full output resolution.
 - Changes fresh-install defaults for **Max Correction** and **Countersteer
   Assist** to `100`. Existing saved tunes and profiles are not overwritten.
 
@@ -76,7 +75,7 @@
 - Keeps WiFi timeout behavior tied to the most recent usable client and avoids
   disruptive recovery work while the control path is active.
 - Adds current controls and help for Driver Priority, transition timing,
-  Anti Wobble scale, gyro hysteresis, throttle rate, display orientation,
+  Anti Wobble scale, throttle rate, display orientation,
   brightness, dim timeout, log archiving, and factory reset.
 
 ### AMOLED themes and backgrounds
@@ -96,7 +95,7 @@
 ### CRSF, EdgeTX, and GPIO
 
 - Exposes Driver Priority, Micro/1/10 Anti Wobble mode, throttle output rate,
-  display rotation, gyro hysteresis, and parked log archiving through the
+  display rotation, and parked log archiving through the
   current EdgeTX Lua tool.
 - Preserves permanent published CRSF parameter IDs and serves names, limits,
   precision, steps, choices, and live values from the firmware catalog.
@@ -125,8 +124,21 @@
 - Refactors Settings, GyroController validation, CRSF metadata, and web numeric
   inputs to consume the shared catalog instead of duplicating hard-coded
   constraints across the project.
+- Adds a catalog-indexed `ParameterStore` as the single live and persisted
+  value source, with versioned migration from every existing tune.
+- Converts driving profiles to a catalog-driven v12 format. Parameters marked
+  `PROFILE` are now captured, restored, and clamped automatically; profiles
+  from v1 through v11 migrate in place.
+- Makes ordinary CRSF reads and writes generic. Explicit handlers remain only
+  for actions, derived status, coupled values, and hardware safety rules.
+- Makes the EdgeTX tool discover the firmware's available parameters, names,
+  ranges, steps, precision, and choices over CRSF instead of maintaining a
+  second hard-coded list of ordinary settings.
+- Adds an atomic parameter-generation snapshot for the real-time controller.
+  The 250/333 Hz task applies a coherent tune only when values change instead
+  of repeatedly reading and reapplying every setting on every control tick.
 - Separates meaningful controller stages such as effective direct gain,
-  steady-drift assist, transition timing, and gyro-only hysteresis into named
+  steady-drift assist, and transition timing into named
   functions while keeping stateful signal history inside GyroController.
 - Adds `docs/DEVELOPING_PARAMETERS.md` with the required workflow and CRSF-ID
   compatibility rules for contributors adding or retiring parameters.

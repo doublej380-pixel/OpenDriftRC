@@ -15,30 +15,52 @@ The catalog is the authority for:
 - CRSF metadata advertised to EdgeTX/GroundTX;
 - numeric limits rendered by the web configurator.
 
+`ParameterStore` is the live-value authority. It keeps one value indexed by
+each permanent parameter ID, performs catalog clamping, tracks a generation
+counter, and persists the complete set as one versioned Preferences blob.
+`Settings` retains typed accessors for hardware semantics and compatibility,
+but ordinary accessors are now thin views over the store.
+
 ## Adding a normal setting
 
 1. Assign a new explicit value in `OpenDriftParameters::Id`. Never renumber or
    reuse a published ID. Leave a tombstone if a setting is retired.
 2. Add its `Definition` to `ParameterCatalog.cpp`.
-3. Add the stored value and typed getter/setter to `Settings`. Clamp at the
-   setter with `OpenDriftParameters::clamp()`.
-4. Bind the value in `CrsfParameterDevice::getScaledValue()` and
-   `setScaledValue()`.
-5. Apply it to its owning subsystem from the existing settings refresh path.
+3. Add `PROFILE` to its flags if driving profiles should capture and restore
+   it. Profile persistence, application, and validation are automatic.
+4. Add a typed `Settings` accessor only when application code benefits from a
+   readable name or the value requires hardware-specific translation.
+   Ordinary CRSF reads/writes and Preferences persistence are automatic.
+5. Add it to `Settings::ControllerSnapshot` when it affects the real-time
+   control loop. The controller task copies the coherent snapshot only after
+   the store generation changes; it must not read the generic store per tick.
 6. Add it to the display/web layout where appropriate. Use
    `WebConfigurator::parameterInput()` for numeric web fields.
-7. Add its ID and any special presentation flags to the EdgeTX tool. The tool
-   obtains the name, limits, precision, and increment from CRSF at runtime.
+7. No EdgeTX edit is required for an ordinary value. The tool discovers
+   available parameters, names, limits, precision, increments, and choices
+   from CRSF. Only a new action or derived status may need special behavior.
 8. Add blackbox columns only when the value or its intermediate output is
    useful for diagnosing vehicle behavior.
 
 Actions and calculated status values still need explicit bindings because
-they do not map to an ordinary stored value.
+they do not map to an ordinary stored value. Hardware rules such as protected
+GPIO pins, AMOLED rotation mapping, endpoint reversal, and coupled gain limits
+also remain explicit in `Settings` or `CrsfParameterDevice`.
+
+## Storage and migration
+
+The first boot after this refactor imports all existing per-key values without
+changing the tune, then writes the versioned `paramStore` blob. Driving profile
+v12 stores catalog-indexed values and automatically includes every definition
+carrying `PROFILE`. Profiles from v1 through v11 are migrated on load.
+
+Published IDs are array indices and over-the-air compatibility identifiers.
+They must never be renumbered or reused, even after a parameter is retired.
 
 ## Validation and safety limits
 
-Configuration values are validated at Settings/subsystem boundaries using
-the catalog. Final servo endpoints, normalized output clamps, failsafe
+Configuration values are validated by `ParameterStore` using the catalog.
+Final servo endpoints, normalized output clamps, failsafe
 neutral, sensor validity checks, and other physical safety limits remain
 local to the hardware/control code. They are safety invariants rather than
 user parameter ranges and must not be removed during catalog cleanup.
@@ -49,4 +71,4 @@ Extract functions around meaningful signal-processing stages, not around
 every individual variable. The top-level update should show the controller
 pipeline while stateful stages retain their history in `GyroController`.
 Examples already separated include effective direct gain, steady drift
-assist, and gyro-only output hysteresis.
+assist, and transition timing.

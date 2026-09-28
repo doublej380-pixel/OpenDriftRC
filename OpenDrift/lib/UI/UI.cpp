@@ -2379,9 +2379,7 @@ void UI::drawSystemPage(
         240,
         38,
         #if defined(OPENDRIFT_INPUT_CRSF)
-        #if defined(OPENDRIFT_CRSF_OOPS_SWAPPED_PINS)
-        "RC TX17 / RX18",
-        #elif defined(OPENDRIFT_CRSF_V2_THROTTLE_GPIO8)
+        #if defined(OPENDRIFT_CRSF_V2_THROTTLE_GPIO8)
         "RX1 TX2 / ESC8",
         #elif defined(OPENDRIFT_AMOLED_V2)
         "RX1 / TX2",
@@ -2472,9 +2470,7 @@ void UI::drawSystemPage(
     lcd->setTextColor(TFT_WHITE);
     lcd->drawCenterString(
         #if defined(OPENDRIFT_INPUT_CRSF)
-        #if defined(OPENDRIFT_CRSF_OOPS_SWAPPED_PINS)
-        "RC TX17 / RX18",
-        #elif defined(OPENDRIFT_CRSF_V2_THROTTLE_GPIO8)
+        #if defined(OPENDRIFT_CRSF_V2_THROTTLE_GPIO8)
         "1RX 2TX / ESC8",
         #elif defined(OPENDRIFT_AMOLED_V2)
         "1 RX / 2 TX",
@@ -2970,9 +2966,9 @@ void UI::drawProfilesPage(
             lcd->setTextColor(OD_MUTED);
 
             String summary =
-                "G " + String(profile->gain, 2) +
-                "   PRED " + String(profile->predictionStrength) +
-                "   HOLD " + String(profile->gyroHoldBoost);
+                "G " + String(settings.getProfileValue(*profile, OpenDriftParameters::Id::GYRO_GAIN), 2) +
+                "   PRED " + String((int)settings.getProfileValue(*profile, OpenDriftParameters::Id::PREDICTION)) +
+                "   HOLD " + String((int)settings.getProfileValue(*profile, OpenDriftParameters::Id::HOLD_ASSIST));
 
             lcd->drawRightString(
                 summary.c_str(),
@@ -3070,8 +3066,8 @@ void UI::drawProfilesPage(
             lcd->setTextColor(0xBDF7);
 
             String summary =
-                "G" + String(profile->gain, 2) +
-                " P" + String(profile->predictionStrength);
+                "G" + String(settings.getProfileValue(*profile, OpenDriftParameters::Id::GYRO_GAIN), 2) +
+                " P" + String((int)settings.getProfileValue(*profile, OpenDriftParameters::Id::PREDICTION));
 
             lcd->drawRightString(
                 summary.c_str(),

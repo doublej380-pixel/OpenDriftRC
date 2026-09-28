@@ -2,24 +2,26 @@
 
 ## Primary board
 
-The final supported target is the Waveshare ESP32-S3 Touch AMOLED 1.64. The older Waveshare 1.28-inch round display is deprecated and frozen; its existing source remains available for experimentation but receives no new releases or feature-parity work.
+The final supported target is the Waveshare ESP32-S3 Touch AMOLED 1.64. The
+older Waveshare 1.28-inch round-display targets have been removed from the
+current source tree; their final firmware remains available in historical
+releases.
 
 The AMOLED board has incompatible V1 and V2 revisions. V1 is marked at the top of the PCB and uses LCD_CS GPIO 9. V2 is marked beside the right-side headers and uses LCD_CS GPIO 46. V2 also connects IMU_INT2 to GPIO 17 and TP_INT to GPIO 18, so OpenDrift does not use GPIO 17/18 for external signals on V2.
 
 ## QMI8658 IMU
 
-Both boards use the QMI8658 six-axis IMU. OpenDrift uses body Z as yaw and records body X/Y gyro plus all three accelerometer axes for terrain and load-transfer analysis.
+The AMOLED board uses the QMI8658 six-axis IMU. OpenDrift uses body Z as yaw and records body X/Y gyro plus all three accelerometer axes for terrain and load-transfer analysis.
 
 | Board | SDA | SCL |
 | --- | ---: | ---: |
 | AMOLED 1.64 | GPIO 47 | GPIO 48 |
-| Round 1.28 | GPIO 6 | GPIO 7 |
 
 The current board orientation reports clockwise rotation as positive Z and counter-clockwise rotation as negative Z. Always verify correction direction by rotating the complete car before driving.
 
 ## PWM receiver and servo routing
 
-AMOLED V1 and the Round build use the same PWM pinout:
+AMOLED V1 uses this PWM pinout:
 
 | Signal | GPIO | Direction |
 | --- | ---: | --- |
@@ -37,7 +39,7 @@ AMOLED V2 PWM uses GPIO 15 steering input, GPIO 16 throttle input, GPIO 1 steeri
 
 ## CRSF routing
 
-AMOLED V1 and Round CRSF share this routing:
+AMOLED V1 CRSF uses this routing:
 
 | Signal | GPIO | Direction |
 | --- | ---: | --- |
@@ -46,9 +48,9 @@ AMOLED V1 and Round CRSF share this routing:
 | Steering servo / servo port | 15 | Output at selectable 250/333 Hz |
 | ESC throttle / throttle port | 16 | Output at 50 Hz |
 
-Both `waveshare_128_crsf` and `waveshare_amoled_164_crsf` enable the complete
-full-duplex path. They remain separate from the normal PWM environments because
-the GPIO routing and settings namespace differ.
+`waveshare_amoled_164_crsf` enables the complete full-duplex path. It remains
+separate from the PWM environment because the GPIO routing and settings
+namespace differ.
 
 AMOLED V2 CRSF uses GPIO 1 RX, GPIO 2 TX, GPIO 15 steering-servo output, and GPIO 16 ESC output. Its targets are `waveshare_amoled_164_v2` and `waveshare_amoled_164_v2_crsf`.
 
