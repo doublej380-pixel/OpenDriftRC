@@ -1,5 +1,150 @@
 # Changelog
 
+## v1.0.9 - 2026-09-27
+
+### Control response and driver authority
+
+- Adds **Driver Priority**, which progressively yields only the fast direct
+  gyro path as the driver moves farther from center. Countersteer Assist,
+  Drift Memory, Max Correction, and the calibrated physical endpoints retain
+  their authority. The default of `0` preserves the established response.
+- Reworks **Transition Speed** into gain-independent correction-reversal
+  timing. Lower values produce a calmer reversal, higher values produce a
+  sharper reversal, and Gyro Gain no longer masks the adjustment as strongly.
+- Smooths gyro correction as yaw settles back toward center, removing the hard
+  final snap without slowing active drift correction or driver input.
+- Adds selectable **1/10** and **Micro** Anti Wobble frequency ranges. The
+  original 2.5-3.6 Hz mode remains the 1/10 default; Micro targets faster
+  5-15 Hz steering oscillations found in 1/24-1/28 chassis.
+- Adds an experimental gyro-only output hysteresis diagnostic from `0-4 us`.
+  A value of `0` is a true bypass and preserves the normal full-resolution
+  control path.
+- Changes fresh-install defaults for **Max Correction** and **Countersteer
+  Assist** to `100`. Existing saved tunes and profiles are not overwritten.
+
+### Precision outputs and failsafe safety
+
+- Replaces integer-stepped steering output with a high-resolution fractional
+  PWM path, eliminating visible command quantization while retaining 250 Hz
+  and 333 Hz servo modes.
+- Gives regenerated throttle output its own high-resolution LEDC driver and
+  selectable 50 Hz, 250 Hz, or 333 Hz output rate. Steering and throttle use
+  independent timers so changing one rate cannot corrupt the other signal.
+- Separates requested steering position from the actual pulse driver state so
+  endpoint capture and telemetry remain correct with fractional output.
+- Hardens startup, signal-loss, and IMU-invalid behavior: servo and ESC outputs
+  arm at neutral, CRSF freshness is checked before control is enabled, and
+  invalid sensor samples cannot be forwarded into steering commands.
+- Improves QMI8658 read-health tracking and LPF reconfiguration recovery,
+  including settling periods and bounded retries after sensor faults.
+
+### Calibration and settings reliability
+
+- Makes steering endpoint capture atomic and immediately persistent, preventing
+  partially updated calibration data or a delayed settings save from making
+  captured endpoints appear to disappear after driving or power cycling.
+- Adds validation and recovery for stored endpoint ordering and calibration
+  state while preserving valid existing physical limits.
+- Adds a web-configurator factory reset that clears the tune, profiles,
+  endpoint calibration, GPIO mappings, and board settings deliberately.
+- Makes settings and profile range validation use the shared parameter catalog
+  at every subsystem boundary.
+
+### Blackbox archive workflow
+
+- Adds a parked-only **Save Log** command to CRSF/EdgeTX and the web
+  configurator. Driving data remains in PSRAM while the car is moving and is
+  copied to internal flash only after the car is safely parked.
+- Writes the archive incrementally with a temporary file, checksum, free-space
+  check, backup/recovery path, progress reporting, and cancellation if the car
+  moves before the save completes.
+- Allows a saved binary archive to be downloaded later as CSV, making logs
+  recoverable after WiFi trouble without introducing flash stalls into the
+  control loop.
+
+### WiFi and web configurator
+
+- Reworks access-point client tracking to distinguish WiFi association from a
+  completed DHCP lease, which prevents a half-connected client from being
+  reported as ready.
+- Adds bounded DHCP/AP recovery when a client remains stuck obtaining an IP,
+  plus `opendrift.local` mDNS access and a configurable access-point name.
+- Keeps WiFi timeout behavior tied to the most recent usable client and avoids
+  disruptive recovery work while the control path is active.
+- Adds current controls and help for Driver Priority, transition timing,
+  Anti Wobble scale, gyro hysteresis, throttle rate, display orientation,
+  brightness, dim timeout, log archiving, and factory reset.
+
+### AMOLED themes and backgrounds
+
+- Adds a persistent AMOLED theme engine with light or dark text, seven accent
+  palettes, and translucent panels designed for arbitrary backgrounds.
+- Supports up to 16 persistent custom backgrounds in FFat while keeping the
+  compiled galaxy image as an immutable recovery fallback.
+- Adds background upload, selection, deletion, validation, and interrupted-file
+  recovery to the onboard web configurator, plus a dedicated selection page on
+  the AMOLED display.
+- Supports browser-converted 456 x 280 RGB565 assets from the OpenDrift website;
+  images are written only while the vehicle is stationary.
+- Adds AMOLED 180-degree orientation, brightness, and idle-dim controls. Matrix
+  builds support all four 90-degree status orientations.
+
+### CRSF, EdgeTX, and GPIO
+
+- Exposes Driver Priority, Micro/1/10 Anti Wobble mode, throttle output rate,
+  display rotation, gyro hysteresis, and parked log archiving through the
+  current EdgeTX Lua tool.
+- Preserves permanent published CRSF parameter IDs and serves names, limits,
+  precision, steps, choices, and live values from the firmware catalog.
+- Improves live parameter refresh and endpoint status synchronization between
+  firmware, the AMOLED display, web configurator, and radio tool.
+- Retains assignable GPIO1-GPIO8 CRSF auxiliary outputs while reserving pins
+  used by a board target's steering, throttle, or CRSF UART functions.
+
+### Hardware targets and interface prototypes
+
+- Adds private PWM and CRSF ports for the headless Waveshare ESP32-S3-Matrix,
+  including onboard 8x8 status animations, orientation control, Matrix-specific
+  I2C/pin mappings, and a dedicated partition layout. These builds remain
+  intentionally excluded from public release assets and the web flasher.
+- Adds a private Waveshare AMOLED V2 CRSF recovery target that moves a damaged
+  GPIO16 throttle output to GPIO8 without changing the official build pinouts.
+- Adds the experimental **GroundTX** surface-radio interface prototype for the
+  RadioMaster MT12. It currently demonstrates safe, memory-only setup screens
+  and mix workflows without modifying the active EdgeTX model.
+
+### Developer architecture and diagnostics
+
+- Introduces `ParameterCatalog` as the single authority for persistent keys,
+  permanent CRSF IDs, names, units, defaults, ranges, precision, increments,
+  choices, availability, and write permissions.
+- Refactors Settings, GyroController validation, CRSF metadata, and web numeric
+  inputs to consume the shared catalog instead of duplicating hard-coded
+  constraints across the project.
+- Separates meaningful controller stages such as effective direct gain,
+  steady-drift assist, transition timing, and gyro-only hysteresis into named
+  functions while keeping stateful signal history inside GyroController.
+- Adds `docs/DEVELOPING_PARAMETERS.md` with the required workflow and CRSF-ID
+  compatibility rules for contributors adding or retiring parameters.
+- Expands blackbox diagnostics with Driver Priority setting/scale, effective
+  direct gain, transition slew, sensor health, and the latest control states.
+
+### Credits
+
+- Theme-engine foundations and selected quality-of-life/reliability concepts
+  were contributed by [J3vb](https://github.com/J3vb), including work reviewed
+  from PR #4 and then integrated into OpenDrift's current architecture.
+- Driver Priority, latency/control-loop analysis, and valuable saturation and
+  response testing were contributed by
+  [uarenotreal](https://github.com/uarenotreal).
+
+### Release targets
+
+- Public firmware remains focused on Waveshare AMOLED 1.64 V1 and V2, with PWM
+  and full-duplex CRSF variants.
+- Waveshare Round 1.28 remains deprecated, and the Matrix and personal recovery
+  targets remain private development builds.
+
 ## v1.0.8 - 2026-09-03
 
 ### Lower-latency gyro experiments
