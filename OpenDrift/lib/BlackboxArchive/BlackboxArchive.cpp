@@ -3,24 +3,115 @@
 #include <FFat.h>
 
 
-bool BlackboxArchive::begin(BlackboxLogger& activeLogger)
+bool BlackboxArchive::begin(
+    BlackboxLogger& activeLogger,
+    fs::FS* preferredStorage,
+    const char* preferredStorageName,
+    uint64_t preferredFreeBytes
+)
 {
     logger = &activeLogger;
 
-    if(FFat.totalBytes() == 0)
+    storage = preferredStorage;
+    csvOutput = storage != nullptr;
+    freeStorageBytes = preferredFreeBytes;
+    storageLabel = preferredStorageName != nullptr
+        ? preferredStorageName
+        : "internal flash";
+
+    if(storage == nullptr)
+    {
+        storage = &FFat;
+        csvOutput = false;
+        storageLabel = "internal flash";
+        freeStorageBytes = FFat.freeBytes();
+    }
+
+    if(freeStorageBytes == 0)
     {
         state = UNAVAILABLE;
         return false;
     }
 
+    if(csvOutput) findLatestCsvArchive();
     recoverFiles();
     Header header = {};
-    archivePresent = validateArchive(ARCHIVE_PATH, &header);
+    archivePresent = csvOutput
+        ? storage->exists(archivePath())
+        : validateArchive(archivePath(), &header);
 
     if(archivePresent)
     {
-        archiveBytes = sizeof(Header) + header.payloadBytes;
-        archivedRecords = header.recordCount;
+        if(csvOutput)
+        {
+            File file = storage->open(archivePath(), FILE_READ);
+            archiveBytes = file ? file.size() : 0;
+            archivedRecords = 0;
+            archivedDurationMs = 0;
+
+            if(file)
+            {
+                bool headerRow = true;
+                bool atLineStart = false;
+                bool timestampValid = false;
+                uint32_t timestamp = 0;
+                uint32_t firstTimestamp = 0;
+                uint32_t lastTimestamp = 0;
+
+                while(file.available())
+                {
+                    const char value = (char)file.read();
+
+                    if(headerRow)
+                    {
+                        if(value == '\n')
+                        {
+                            headerRow = false;
+                            atLineStart = true;
+                        }
+                        continue;
+                    }
+
+                    if(atLineStart)
+                    {
+                        if(value >= '0' && value <= '9')
+                        {
+                            timestamp = timestamp * 10U + (uint32_t)(value - '0');
+                            timestampValid = true;
+                            continue;
+                        }
+
+                        if(value == ',' && timestampValid)
+                        {
+                            if(archivedRecords == 0) firstTimestamp = timestamp;
+                            lastTimestamp = timestamp;
+                        }
+
+                        atLineStart = false;
+                    }
+
+                    if(value == '\n')
+                    {
+                        archivedRecords++;
+                        atLineStart = true;
+                        timestampValid = false;
+                        timestamp = 0;
+                    }
+                }
+                file.close();
+
+                if(archivedRecords > 1)
+                {
+                    archivedDurationMs = lastTimestamp - firstTimestamp;
+                }
+            }
+        }
+        else
+        {
+            archiveBytes = sizeof(Header) + header.payloadBytes;
+            archivedRecords = header.recordCount;
+            archivedDurationMs = header.durationMs;
+        }
     }
 
     state = archivePresent ? SAVED : NO_LOG;
@@ -34,7 +125,7 @@ void BlackboxArchive::update(bool parked)
 
     if(state == SAVING)
     {
-        if(!parkedNow)
+        if(!parkedNow && !allowUnconfirmedParkedDuringSave)
         {
             abortSave(CANCELLED);
             return;
@@ -58,14 +149,14 @@ void BlackboxArchive::update(bool parked)
 }
 
 
-bool BlackboxArchive::requestSave()
+bool BlackboxArchive::requestSave(bool allowNoSignalBench)
 {
     if(state == SAVING || logger == nullptr || !logger->isReady())
     {
         return false;
     }
 
-    if(!parkedNow)
+    if(!parkedNow && !allowNoSignalBench)
     {
         state = PARK_CAR;
         return false;
@@ -77,7 +168,15 @@ bool BlackboxArchive::requestSave()
         return false;
     }
 
-    return startSave();
+    allowUnconfirmedParkedDuringSave = allowNoSignalBench;
+
+    if(!startSave())
+    {
+        allowUnconfirmedParkedDuringSave = false;
+        return false;
+    }
+
+    return true;
 }
 
 
@@ -114,6 +213,32 @@ bool BlackboxArchive::isSaving() const { return state == SAVING; }
 bool BlackboxArchive::hasArchive() const { return archivePresent; }
 size_t BlackboxArchive::getArchiveBytes() const { return archiveBytes; }
 size_t BlackboxArchive::getArchiveRecordCount() const { return archivedRecords; }
+uint32_t BlackboxArchive::getArchiveDurationMs() const { return archivedDurationMs; }
+size_t BlackboxArchive::getRamRecordCount() const
+{
+    return logger != nullptr ? logger->getRecordCount() : 0;
+}
+size_t BlackboxArchive::getRamBytes() const
+{
+    return logger != nullptr ? logger->getSize() : 0;
+}
+size_t BlackboxArchive::getRamCapacityBytes() const
+{
+    return logger != nullptr ? logger->getCapacityBytes() : 0;
+}
+uint32_t BlackboxArchive::getRamDurationMs() const
+{
+    return logger != nullptr ? logger->getDurationMs() : 0;
+}
+bool BlackboxArchive::clearRamLog()
+{
+    if(logger == nullptr || isSaving()) return false;
+    logger->clear();
+    state = NO_LOG;
+    return true;
+}
+const char* BlackboxArchive::getStorageName() const { return storageLabel; }
+bool BlackboxArchive::isCsvArchive() const { return csvOutput; }
 
 
 bool BlackboxArchive::clearArchive()
@@ -121,13 +246,29 @@ bool BlackboxArchive::clearArchive()
     if(state == SAVING) return false;
 
     bool ok = true;
-    if(FFat.exists(ARCHIVE_PATH)) ok = FFat.remove(ARCHIVE_PATH);
-    if(FFat.exists(BACKUP_PATH)) FFat.remove(BACKUP_PATH);
-    if(FFat.exists(TEMP_PATH)) FFat.remove(TEMP_PATH);
+    if(storage == nullptr) return false;
+    if(storage->exists(archivePath())) ok = storage->remove(archivePath());
+    if(storage->exists(backupPath())) storage->remove(backupPath());
+    if(storage->exists(tempPath())) storage->remove(tempPath());
+
+    if(csvOutput)
+    {
+        BlackboxLogger* activeLogger = logger;
+        fs::FS* activeStorage = storage;
+        const char* activeStorageLabel = storageLabel;
+        const uint64_t activeFreeBytes = freeStorageBytes;
+        return ok && activeLogger != nullptr && begin(
+            *activeLogger,
+            activeStorage,
+            activeStorageLabel,
+            activeFreeBytes
+        );
+    }
 
     archivePresent = false;
     archiveBytes = 0;
     archivedRecords = 0;
+    archivedDurationMs = 0;
     state = logger != nullptr && logger->getRecordCount() > 0
         ? (parkedNow ? READY : PARK_CAR)
         : NO_LOG;
@@ -142,9 +283,9 @@ bool BlackboxArchive::openArchive(
 ) const
 {
     Header header = {};
-    if(!validateArchive(ARCHIVE_PATH, &header)) return false;
+    if(csvOutput || !validateArchive(archivePath(), &header)) return false;
 
-    file = FFat.open(ARCHIVE_PATH, FILE_READ);
+    file = storage->open(archivePath(), FILE_READ);
     if(!file || !file.seek(sizeof(Header)))
     {
         if(file) file.close();
@@ -157,17 +298,28 @@ bool BlackboxArchive::openArchive(
 }
 
 
+bool BlackboxArchive::openCsvArchive(File& file) const
+{
+    if(!csvOutput || storage == nullptr || !storage->exists(archivePath()))
+    {
+        return false;
+    }
+
+    file = storage->open(archivePath(), FILE_READ);
+    return file && !file.isDirectory();
+}
+
+
 bool BlackboxArchive::startSave()
 {
     snapshotRecords = logger->getRecordCount();
     snapshotRecordSize = logger->getBinaryRecordSize();
 
-    const size_t required =
-        sizeof(Header) +
-        snapshotRecords * snapshotRecordSize +
-        FREE_SPACE_MARGIN;
+    const size_t required = csvOutput
+        ? snapshotRecords * 704UL + FREE_SPACE_MARGIN
+        : sizeof(Header) + snapshotRecords * snapshotRecordSize + FREE_SPACE_MARGIN;
 
-    if(FFat.freeBytes() < required)
+    if(storage == nullptr || freeStorageBytes < required)
     {
         state = NO_SPACE;
         resultShownAtMs = millis();
@@ -176,8 +328,16 @@ bool BlackboxArchive::startSave()
 
     logger->setPaused(true);
 
-    if(FFat.exists(TEMP_PATH)) FFat.remove(TEMP_PATH);
-    output = FFat.open(TEMP_PATH, FILE_WRITE);
+    if(csvOutput && !prepareNextCsvArchivePath())
+    {
+        logger->setPaused(false);
+        state = FAILED;
+        resultShownAtMs = millis();
+        return false;
+    }
+
+    if(storage->exists(tempPath())) storage->remove(tempPath());
+    output = storage->open(tempPath(), FILE_WRITE);
 
     if(!output)
     {
@@ -187,14 +347,29 @@ bool BlackboxArchive::startSave()
         return false;
     }
 
-    Header placeholder = {};
-    if(output.write(
-        reinterpret_cast<const uint8_t*>(&placeholder),
-        sizeof(placeholder)
-    ) != sizeof(placeholder))
+    if(csvOutput)
     {
-        abortSave(FAILED);
-        return false;
+        const char* header = logger->getCsvHeader();
+        if(
+            output.print(header) != strlen(header) ||
+            output.write((uint8_t)'\n') != 1
+        )
+        {
+            abortSave(FAILED);
+            return false;
+        }
+    }
+    else
+    {
+        Header placeholder = {};
+        if(output.write(
+            reinterpret_cast<const uint8_t*>(&placeholder),
+            sizeof(placeholder)
+        ) != sizeof(placeholder))
+        {
+            abortSave(FAILED);
+            return false;
+        }
     }
 
     archiveIndex = 0;
@@ -206,6 +381,35 @@ bool BlackboxArchive::startSave()
 
 void BlackboxArchive::writeNextChunk()
 {
+    if(csvOutput)
+    {
+        char line[704];
+        const size_t remaining = snapshotRecords - archiveIndex;
+        const size_t count = min((size_t)12, remaining);
+
+        for(size_t index = 0; index < count; index++)
+        {
+            const size_t length = logger->formatCsvRecord(
+                archiveIndex + index,
+                line,
+                sizeof(line)
+            );
+
+            if(length == 0 || output.write(
+                reinterpret_cast<const uint8_t*>(line),
+                length
+            ) != length)
+            {
+                abortSave(FAILED);
+                return;
+            }
+        }
+
+        archiveIndex += count;
+        if(archiveIndex >= snapshotRecords) finishSave();
+        return;
+    }
+
     const size_t recordsPerChunk =
         max((size_t)1, WRITE_BUFFER_BYTES / snapshotRecordSize);
     const size_t remaining = snapshotRecords - archiveIndex;
@@ -256,37 +460,56 @@ void BlackboxArchive::finishSave()
         (uint32_t)logger->getDurationMs()
     };
 
-    bool ok =
+    bool ok = csvOutput || (
         output.seek(0) &&
         output.write(
             reinterpret_cast<const uint8_t*>(&header),
             sizeof(header)
-        ) == sizeof(header);
+        ) == sizeof(header)
+    );
 
     output.flush();
     output.close();
 
-    if(ok && validateArchive(TEMP_PATH))
+    if(ok && csvOutput)
     {
-        if(FFat.exists(BACKUP_PATH)) FFat.remove(BACKUP_PATH);
+        ok = pendingCsvPath[0] != '\0' &&
+            !storage->exists(pendingCsvPath) &&
+            storage->rename(tempPath(), pendingCsvPath);
 
-        if(FFat.exists(ARCHIVE_PATH))
+        if(ok)
         {
-            ok = FFat.rename(ARCHIVE_PATH, BACKUP_PATH);
+            snprintf(
+                currentCsvPath,
+                sizeof(currentCsvPath),
+                "%s",
+                pendingCsvPath
+            );
+        }
+
+        pendingCsvPath[0] = '\0';
+    }
+    else if(ok && validateArchive(tempPath()))
+    {
+        if(storage->exists(backupPath())) storage->remove(backupPath());
+
+        if(storage->exists(archivePath()))
+        {
+            ok = storage->rename(archivePath(), backupPath());
         }
 
         if(ok)
         {
-            ok = FFat.rename(TEMP_PATH, ARCHIVE_PATH);
+            ok = storage->rename(tempPath(), archivePath());
         }
 
         if(ok)
         {
-            if(FFat.exists(BACKUP_PATH)) FFat.remove(BACKUP_PATH);
+            if(storage->exists(backupPath())) storage->remove(backupPath());
         }
-        else if(FFat.exists(BACKUP_PATH) && !FFat.exists(ARCHIVE_PATH))
+        else if(storage->exists(backupPath()) && !storage->exists(archivePath()))
         {
-            FFat.rename(BACKUP_PATH, ARCHIVE_PATH);
+            storage->rename(backupPath(), archivePath());
         }
     }
 
@@ -294,15 +517,28 @@ void BlackboxArchive::finishSave()
 
     if(!ok)
     {
-        if(FFat.exists(TEMP_PATH)) FFat.remove(TEMP_PATH);
+        if(storage->exists(tempPath())) storage->remove(tempPath());
+        pendingCsvPath[0] = '\0';
+        allowUnconfirmedParkedDuringSave = false;
         state = FAILED;
         resultShownAtMs = millis();
         return;
     }
 
     archivePresent = true;
-    archiveBytes = sizeof(Header) + header.payloadBytes;
+    if(csvOutput)
+    {
+        File completed = storage->open(archivePath(), FILE_READ);
+        archiveBytes = completed ? completed.size() : 0;
+        if(completed) completed.close();
+    }
+    else
+    {
+        archiveBytes = sizeof(Header) + header.payloadBytes;
+    }
     archivedRecords = header.recordCount;
+    archivedDurationMs = header.durationMs;
+    allowUnconfirmedParkedDuringSave = false;
     state = SAVED;
     resultShownAtMs = millis();
 }
@@ -311,8 +547,10 @@ void BlackboxArchive::finishSave()
 void BlackboxArchive::abortSave(Status reason)
 {
     if(output) output.close();
-    if(FFat.exists(TEMP_PATH)) FFat.remove(TEMP_PATH);
+    if(storage != nullptr && storage->exists(tempPath())) storage->remove(tempPath());
+    pendingCsvPath[0] = '\0';
     if(logger != nullptr) logger->setPaused(false);
+    allowUnconfirmedParkedDuringSave = false;
     state = reason;
     resultShownAtMs = millis();
 }
@@ -323,9 +561,9 @@ bool BlackboxArchive::validateArchive(
     Header* returnedHeader
 ) const
 {
-    if(logger == nullptr || !FFat.exists(path)) return false;
+    if(logger == nullptr || storage == nullptr || !storage->exists(path)) return false;
 
-    File file = FFat.open(path, FILE_READ);
+    File file = storage->open(path, FILE_READ);
     if(!file || file.isDirectory() || file.size() < sizeof(Header))
     {
         if(file) file.close();
@@ -386,17 +624,147 @@ bool BlackboxArchive::validateArchive(
 
 void BlackboxArchive::recoverFiles()
 {
-    if(FFat.exists(TEMP_PATH)) FFat.remove(TEMP_PATH);
+    if(storage == nullptr) return;
+    if(storage->exists(tempPath())) storage->remove(tempPath());
 
-    if(FFat.exists(BACKUP_PATH))
+    if(csvOutput) return;
+
+    if(storage->exists(backupPath()))
     {
-        if(validateArchive(ARCHIVE_PATH)) FFat.remove(BACKUP_PATH);
+        const bool currentValid = csvOutput
+            ? storage->exists(archivePath())
+            : validateArchive(archivePath());
+
+        if(currentValid) storage->remove(backupPath());
         else
         {
-            if(FFat.exists(ARCHIVE_PATH)) FFat.remove(ARCHIVE_PATH);
-            FFat.rename(BACKUP_PATH, ARCHIVE_PATH);
+            if(storage->exists(archivePath())) storage->remove(archivePath());
+            storage->rename(backupPath(), archivePath());
         }
     }
+}
+
+
+const char* BlackboxArchive::archivePath() const
+{
+    if(!csvOutput) return BINARY_ARCHIVE_PATH;
+    return currentCsvPath[0] != '\0'
+        ? currentCsvPath
+        : CSV_LEGACY_ARCHIVE_PATH;
+}
+
+
+const char* BlackboxArchive::tempPath() const
+{
+    return csvOutput ? CSV_TEMP_PATH : BINARY_TEMP_PATH;
+}
+
+
+const char* BlackboxArchive::backupPath() const
+{
+    return BINARY_BACKUP_PATH;
+}
+
+
+void BlackboxArchive::findLatestCsvArchive()
+{
+    currentCsvPath[0] = '\0';
+    pendingCsvPath[0] = '\0';
+    nextCsvIndex = 1;
+
+    if(storage == nullptr) return;
+
+    uint32_t highestIndex = 0;
+    File root = storage->open("/");
+
+    if(root && root.isDirectory())
+    {
+        File file = root.openNextFile();
+        while(file)
+        {
+            const char* fullName = file.name();
+            const char* name = strrchr(fullName, '/');
+            name = name != nullptr ? name + 1 : fullName;
+
+            static constexpr const char* PREFIX = "opendrift-blackbox-";
+            static constexpr const char* SUFFIX = ".csv";
+            const size_t prefixLength = strlen(PREFIX);
+            const size_t nameLength = strlen(name);
+            const size_t suffixLength = strlen(SUFFIX);
+
+            if(
+                !file.isDirectory() &&
+                nameLength > prefixLength + suffixLength &&
+                strncmp(name, PREFIX, prefixLength) == 0 &&
+                strcmp(name + nameLength - suffixLength, SUFFIX) == 0
+            )
+            {
+                bool digitsOnly = true;
+                uint32_t index = 0;
+                for(
+                    size_t position = prefixLength;
+                    position < nameLength - suffixLength;
+                    position++
+                )
+                {
+                    if(name[position] < '0' || name[position] > '9')
+                    {
+                        digitsOnly = false;
+                        break;
+                    }
+                    index = index * 10U + (uint32_t)(name[position] - '0');
+                }
+
+                if(digitsOnly && index > highestIndex)
+                {
+                    highestIndex = index;
+                    snprintf(
+                        currentCsvPath,
+                        sizeof(currentCsvPath),
+                        "/%s",
+                        name
+                    );
+                }
+            }
+
+            file.close();
+            file = root.openNextFile();
+        }
+        root.close();
+    }
+
+    if(highestIndex == 0 && storage->exists(CSV_LEGACY_ARCHIVE_PATH))
+    {
+        snprintf(
+            currentCsvPath,
+            sizeof(currentCsvPath),
+            "%s",
+            CSV_LEGACY_ARCHIVE_PATH
+        );
+    }
+
+    nextCsvIndex = highestIndex + 1U;
+}
+
+
+bool BlackboxArchive::prepareNextCsvArchivePath()
+{
+    if(storage == nullptr) return false;
+
+    for(uint32_t attempts = 0; attempts < 10000U; attempts++)
+    {
+        snprintf(
+            pendingCsvPath,
+            sizeof(pendingCsvPath),
+            "/opendrift-blackbox-%04lu.csv",
+            (unsigned long)nextCsvIndex++
+        );
+
+        if(!storage->exists(pendingCsvPath)) return true;
+    }
+
+    pendingCsvPath[0] = '\0';
+    return false;
 }
 
 

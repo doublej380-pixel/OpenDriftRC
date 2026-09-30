@@ -32,6 +32,8 @@
 #if defined(OPENDRIFT_BOARD_AMOLED_164)
 #include "Backgrounds.h"
 #include "BlackboxArchive.h"
+#include "OnboardStorage.h"
+#include "UsbMaintenance.h"
 #endif
 
 #if !defined(OPENDRIFT_HEADLESS)
@@ -80,6 +82,10 @@ BlackboxLogger blackbox;
 #if defined(OPENDRIFT_BOARD_AMOLED_164)
 Backgrounds backgrounds;
 BlackboxArchive blackboxArchive;
+OnboardStorage onboardStorage;
+#if defined(OPENDRIFT_USB_MAINTENANCE)
+UsbMaintenance usbMaintenance;
+#endif
 #endif
 
 unsigned long lastBlackboxLog = 0;
@@ -202,11 +208,227 @@ volatile bool crsfThrottleOutputArmed = false;
 
 volatile bool gyroCalibrationRequested = false;
 
+#if defined(OPENDRIFT_USB_MAINTENANCE)
+volatile bool usbMaintenanceRequested = false;
+bool usbMaintenanceActive = false;
+bool usbMaintenanceLastTouch = false;
+bool firmwareUpdateCompletedAtBoot = false;
+uint32_t lastUsbUpdateRevision = 0;
+LGFX_Sprite usbMaintenanceCanvas;
+LGFX_Sprite usbMaintenancePanel;
+bool usbMaintenanceCanvasReady = false;
+#endif
+
 
 void requestGyroCalibration()
 {
     gyroCalibrationRequested = true;
 }
+
+
+#if defined(OPENDRIFT_USB_MAINTENANCE)
+void requestUsbMaintenance()
+{
+    usbMaintenanceRequested = true;
+}
+
+
+void flushUsbMaintenanceCanvas()
+{
+    if(!usbMaintenanceCanvasReady) return;
+
+    uint16_t* source = static_cast<uint16_t*>(
+        usbMaintenanceCanvas.getBuffer()
+    );
+    uint16_t* target = static_cast<uint16_t*>(
+        usbMaintenancePanel.getBuffer()
+    );
+
+    for(int y = 0; y < 280; y++)
+    {
+        for(int x = 0; x < 456; x++)
+        {
+            target[((455 - x) * 280) + y] = source[(y * 456) + x];
+        }
+    }
+
+    usbMaintenancePanel.pushSprite(&lcd, 0, 0);
+}
+
+
+void drawUsbMaintenanceScreen()
+{
+    if(!usbMaintenanceCanvasReady)
+    {
+        const bool usePsram = psramFound();
+        usbMaintenanceCanvas.setPsram(usePsram);
+        usbMaintenancePanel.setPsram(usePsram);
+        usbMaintenanceCanvas.setColorDepth(16);
+        usbMaintenancePanel.setColorDepth(16);
+
+        const bool canvasCreated =
+            usbMaintenanceCanvas.createSprite(456, 280) != nullptr;
+        const bool panelCreated =
+            usbMaintenancePanel.createSprite(280, 456) != nullptr;
+
+        usbMaintenanceCanvasReady = canvasCreated && panelCreated;
+
+        if(!usbMaintenanceCanvasReady)
+        {
+            usbMaintenanceCanvas.deleteSprite();
+            usbMaintenancePanel.deleteSprite();
+        }
+    }
+
+    if(!usbMaintenanceCanvasReady)
+    {
+        Serial.println("USB maintenance display buffers unavailable");
+        return;
+    }
+
+    usbMaintenanceCanvas.fillScreen(TFT_BLACK);
+    usbMaintenanceCanvas.setTextWrap(false);
+    usbMaintenanceCanvas.setTextDatum(top_center);
+
+    const UsbMaintenance::UpdateState updateState =
+        usbMaintenance.getUpdateState();
+    const size_t updateBytes = usbMaintenance.getUpdateBytes();
+
+    usbMaintenanceCanvas.setTextColor(
+        updateState == UsbMaintenance::UPDATE_COMPLETE
+            ? TFT_GREEN
+            : updateState == UsbMaintenance::UPDATE_ERROR
+                ? TFT_RED
+                : updateState == UsbMaintenance::UPDATE_WRITING
+                    ? 0xFD20
+                    : TFT_CYAN
+    );
+    usbMaintenanceCanvas.setTextSize(3);
+    usbMaintenanceCanvas.drawString(
+        updateState == UsbMaintenance::UPDATE_COMPLETE
+            ? "UPDATE COMPLETE"
+            : updateState == UsbMaintenance::UPDATE_ERROR
+                ? "UPDATE FAILED"
+                : updateState == UsbMaintenance::UPDATE_WRITING
+                    ? "INSTALLING UPDATE"
+                    : "USB MAINTENANCE",
+        228,
+        20
+    );
+
+    if(updateState != UsbMaintenance::UPDATE_IDLE)
+    {
+        char updateMessage[64];
+        snprintf(
+            updateMessage,
+            sizeof(updateMessage),
+            "%u KB written",
+            (unsigned int)(updateBytes / 1024U)
+        );
+
+        usbMaintenanceCanvas.setTextSize(2);
+        usbMaintenanceCanvas.setTextColor(TFT_WHITE);
+        usbMaintenanceCanvas.drawString(updateMessage, 228, 86);
+
+        usbMaintenanceCanvas.setTextSize(1);
+        usbMaintenanceCanvas.setTextColor(
+            updateState == UsbMaintenance::UPDATE_COMPLETE
+                ? TFT_GREEN
+                : updateState == UsbMaintenance::UPDATE_ERROR
+                    ? TFT_RED
+                    : 0xFD20
+        );
+        usbMaintenanceCanvas.drawString(
+            updateState == UsbMaintenance::UPDATE_COMPLETE
+                ? "Firmware verified. Restarting into the update..."
+                : updateState == UsbMaintenance::UPDATE_ERROR
+                    ? "The update was rejected. Existing firmware is safe."
+                    : "DO NOT UNPLUG OR RESTART",
+            228,
+            132
+        );
+
+        if(updateState == UsbMaintenance::UPDATE_WRITING)
+        {
+            const int activityWidth = 28 + (int)((updateBytes / 4096U) % 200U);
+            usbMaintenanceCanvas.drawRoundRect(108, 166, 240, 18, 5, 0xFD20);
+            usbMaintenanceCanvas.fillRoundRect(
+                112,
+                170,
+                activityWidth,
+                10,
+                0xFD20
+            );
+        }
+    }
+    else
+    {
+        usbMaintenanceCanvas.setTextSize(2);
+        usbMaintenanceCanvas.setTextColor(TFT_WHITE);
+        usbMaintenanceCanvas.drawString(
+            usbMaintenance.firmwareDriveReady()
+                ? "Firmware drive: READY"
+                : "Firmware drive: UNAVAILABLE",
+            228,
+            72
+        );
+        usbMaintenanceCanvas.drawString(
+            usbMaintenance.sdDriveReady()
+                ? "SD logs: READY (READ ONLY)"
+                : "SD logs: NO CARD",
+            228,
+            102
+        );
+
+        usbMaintenanceCanvas.setTextColor(0x9CF3);
+        usbMaintenanceCanvas.setTextSize(1);
+        usbMaintenanceCanvas.drawString(
+            "Copy firmware.bin to update OpenDrift.",
+            228,
+            146
+        );
+        usbMaintenanceCanvas.drawString(
+            "Copy logs from the read-only SD drive.",
+            228,
+            163
+        );
+        usbMaintenanceCanvas.drawString(
+            "Restart safely disconnects both USB drives.",
+            228,
+            180
+        );
+    }
+
+    const bool restartEnabled =
+        updateState != UsbMaintenance::UPDATE_WRITING;
+    usbMaintenanceCanvas.fillRoundRect(
+        118,
+        216,
+        220,
+        46,
+        8,
+        restartEnabled ? 0x3186 : 0x2104
+    );
+    usbMaintenanceCanvas.drawRoundRect(
+        118,
+        216,
+        220,
+        46,
+        8,
+        restartEnabled ? TFT_CYAN : 0x8410
+    );
+    usbMaintenanceCanvas.setTextColor(TFT_WHITE);
+    usbMaintenanceCanvas.setTextSize(2);
+    usbMaintenanceCanvas.drawString(
+        restartEnabled ? "EXIT / RESTART" : "UPDATE IN PROGRESS",
+        228,
+        230
+    );
+    usbMaintenanceCanvas.setTextDatum(top_left);
+
+    flushUsbMaintenanceCanvas();
+}
+#endif
 
 const char* password = "opendrift";
 
@@ -1346,6 +1568,10 @@ void setup()
 
     Serial.println("OpenDrift Starting");
 
+    #if defined(OPENDRIFT_USB_UPDATE_TEST_PAYLOAD)
+    Serial.println("USB OTA TEST PAYLOAD ACTIVE");
+    #endif
+
     #if defined(OPENDRIFT_INPUT_CRSF)
     // Do not let a powered F1000 receiver start UART activity while the panel,
     // sensors, PSRAM, and shared resources are still being initialized.
@@ -1453,6 +1679,11 @@ void setup()
     bool settingsOk =
         settings.begin();
 
+    #if defined(OPENDRIFT_USB_MAINTENANCE)
+    firmwareUpdateCompletedAtBoot =
+        UsbMaintenance::consumeCompletedUpdate();
+    #endif
+
     controlLoopHz = settings.getControlLoopHz();
     controlLoopPeriodMs = 1000 / controlLoopHz;
 
@@ -1474,6 +1705,60 @@ void setup()
     );
 
     #if defined(OPENDRIFT_BOARD_AMOLED_164)
+    //-------------------
+    // REMOVABLE STORAGE
+    //-------------------
+
+    const bool sdCardOk = onboardStorage.begin();
+
+    char sdMessage[64];
+    snprintf(
+        sdMessage,
+        sizeof(sdMessage),
+        sdCardOk
+            ? "sdcard: %.1f GB ready"
+            : "sdcard: no readable card inserted",
+        sdCardOk
+            ? (double)onboardStorage.cardSizeBytes() / 1073741824.0
+            : 0.0
+    );
+
+    bootConsole.log(
+        sdMessage,
+        sdCardOk ? "[ OK ]" : "[SKIP]",
+        sdCardOk ? TFT_GREEN : 0x8410
+    );
+
+    #if defined(OPENDRIFT_USB_MAINTENANCE)
+    if(UsbMaintenance::consumeBootRequest())
+    {
+        bootConsole.log(
+            "usb: entering isolated maintenance mode",
+            "[WAIT]",
+            TFT_CYAN
+        );
+        delay(250);
+        bootConsole.end();
+
+        Wire.begin(I2C_SDA_PIN, I2C_SCL_PIN);
+        Wire.setTimeOut(5);
+        touch.begin();
+        touch.setRotation(settings.getDisplayRotation());
+
+        usbMaintenance.begin(onboardStorage);
+        usbMaintenanceActive = true;
+        lastUsbUpdateRevision = usbMaintenance.getUpdateRevision();
+        drawUsbMaintenanceScreen();
+
+        Serial.printf(
+            "USB maintenance: firmware=%s sd=%s\n",
+            usbMaintenance.firmwareDriveReady() ? "ready" : "unavailable",
+            usbMaintenance.sdDriveReady() ? "ready/read-only" : "unavailable"
+        );
+        return;
+    }
+    #endif
+
     //-------------------
     // BACKGROUND STORAGE
     //-------------------
@@ -1500,9 +1785,15 @@ void setup()
     );
 
     webConfig.setBackgroundStore(backgrounds);
-    blackboxArchive.begin(blackbox);
+    blackboxArchive.begin(
+        blackbox,
+        onboardStorage.fileSystem(),
+        onboardStorage.isSdAvailable() ? "SD card" : nullptr,
+        onboardStorage.freeBytes()
+    );
     webConfig.setBlackboxArchive(blackboxArchive);
     ui.setBackgroundStore(backgrounds);
+    ui.setBlackboxArchive(blackboxArchive);
     #endif
 
     //-------------------
@@ -2117,6 +2408,18 @@ void setup()
         requestGyroCalibration
     );
 
+    #if defined(OPENDRIFT_USB_MAINTENANCE)
+    ui.setUsbMaintenanceCallback(
+        requestUsbMaintenance
+    );
+
+    if(firmwareUpdateCompletedAtBoot)
+    {
+        ui.showFirmwareUpdateCompleted();
+        Serial.println("USB firmware update completed successfully");
+    }
+    #endif
+
     touch.update();
     #else
     bootConsole.log(
@@ -2191,6 +2494,74 @@ void setup()
 void loop()
 {
     static unsigned long lastHeartbeatMs = 0;
+
+    #if defined(OPENDRIFT_USB_MAINTENANCE)
+    if(usbMaintenanceActive)
+    {
+        const uint32_t updateRevision =
+            usbMaintenance.getUpdateRevision();
+        if(updateRevision != lastUsbUpdateRevision)
+        {
+            lastUsbUpdateRevision = updateRevision;
+            drawUsbMaintenanceScreen();
+        }
+
+        touch.update();
+        const bool touched = touch.isTouched();
+
+        if(
+            touched &&
+            !usbMaintenanceLastTouch &&
+            touch.getX() >= 118 && touch.getX() <= 338 &&
+            touch.getY() >= 216 && touch.getY() <= 262 &&
+            usbMaintenance.getUpdateState() !=
+                UsbMaintenance::UPDATE_WRITING
+        )
+        {
+            usbMaintenanceCanvas.fillScreen(TFT_BLACK);
+            usbMaintenanceCanvas.setTextDatum(middle_center);
+            usbMaintenanceCanvas.setTextColor(TFT_WHITE);
+            usbMaintenanceCanvas.setTextSize(2);
+            usbMaintenanceCanvas.drawString(
+                "Disconnecting USB drives...",
+                228,
+                140
+            );
+            usbMaintenanceCanvas.setTextDatum(top_left);
+            flushUsbMaintenanceCanvas();
+
+            usbMaintenance.prepareForRestart(onboardStorage);
+            delay(250);
+            ESP.restart();
+        }
+
+        usbMaintenanceLastTouch = touched;
+        delay(10);
+        return;
+    }
+
+    if(usbMaintenanceRequested)
+    {
+        usbMaintenanceRequested = false;
+
+        if(controlTaskHandle != nullptr) vTaskSuspend(controlTaskHandle);
+        #if defined(OPENDRIFT_INPUT_CRSF)
+        if(crsfTaskHandle != nullptr) vTaskSuspend(crsfTaskHandle);
+        #endif
+
+        steeringServo.center();
+        throttleOutput.writeMicroseconds(1500);
+        delay(100);
+        steeringServo.end();
+        throttleOutput.end();
+
+        UsbMaintenance::armNextBoot();
+        Serial.println("Restarting into USB maintenance mode");
+        Serial.flush();
+        delay(100);
+        ESP.restart();
+    }
+    #endif
 
     #if defined(OPENDRIFT_INPUT_CRSF)
     crsfParameters.update();
@@ -2429,10 +2800,20 @@ void loop()
     // BLACKBOX LOG
     //-------------------
 
+    const bool blackboxInputReady =
+        telemetry.steeringSignal
+        #if defined(OPENDRIFT_USB_MAINTENANCE)
+        // The private maintenance build doubles as a bench logger. When no
+        // receiver is present, capture IMU/controller state with failsafe
+        // neutral inputs so SD and USB maintenance can be tested standalone.
+        || (!telemetry.steeringSignal && !telemetry.throttleSignal)
+        #endif
+        ;
+
     if(
         settings.getBlackboxEnabled() &&
         blackbox.isReady() &&
-        telemetry.steeringSignal &&
+        blackboxInputReady &&
         millis() - lastBlackboxLog >= 50
     )
     {

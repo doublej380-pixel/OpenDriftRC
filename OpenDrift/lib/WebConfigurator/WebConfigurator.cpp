@@ -141,6 +141,12 @@ void WebConfigurator::begin(
         HTTP_POST,
         [this]() { handleArchivedLogClear(); }
     );
+
+    server.on(
+        "/save-blackbox",
+        HTTP_POST,
+        [this]() { handleArchivedLogSave(); }
+    );
     #endif
 
     server.on(
@@ -658,8 +664,24 @@ void WebConfigurator::handleRoot()
             html += String(blackbox->getOverwrittenRows());
         }
 
-        html += F("</p><p class='sub'>While driving, records stay entirely in volatile PSRAM. Internal flash is written only when you explicitly archive after parking. Download converts the binary records to CSV; power cycling clears only the RAM copy.</p>");
+        html += F("</p><p class='sub'>While driving, records stay entirely in volatile PSRAM. Persistent storage is written only when you explicitly dump the log after parking. Power cycling clears only the RAM copy.</p>");
         html += F("<a href='/blackbox.csv'>Download CSV</a>");
+        #if defined(OPENDRIFT_BOARD_AMOLED_164)
+        if(blackboxArchive != nullptr)
+        {
+            html += F("<form method='post' action='/save-blackbox'><button type='submit'>Dump RAM Log to ");
+            html += blackboxArchive->getStorageName();
+            html += F("</button></form>");
+            html += F("<p class='sub'>With no receiver connected, bench dumping is allowed immediately. With an active receiver, the car must be stationary for two seconds.</p>");
+
+            if(blackboxArchive->isSaving())
+            {
+                html += F("<p class='sub'>Dump in progress: ");
+                html += String(blackboxArchive->getProgress());
+                html += F("%. Refresh this page to update.</p>");
+            }
+        }
+        #endif
         html += F("<form method='post' action='/clear-log'><button type='submit'>Clear RAM Log</button></form>");
 
     }
@@ -671,7 +693,9 @@ void WebConfigurator::handleRoot()
     #if defined(OPENDRIFT_BOARD_AMOLED_164)
     if(blackboxArchive != nullptr && blackboxArchive->hasArchive())
     {
-        html += F("<p class='sub'>Saved internal archive: ");
+        html += F("<p class='sub'>Saved archive on ");
+        html += blackboxArchive->getStorageName();
+        html += F(": ");
         html += String(blackboxArchive->getArchiveRecordCount());
         html += F(" records &middot; ");
         html += String(blackboxArchive->getArchiveBytes() / 1024);
@@ -1433,6 +1457,24 @@ void WebConfigurator::handleArchivedLogDownload()
     }
 
     File file;
+
+    if(blackboxArchive->isCsvArchive())
+    {
+        if(!blackboxArchive->openCsvArchive(file))
+        {
+            server.send(404, "text/plain", "No valid saved blackbox log");
+            return;
+        }
+
+        server.sendHeader(
+            "Content-Disposition",
+            "attachment; filename=opendrift-blackbox-saved.csv"
+        );
+        server.streamFile(file, "text/csv");
+        file.close();
+        return;
+    }
+
     size_t recordCount = 0;
     size_t recordSize = 0;
 
@@ -1503,6 +1545,58 @@ void WebConfigurator::handleArchivedLogClear()
     if(blackboxArchive == nullptr || !blackboxArchive->clearArchive())
     {
         server.send(503, "text/plain", "Could not delete saved blackbox log");
+        return;
+    }
+
+    server.sendHeader("Location", "/");
+    server.send(303);
+}
+
+
+void WebConfigurator::handleArchivedLogSave()
+{
+    if(blackboxArchive == nullptr || blackbox == nullptr)
+    {
+        server.send(503, "text/plain", "Blackbox archive unavailable");
+        return;
+    }
+
+    if(settings != nullptr && !settings->getBlackboxEnabled())
+    {
+        server.send(503, "text/plain", "Blackbox logging disabled");
+        return;
+    }
+
+    const bool noReceiverSignals =
+        steeringRadio != nullptr &&
+        throttleRadio != nullptr &&
+        !steeringRadio->hasSignal() &&
+        !throttleRadio->hasSignal();
+
+    if(!blackboxArchive->requestSave(noReceiverSignals))
+    {
+        switch(blackboxArchive->getStatus())
+        {
+            case BlackboxArchive::PARK_CAR:
+                server.send(409, "text/plain", "Park the car for two seconds before dumping the log");
+                break;
+
+            case BlackboxArchive::NO_LOG:
+                server.send(409, "text/plain", "No RAM blackbox data to save");
+                break;
+
+            case BlackboxArchive::NO_SPACE:
+                server.send(507, "text/plain", "Not enough storage space for the blackbox log");
+                break;
+
+            case BlackboxArchive::SAVING:
+                server.send(409, "text/plain", "Blackbox save already in progress");
+                break;
+
+            default:
+                server.send(503, "text/plain", "Could not start blackbox save");
+                break;
+        }
         return;
     }
 

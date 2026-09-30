@@ -18,7 +18,8 @@ static constexpr uint8_t PAGE_STEERING = 7;
 static constexpr uint8_t PAGE_STEERING_CAL = 8;
 static constexpr uint8_t PAGE_WIFI = 9;
 static constexpr uint8_t PAGE_SYSTEM = 10;
-static constexpr uint8_t PAGE_BACKGROUNDS = 11;
+static constexpr uint8_t PAGE_BLACKBOX = 11;
+static constexpr uint8_t PAGE_BACKGROUNDS = 12;
 
 
 static uint8_t radioSectionForPage(
@@ -924,6 +925,10 @@ void UI::drawPage(
             break;
 
         #if defined(OPENDRIFT_BOARD_AMOLED_164)
+        case PAGE_BLACKBOX:
+            drawBlackboxPage(settings);
+            break;
+
         case PAGE_BACKGROUNDS:
             drawBackgroundsPage(
                 settings
@@ -954,6 +959,16 @@ void UI::setCalibrationCallback(
 {
     calibrationCallback = callback;
 }
+
+
+#if defined(OPENDRIFT_USB_MAINTENANCE)
+void UI::setUsbMaintenanceCallback(
+    void (*callback)()
+)
+{
+    usbMaintenanceCallback = callback;
+}
+#endif
 
 
 
@@ -1435,6 +1450,61 @@ void UI::flushDisplay()
 }
 
 
+#if defined(OPENDRIFT_BOARD_AMOLED_164)
+void UI::drawBlackboxProgress(
+    uint8_t progress,
+    BlackboxArchive::Status status
+)
+{
+    if(!canvasReady || blackboxArchive == nullptr) return;
+
+    const bool saving = status == BlackboxArchive::SAVING;
+    const bool saved = status == BlackboxArchive::SAVED;
+    const uint16_t accent = saving ? OD_CYAN : (saved ? OD_GREEN : OD_RED);
+
+    canvas.fillRoundRect(48, 64, 360, 152, 10, 0x0841);
+    canvas.drawRoundRect(48, 64, 360, 152, 10, accent);
+    canvas.setTextDatum(top_center);
+    canvas.setTextColor(accent);
+    canvas.setTextSize(2);
+    canvas.drawString(
+        saving ? "DUMPING BLACKBOX" : (saved ? "DUMP COMPLETE" : "DUMP FAILED"),
+        UI_CENTER_X,
+        83
+    );
+
+    canvas.setTextColor(OD_TEXT);
+    canvas.setTextSize(1);
+    canvas.drawString(
+        saving
+            ? blackboxArchive->getStorageName()
+            : (saved ? "Safe to restart or remove power" : "Log was not saved"),
+        UI_CENTER_X,
+        116
+    );
+
+    canvas.drawRoundRect(78, 143, 300, 28, 6, OD_DIM);
+    canvas.fillRoundRect(82, 147, 292, 20, 4, 0x1082);
+
+    const uint16_t fillWidth =
+        (uint16_t)((constrain(progress, 0, 100) * 292UL) / 100UL);
+
+    if(fillWidth > 0)
+    {
+        canvas.fillRoundRect(82, 147, fillWidth, 20, 4, accent);
+    }
+
+    char percent[8];
+    snprintf(percent, sizeof(percent), "%u%%", (unsigned int)progress);
+    canvas.setTextColor(OD_TEXT);
+    canvas.setTextSize(1);
+    canvas.drawString(percent, UI_CENTER_X, 181);
+    canvas.setTextDatum(top_left);
+    flushDisplay();
+}
+#endif
+
+
 void UI::flushDisplay(
     int16_t xOffset
 )
@@ -1808,7 +1878,11 @@ void UI::drawMainPage(
     #if defined(OPENDRIFT_BOARD_AMOLED_164)
     drawAmoledHeader(
         lcd,
+        #if defined(OPENDRIFT_USB_UPDATE_TEST_PAYLOAD)
+        "Drive - OTA TEST",
+        #else
         "Drive",
+        #endif
         OD_CYAN
     );
 
@@ -1990,6 +2064,46 @@ void UI::drawMainPage(
     drawPageDots();
 
 }
+
+
+#if defined(OPENDRIFT_USB_MAINTENANCE)
+void UI::showFirmwareUpdateCompleted()
+{
+    if(lcd == nullptr) return;
+
+    firmwareUpdateNoticeVisible = true;
+    firmwareUpdateNoticeUntil = millis() + 4500;
+
+    lcd->fillRoundRect(70, 70, 316, 136, 10, 0x10A2);
+    lcd->drawRoundRect(70, 70, 316, 136, 10, TFT_GREEN);
+    lcd->drawRoundRect(72, 72, 312, 132, 8, TFT_GREEN);
+    lcd->setTextDatum(middle_center);
+    lcd->setTextColor(TFT_GREEN);
+    lcd->setTextSize(3);
+    lcd->drawString(
+        #if defined(OPENDRIFT_USB_UPDATE_TEST_PAYLOAD)
+        "USB TEST PASSED",
+        #else
+        "UPDATE COMPLETE",
+        #endif
+        228,
+        110
+    );
+    lcd->setTextColor(TFT_WHITE);
+    lcd->setTextSize(2);
+    lcd->drawString(
+        #if defined(OPENDRIFT_USB_UPDATE_TEST_PAYLOAD)
+        "OTA payload is running",
+        #else
+        "New firmware is running",
+        #endif
+        228,
+        158
+    );
+    lcd->setTextDatum(top_left);
+    flushDisplay();
+}
+#endif
 
 
 
@@ -2286,7 +2400,9 @@ void UI::drawSystemPage(
 
     drawAmoledRowPanel(lcd, 48, 46);
     drawAmoledRowPanel(lcd, 102, 46);
+    #if defined(OPENDRIFT_USB_MAINTENANCE)
     drawAmoledRowPanel(lcd, 156, 38);
+    #endif
     drawAmoledRowPanel(lcd, 198, 46);
 
     lcd->setTextSize(2);
@@ -2307,11 +2423,9 @@ void UI::drawSystemPage(
         116
     );
 
-    lcd->drawString(
-        "BLACKBOX",
-        22,
-        168
-    );
+    #if defined(OPENDRIFT_USB_MAINTENANCE)
+    lcd->drawString("USB MAINT", 22, 168);
+    #endif
 
     lcd->drawString(
         #if defined(OPENDRIFT_INPUT_CRSF)
@@ -2366,11 +2480,18 @@ void UI::drawSystemPage(
         2
     );
 
-    lcd->drawString(
-        settings.getBlackboxEnabled() ? "ON" : "OFF",
+    #if defined(OPENDRIFT_USB_MAINTENANCE)
+    drawAmoledButton(
+        lcd,
         150,
-        160
+        156,
+        240,
+        38,
+        usbMaintenanceHoldStartedAt != 0 ? "KEEP HOLD" : "USB MODE",
+        OD_AMBER,
+        2
     );
+    #endif
 
     drawAmoledButton(
         lcd,
@@ -2502,6 +2623,102 @@ void UI::drawSystemPage(
     drawPageDots();
 
 }
+
+
+#if defined(OPENDRIFT_BOARD_AMOLED_164)
+void UI::drawBlackboxPage(Settings& settings)
+{
+    drawUiBackground(lcd);
+    drawAmoledHeader(lcd, "Blackbox", OD_GREEN);
+
+    drawAmoledRowPanel(lcd, 48, 44);
+    drawAmoledRowPanel(lcd, 98, 56);
+    drawAmoledRowPanel(lcd, 160, 42);
+
+    lcd->setTextDatum(top_left);
+    lcd->setTextSize(2);
+    lcd->setTextColor(OD_MUTED);
+    lcd->drawString("RECORDER", 22, 61);
+
+    drawAmoledButton(
+        lcd,
+        300,
+        51,
+        128,
+        38,
+        settings.getBlackboxEnabled() ? "ENABLED" : "DISABLED",
+        settings.getBlackboxEnabled() ? OD_GREEN : OD_RED,
+        1
+    );
+
+    size_t ramRecords = 0;
+    size_t ramBytes = 0;
+    size_t ramCapacity = 0;
+    uint32_t ramDuration = 0;
+    size_t savedRecords = 0;
+    size_t savedBytes = 0;
+    uint32_t savedDuration = 0;
+    const char* target = "UNAVAILABLE";
+
+    if(blackboxArchive != nullptr)
+    {
+        ramRecords = blackboxArchive->getRamRecordCount();
+        ramBytes = blackboxArchive->getRamBytes();
+        ramCapacity = blackboxArchive->getRamCapacityBytes();
+        ramDuration = blackboxArchive->getRamDurationMs();
+        savedRecords = blackboxArchive->getArchiveRecordCount();
+        savedBytes = blackboxArchive->getArchiveBytes();
+        savedDuration = blackboxArchive->getArchiveDurationMs();
+        target = blackboxArchive->getStorageName();
+    }
+
+    char ramStats[96];
+    snprintf(
+        ramStats,
+        sizeof(ramStats),
+        "%u records  |  %u / %u KB  |  %02lu:%02lu",
+        (unsigned int)ramRecords,
+        (unsigned int)(ramBytes / 1024U),
+        (unsigned int)(ramCapacity / 1024U),
+        (unsigned long)(ramDuration / 60000UL),
+        (unsigned long)((ramDuration / 1000UL) % 60UL)
+    );
+
+    lcd->setTextColor(OD_CYAN);
+    lcd->setTextSize(1);
+    lcd->drawString("RAM CAPTURE", 22, 108);
+    lcd->setTextColor(OD_TEXT);
+    lcd->drawString(ramStats, 22, 130);
+
+    char savedStats[112];
+    snprintf(
+        savedStats,
+        sizeof(savedStats),
+        "%s  |  %u records  |  %u KB  |  %02lu:%02lu",
+        target,
+        (unsigned int)savedRecords,
+        (unsigned int)(savedBytes / 1024U),
+        (unsigned long)(savedDuration / 60000UL),
+        (unsigned long)((savedDuration / 1000UL) % 60UL)
+    );
+
+    lcd->setTextColor(OD_MUTED);
+    lcd->setTextSize(1);
+    lcd->drawString("SAVED: ", 22, 174);
+    lcd->setTextColor(OD_TEXT);
+    lcd->drawString(savedStats, 78, 174);
+
+    const char* dumpLabel =
+        strcmp(target, "SD card") == 0
+        ? "DUMP TO SD CARD"
+        : "DUMP TO FLASH";
+
+    drawAmoledButton(lcd, 22, 210, 270, 38, dumpLabel, OD_GREEN, 2);
+    drawAmoledButton(lcd, 300, 210, 128, 38, "CLEAR RAM", OD_AMBER, 1);
+
+    drawPageDots();
+}
+#endif
 
 
 
@@ -2647,6 +2864,12 @@ bool UI::isProfilesPage()
 void UI::setBackgroundStore(Backgrounds& store)
 {
     backgroundStore = &store;
+}
+
+
+void UI::setBlackboxArchive(BlackboxArchive& archive)
+{
+    blackboxArchive = &archive;
 }
 
 
@@ -5648,6 +5871,19 @@ bool UI::actionButtonAt(
     )
         return true;
 
+    #if defined(OPENDRIFT_USB_MAINTENANCE)
+    if(page == PAGE_SYSTEM && buttonPressed(x, y, 150, 156, 240, 38))
+        return true;
+    #endif
+
+    if(page == PAGE_BLACKBOX)
+    {
+        return
+            buttonPressed(x, y, 300, 51, 128, 38) ||
+            buttonPressed(x, y, 22, 210, 270, 38) ||
+            buttonPressed(x, y, 300, 210, 128, 38);
+    }
+
     if(
         page == PAGE_SYSTEM
         #if defined(OPENDRIFT_INPUT_CRSF)
@@ -6018,6 +6254,28 @@ void UI::update(
     bool touched =
         touch.isTouched();
 
+    #if defined(OPENDRIFT_USB_MAINTENANCE)
+    if(firmwareUpdateNoticeVisible)
+    {
+        if((int32_t)(millis() - firmwareUpdateNoticeUntil) < 0)
+        {
+            lastTouchState = touched;
+            return;
+        }
+
+        firmwareUpdateNoticeVisible = false;
+        drawPage(
+            gyro,
+            wifi,
+            settings,
+            steeringRadio,
+            gainRadio
+        );
+        lastTouchState = touched;
+        return;
+    }
+    #endif
+
     #if defined(OPENDRIFT_BOARD_AMOLED_164)
     if(updateDisplayBrightness(settings, touched))
     {
@@ -6033,6 +6291,67 @@ void UI::update(
     if(applyBackground(settings))
     {
         refreshRequested = true;
+    }
+
+    if(blackboxArchive != nullptr)
+    {
+        const BlackboxArchive::Status archiveStatus =
+            blackboxArchive->getStatus();
+
+        if(archiveStatus == BlackboxArchive::SAVING)
+        {
+            const uint8_t progress = blackboxArchive->getProgress();
+
+            if(!blackboxProgressVisible || progress != lastBlackboxProgress)
+            {
+                drawBlackboxProgress(progress, archiveStatus);
+                lastBlackboxProgress = progress;
+            }
+
+            blackboxProgressVisible = true;
+            blackboxResultShownAt = 0;
+            trackingSwipe = false;
+            swipePreviewActive = false;
+            heldRepeatButton = 0;
+            lastTouchState = touched;
+            return;
+        }
+
+        if(blackboxProgressVisible)
+        {
+            if(blackboxResultShownAt == 0)
+            {
+                drawBlackboxProgress(
+                    archiveStatus == BlackboxArchive::SAVED ? 100 : lastBlackboxProgress,
+                    archiveStatus
+                );
+                blackboxResultShownAt = millis();
+            }
+
+            if(millis() - blackboxResultShownAt < 1800)
+            {
+                lastTouchState = touched;
+                return;
+            }
+
+            blackboxProgressVisible = false;
+            blackboxResultShownAt = 0;
+            lastBlackboxProgress = 255;
+            trackingSwipe = false;
+            swipePreviewActive = false;
+            heldRepeatButton = 0;
+            lastTouchState = touched;
+            refreshRequested = false;
+
+            drawPage(
+                gyro,
+                wifi,
+                settings,
+                steeringRadio,
+                gainRadio
+            );
+            return;
+        }
     }
     #endif
 
@@ -6131,6 +6450,9 @@ void UI::update(
             page == PAGE_DRIVE ||
             page == PAGE_RADIO ||
             page == PAGE_STEERING
+            #if defined(OPENDRIFT_BOARD_AMOLED_164)
+            || page == PAGE_BLACKBOX
+            #endif
         ) &&
         !touched &&
         !lastTouchState &&
@@ -6154,6 +6476,12 @@ void UI::update(
                 );
             }
         }
+        #if defined(OPENDRIFT_BOARD_AMOLED_164)
+        else if(page == PAGE_BLACKBOX)
+        {
+            drawBlackboxPage(settings);
+        }
+        #endif
         else
         {
             updateRadioPage(
@@ -6349,6 +6677,14 @@ void UI::update(
 
         steeringCalibrationResetPoint = -1;
         steeringCalibrationResetStartedAt = 0;
+
+        #if defined(OPENDRIFT_USB_MAINTENANCE)
+        if(usbMaintenanceHoldStartedAt != 0)
+        {
+            usbMaintenanceHoldStartedAt = 0;
+            if(page == PAGE_SYSTEM) drawSystemPage(settings);
+        }
+        #endif
 
         int delta =
             touch.getX()
@@ -6615,6 +6951,34 @@ void UI::update(
 
 
     #if defined(OPENDRIFT_BOARD_AMOLED_164)
+    #if defined(OPENDRIFT_USB_MAINTENANCE)
+    if(touched && page == PAGE_SYSTEM && usbMaintenanceHoldStartedAt != 0)
+    {
+        const bool stillOnButton = buttonPressed(
+            touch.getX(),
+            touch.getY(),
+            150,
+            156,
+            240,
+            38
+        );
+
+        if(!stillOnButton)
+        {
+            usbMaintenanceHoldStartedAt = 0;
+            drawSystemPage(settings);
+        }
+        else if(millis() - usbMaintenanceHoldStartedAt >= 1500)
+        {
+            usbMaintenanceHoldStartedAt = 0;
+            if(usbMaintenanceCallback != nullptr) usbMaintenanceCallback();
+        }
+
+        lastTouchState = touched;
+        return;
+    }
+    #endif
+
     if(
         touched &&
         page == PAGE_STEERING_CAL &&
@@ -6938,6 +7302,59 @@ void UI::update(
             lastTouchState = touched;
             return;
         }
+
+        if(page == PAGE_BLACKBOX)
+        {
+            if(buttonPressed(x, y, 300, 51, 128, 38))
+            {
+                settings.setBlackboxEnabled(!settings.getBlackboxEnabled());
+                drawBlackboxPage(settings);
+                lastTouchState = touched;
+                return;
+            }
+
+            if(
+                buttonPressed(x, y, 22, 210, 270, 38) &&
+                blackboxArchive != nullptr
+            )
+            {
+                const bool noReceiverSignals =
+                    !steeringRadio.hasSignal() &&
+                    (
+                        throttleRadioInput == nullptr ||
+                        !throttleRadioInput->hasSignal()
+                    );
+
+                blackboxArchive->requestSave(noReceiverSignals);
+                drawBlackboxPage(settings);
+                lastTouchState = touched;
+                return;
+            }
+
+            if(
+                buttonPressed(x, y, 300, 210, 128, 38) &&
+                blackboxArchive != nullptr
+            )
+            {
+                blackboxArchive->clearRamLog();
+                drawBlackboxPage(settings);
+                lastTouchState = touched;
+                return;
+            }
+        }
+
+        #if defined(OPENDRIFT_USB_MAINTENANCE)
+        if(
+            page == PAGE_SYSTEM &&
+            buttonPressed(x, y, 150, 156, 240, 38)
+        )
+        {
+            usbMaintenanceHoldStartedAt = millis();
+            drawSystemPage(settings);
+            lastTouchState = touched;
+            return;
+        }
+        #endif
 
         if(
             page == PAGE_SYSTEM &&

@@ -13,6 +13,7 @@
 
 #if defined(OPENDRIFT_BOARD_AMOLED_164)
 #include "Backgrounds.h"
+#include "BlackboxArchive.h"
 #endif
 
 
@@ -39,6 +40,10 @@ public:
     void setBackgroundStore(
         Backgrounds& store
     );
+
+    void setBlackboxArchive(
+        BlackboxArchive& archive
+    );
     #endif
 
     void requestRefresh();
@@ -46,6 +51,14 @@ public:
     void setCalibrationCallback(
         void (*callback)()
     );
+
+    #if defined(OPENDRIFT_USB_MAINTENANCE)
+    void setUsbMaintenanceCallback(
+        void (*callback)()
+    );
+
+    void showFirmwareUpdateCompleted();
+    #endif
 
 
     void update(
@@ -84,6 +97,13 @@ private:
 
     void (*calibrationCallback)() = nullptr;
 
+    #if defined(OPENDRIFT_USB_MAINTENANCE)
+    void (*usbMaintenanceCallback)() = nullptr;
+    unsigned long usbMaintenanceHoldStartedAt = 0;
+    bool firmwareUpdateNoticeVisible = false;
+    unsigned long firmwareUpdateNoticeUntil = 0;
+    #endif
+
     LGFX_Sprite canvas;
 
     LGFX_Sprite transitionCanvas;
@@ -93,6 +113,15 @@ private:
     #if defined(OPENDRIFT_BOARD_AMOLED_164)
     LGFX_Sprite panelCanvas;
     bool panelCanvasReady = false;
+    BlackboxArchive* blackboxArchive = nullptr;
+    bool blackboxProgressVisible = false;
+    uint8_t lastBlackboxProgress = 255;
+    unsigned long blackboxResultShownAt = 0;
+
+    void drawBlackboxProgress(
+        uint8_t progress,
+        BlackboxArchive::Status status
+    );
     #endif
 
     LGFX_Sprite* lcd = nullptr;
@@ -119,14 +148,14 @@ private:
 
     // Pages
     // Shared order: Drive, Core, Response, Drift Assist, Experimental,
-    // Profiles, Radio, Steering, Physical Endpoints, WiFi, System, and
-    // Backgrounds on AMOLED builds.
+    // Profiles, Radio, Steering, Physical Endpoints, WiFi, System,
+    // Blackbox, and Backgrounds on AMOLED builds.
 
     uint8_t page = 0;
 
 
     #if defined(OPENDRIFT_BOARD_AMOLED_164)
-    const uint8_t totalPages = 12;
+    const uint8_t totalPages = 13;
     #else
     const uint8_t totalPages = 11;
     #endif
@@ -287,6 +316,12 @@ private:
     void drawSystemPage(
         Settings& settings
     );
+
+    #if defined(OPENDRIFT_BOARD_AMOLED_164)
+    void drawBlackboxPage(
+        Settings& settings
+    );
+    #endif
 
 
 

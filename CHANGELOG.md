@@ -57,13 +57,24 @@
 
 - Adds a parked-only **Save Log** command to CRSF/EdgeTX and the web
   configurator. Driving data remains in PSRAM while the car is moving and is
-  copied to internal flash only after the car is safely parked.
+  copied to persistent storage only after the car is safely parked.
 - Writes the archive incrementally with a temporary file, checksum, free-space
   check, backup/recovery path, progress reporting, and cancellation if the car
   moves before the save completes.
 - Allows a saved binary archive to be downloaded later as CSV, making logs
   recoverable after WiFi trouble without introducing flash stalls into the
   control loop.
+- Adds native microSD detection on the Waveshare AMOLED board. When a readable
+  card is installed, parked dumps are written directly as CSV and internal
+  flash remains the automatic fallback when no card is available.
+- Keeps every SD dump as a separate sequential file such as
+  `opendrift-blackbox-0001.csv`; existing sessions are never overwritten and
+  numbering resumes after reboot.
+- Adds a dedicated AMOLED **Blackbox** page with logging enable/disable, live
+  RAM record/size/duration statistics, saved-log statistics, dump progress,
+  storage target, and RAM-clear controls.
+- Adds a matching web-configurator dump command and permits receiver-free bench
+  capture in the private maintenance build for storage testing.
 
 ### WiFi and web configurator
 
@@ -112,6 +123,20 @@
   intentionally excluded from public release assets and the web flasher.
 - Adds a private Waveshare AMOLED V2 CRSF recovery target that moves a damaged
   GPIO16 throttle output to GPIO8 without changing the official build pinouts.
+- Gives that private recovery target an isolated USB maintenance mode backed by
+  dual OTA app partitions. Its writable firmware volume accepts a complete
+  `firmware.bin`, verifies it, selects the new partition, and reboots
+  automatically; an installed microSD card is exposed separately as a genuine
+  read-only log volume.
+- Reports firmware-copy activity and errors on the AMOLED, disables manual
+  restart while flash is being written, records the source OTA partition, and
+  shows a one-time **Update Complete** confirmation only after the new
+  partition actually boots.
+- Makes the maintenance restart close both mass-storage devices and logically
+  disconnect USB before rebooting. USB is re-enumerated only after its media
+  are ready, reducing slow drive discovery on desktop Linux.
+- Adds a visibly marked, private USB OTA test-payload target for validating the
+  complete update path without changing or publishing official firmware.
 - Adds the experimental **GroundTX** surface-radio interface prototype for the
   RadioMaster MT12. It currently demonstrates safe, memory-only setup screens
   and mix workflows without modifying the active EdgeTX model.

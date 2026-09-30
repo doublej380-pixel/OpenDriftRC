@@ -53,6 +53,8 @@ Visit [opendriftrc.com](https://opendriftrc.com) for the project overview, [wiri
 - WiFi access point.
 - Browser-based web configurator.
 - Non-blocking PSRAM blackbox logging with controller, prediction, throttle, notch, chassis-motion, and correction telemetry.
+- Parked blackbox archiving to sequential CSV files on AMOLED microSD, with an
+  internal-flash fallback when no card is installed.
 - Persistent settings stored in ESP32 preferences.
 - Transition Speed adjustment centered at the neutral baseline of `50`.
 - Driver Priority adjustment that yields fast direct gyro gain as steering input increases; default `0` preserves the established response.
@@ -408,12 +410,26 @@ OpenDrift records fixed-size blackbox samples into a 4 MB circular PSRAM buffer 
 
 Blackbox logging is disabled by default. Enable `Onboard logging` in the web configurator only when you want to collect data, then save settings.
 
-No flash or filesystem writes occur while driving. Once the circular buffer is full, the oldest records are overwritten so the newest behavior remains available. Download the CSV before removing power because PSRAM is volatile.
+No flash or filesystem writes occur while driving. Once the circular buffer is
+full, the oldest records are overwritten so the newest behavior remains
+available. Park the car before saving the RAM log to persistent storage.
+
+On AMOLED hardware, an installed microSD card is preferred and each dump is
+saved as a new CSV (`opendrift-blackbox-0001.csv`, `0002`, and onward). Existing
+sessions are preserved and numbering continues after reboot. Without an SD
+card, OpenDrift stores one compact binary archive in internal flash and converts
+it to CSV when downloaded through the web configurator.
+
+The dedicated AMOLED **Blackbox** page shows the current RAM records, used and
+available space, captured duration, archive destination, saved-log statistics,
+and dump progress. It also provides logging, dump, and RAM-clear controls.
 
 The web configurator shows the current log size and provides:
 
 - `Download CSV`
 - `Clear RAM Log`
+- `Dump RAM Log to SD card` or internal flash, according to available storage
+- `Download saved CSV`
 
 Log rows include:
 
@@ -448,7 +464,10 @@ Suggested test workflow:
 3. Enable onboard logging if it is off, then save settings.
 4. Tap `Clear RAM Log`.
 5. Drive the car.
-6. Reconnect to WiFi and tap `Download CSV` before resetting or removing power.
+6. Stop and leave the car parked for two seconds.
+7. Dump the RAM log from the AMOLED Blackbox page, EdgeTX tool, or web
+   configurator.
+8. Download the saved CSV over WiFi, or remove/read the SD card later.
 
 The CSV can be pasted into a spreadsheet or plotted to see whether the car spun because of delayed correction, overcorrection, max correction saturation, noisy yaw, or steering/radio behavior.
 

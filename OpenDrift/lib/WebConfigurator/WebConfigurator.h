@@ -101,6 +101,7 @@ private:
     void handleBackgroundDelete();
     void handleArchivedLogDownload();
     void handleArchivedLogClear();
+    void handleArchivedLogSave();
     #endif
 
     void handleNotFound();
