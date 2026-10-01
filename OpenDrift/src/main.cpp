@@ -1568,10 +1568,6 @@ void setup()
 
     Serial.println("OpenDrift Starting");
 
-    #if defined(OPENDRIFT_USB_UPDATE_TEST_PAYLOAD)
-    Serial.println("USB OTA TEST PAYLOAD ACTIVE");
-    #endif
-
     #if defined(OPENDRIFT_INPUT_CRSF)
     // Do not let a powered F1000 receiver start UART activity while the panel,
     // sensors, PSRAM, and shared resources are still being initialized.

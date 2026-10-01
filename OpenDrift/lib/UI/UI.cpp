@@ -1878,11 +1878,7 @@ void UI::drawMainPage(
     #if defined(OPENDRIFT_BOARD_AMOLED_164)
     drawAmoledHeader(
         lcd,
-        #if defined(OPENDRIFT_USB_UPDATE_TEST_PAYLOAD)
-        "Drive - OTA TEST",
-        #else
         "Drive",
-        #endif
         OD_CYAN
     );
 
@@ -2081,22 +2077,14 @@ void UI::showFirmwareUpdateCompleted()
     lcd->setTextColor(TFT_GREEN);
     lcd->setTextSize(3);
     lcd->drawString(
-        #if defined(OPENDRIFT_USB_UPDATE_TEST_PAYLOAD)
-        "USB TEST PASSED",
-        #else
         "UPDATE COMPLETE",
-        #endif
         228,
         110
     );
     lcd->setTextColor(TFT_WHITE);
     lcd->setTextSize(2);
     lcd->drawString(
-        #if defined(OPENDRIFT_USB_UPDATE_TEST_PAYLOAD)
-        "OTA payload is running",
-        #else
         "New firmware is running",
-        #endif
         228,
         158
     );
