@@ -15,6 +15,14 @@ The updated path:
   delay afterward. This targets 60 Hz pacing, not guaranteed 60 FPS.
 - Updates live Radio/Steering values every 50 ms (20 Hz maximum); other idle
   status pages keep their existing lower update rate.
+- Reads the FT3168 point count and coordinates together in one repeated-start
+  I2C transaction. Releases a valid touch after 18 ms without a reported point,
+  while I2C read failures retain the longer 80 ms hold to avoid false releases
+  during a transient bus error.
+- Starts the AMOLED page preview after 6 pixels of horizontal travel. Page
+  changes commit after 24 pixels or a short, fast flick whose projected travel
+  clears the page threshold. Release velocity also shortens the completion
+  animation, while the direction check continues rejecting vertical movement.
 - Leaves the panel SPI clock and independent controller task unchanged.
 
 The swipe cache is allocated lazily in PSRAM and occupies 766,080 bytes. It is

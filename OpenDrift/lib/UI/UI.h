@@ -81,6 +81,12 @@ private:
     static constexpr int UI_CENTER_X = 228;
     static constexpr int UI_FOOTER_Y = 254;
     static constexpr int UI_DOTS_Y = 260;
+    static constexpr int SWIPE_PREVIEW_DISTANCE_PX = 6;
+    static constexpr int SWIPE_COMMIT_DISTANCE_PX = 24;
+    static constexpr int SWIPE_FLICK_MIN_DISTANCE_PX = 8;
+    static constexpr int SWIPE_FLICK_PROJECTED_DISTANCE_PX = 55;
+    static constexpr uint32_t SWIPE_FLICK_MEMORY_MS = 120;
+    static constexpr float SWIPE_FLICK_PROJECTION_SECONDS = 0.12f;
     #else
     static constexpr int UI_CANVAS_WIDTH = 240;
     static constexpr int UI_CANVAS_HEIGHT = 240;
@@ -218,6 +224,11 @@ private:
 
     unsigned long lastSwipePreviewAt = 0;
 
+    int swipeLastX = 0;
+    unsigned long swipeLastSampleAt = 0;
+    unsigned long swipeLastMoveAt = 0;
+    float swipeVelocityX = 0.0f;
+
     uint8_t appliedBrightnessLevel = 0xFF;
     unsigned long lastTouchMs = 0;
     uint16_t lastDimTimeoutSeconds = 0;
@@ -287,7 +298,8 @@ private:
     );
 
     void finishSwipePreview(
-        bool commit
+        bool commit,
+        float releaseVelocityX = 0.0f
     );
 
 

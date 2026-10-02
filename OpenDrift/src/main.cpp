@@ -4,6 +4,9 @@
 #include <freertos/semphr.h>
 #include <freertos/task.h>
 #include <esp_system.h>
+#if defined(OPENDRIFT_USB_MAINTENANCE)
+#include <tusb.h>
+#endif
 
 #if !defined(OPENDRIFT_HEADLESS)
 #include "LGFX_OpenDrift.hpp"
@@ -83,10 +86,10 @@ ControlDiagnostics controlDiagnostics;
 #if defined(OPENDRIFT_BOARD_AMOLED_164)
 Backgrounds backgrounds;
 BlackboxArchive blackboxArchive;
-OnboardStorage onboardStorage;
 #if defined(OPENDRIFT_USB_MAINTENANCE)
 UsbMaintenance usbMaintenance;
 #endif
+OnboardStorage onboardStorage;
 #endif
 
 unsigned long lastBlackboxLog = 0;
@@ -1588,6 +1591,18 @@ void setup()
     const bool automaticRecovery = !manualMaintenance && UsbMaintenance::recordBootAttempt(
         esp_reset_reason() == ESP_RST_POWERON || esp_reset_reason() == ESP_RST_BROWNOUT);
     const bool enterMaintenance = manualMaintenance || automaticRecovery;
+
+    // Arduino starts native USB before setup(). Keep maintenance boots off the
+    // bus until both MSC LUNs are fully initialized; Windows otherwise caches
+    // the early unnamed/no-media LUNs and may never retry the second drive.
+    if(enterMaintenance)
+    {
+        tud_disconnect();
+    }
+    else
+    {
+        UsbMaintenance::releaseUsbEnumeration();
+    }
     #endif
     Serial.begin(115200);
     webConfig.setControlDiagnostics(controlDiagnostics);
@@ -2543,6 +2558,43 @@ void loop()
     #if defined(OPENDRIFT_USB_MAINTENANCE)
     if(usbMaintenanceActive)
     {
+        static uint32_t lastReportedUsbSdActivity = 0;
+        static uint32_t lastUsbSdReportAtMs = 0;
+        const OnboardStorage::UsbReadDiagnostics sd =
+            onboardStorage.getUsbReadDiagnostics();
+        const uint32_t sdActivity =
+            sd.callbacks + sd.busyReturns + sd.requestMismatches +
+            sd.invalidRequests;
+        const uint32_t callbackIdleMs = millis() - sd.lastCallbackAtMs;
+        if(
+            sdActivity != lastReportedUsbSdActivity &&
+            (callbackIdleMs >= 2000UL ||
+             millis() - lastUsbSdReportAtMs >= 5000UL)
+        )
+        {
+            lastReportedUsbSdActivity = sdActivity;
+            lastUsbSdReportAtMs = millis();
+            Serial.printf(
+                "USB SD reads=%lu fail=%lu bytes=%lu io_last=%luus io_max=%luus lba=%lu off=%lu size=%lu err=%u cb=%lu busy=%lu mismatch=%lu invalid=%lu wait_last=%luus wait_max=%luus state=%u\n",
+                (unsigned long)sd.reads,
+                (unsigned long)sd.failures,
+                (unsigned long)sd.bytes,
+                (unsigned long)sd.lastDurationUs,
+                (unsigned long)sd.maxDurationUs,
+                (unsigned long)sd.lastLba,
+                (unsigned long)sd.lastOffset,
+                (unsigned long)sd.lastSize,
+                sd.lastError,
+                (unsigned long)sd.callbacks,
+                (unsigned long)sd.busyReturns,
+                (unsigned long)sd.requestMismatches,
+                (unsigned long)sd.invalidRequests,
+                (unsigned long)sd.lastCallbackWaitUs,
+                (unsigned long)sd.maxCallbackWaitUs,
+                sd.workerState
+            );
+        }
+
         const uint32_t updateRevision =
             usbMaintenance.getUpdateRevision();
         if(updateRevision != lastUsbUpdateRevision)

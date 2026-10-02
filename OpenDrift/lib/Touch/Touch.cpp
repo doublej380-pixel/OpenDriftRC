@@ -4,6 +4,8 @@
 #if defined(OPENDRIFT_BOARD_AMOLED_164)
 
 static constexpr uint8_t FT3168_ADDR = 0x38;
+static constexpr unsigned long FT3168_RELEASE_HOLD_MS = 18;
+static constexpr unsigned long FT3168_READ_FAILURE_HOLD_MS = 80;
 
 Touch::Touch()
 {
@@ -59,14 +61,10 @@ static bool readTouchBytes(
         reg
     );
 
-    if(Wire.endTransmission(true) != 0)
+    if(Wire.endTransmission(false) != 0)
     {
         return false;
     }
-
-    delayMicroseconds(
-        150
-    );
 
     if(Wire.requestFrom(
         FT3168_ADDR,
@@ -97,12 +95,12 @@ void Touch::update()
         return;
     }
 
-    uint8_t points = 0;
+    uint8_t data[5];
 
     if(!readTouchBytes(
         0x02,
-        &points,
-        1
+        data,
+        sizeof(data)
     ))
     {
         touchReadFailures++;
@@ -118,7 +116,7 @@ void Touch::update()
             Serial.println("Touch read unstable");
         }
 
-        if(millis() - lastEventMs > 80)
+        if(millis() - lastEventMs > FT3168_READ_FAILURE_HOLD_MS)
         {
             pressed = false;
 
@@ -130,9 +128,9 @@ void Touch::update()
 
     touchReadFailures = 0;
 
-    if((points & 0x0F) == 0)
+    if((data[0] & 0x0F) == 0)
     {
-        if(millis() - lastEventMs > 80)
+        if(millis() - lastEventMs > FT3168_RELEASE_HOLD_MS)
         {
             pressed = false;
 
@@ -144,41 +142,15 @@ void Touch::update()
         return;
     }
 
-    uint8_t data[4];
-
-    if(!readTouchBytes(
-        0x03,
-        data,
-        sizeof(data)
-    ))
-    {
-        touchReadFailures++;
-
-        if(
-            touchReadFailures >= 8 &&
-            millis() - lastTouchErrorMs > 5000
-        )
-        {
-            lastTouchErrorMs =
-                millis();
-
-            Serial.println("Touch coordinate read unstable");
-        }
-
-        return;
-    }
-
-    touchReadFailures = 0;
-
     uint16_t rawX =
-        (((uint16_t)data[0] & 0x0F) << 8)
+        (((uint16_t)data[1] & 0x0F) << 8)
         |
-        data[1];
+        data[2];
 
     uint16_t rawY =
-        (((uint16_t)data[2] & 0x0F) << 8)
+        (((uint16_t)data[3] & 0x0F) << 8)
         |
-        data[3];
+        data[4];
 
     rawX =
         constrain(

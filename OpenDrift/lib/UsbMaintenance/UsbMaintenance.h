@@ -25,6 +25,7 @@ public:
     static bool recordBootAttempt(bool coldBoot);
     static void markBootHealthy();
     static bool consumeCompletedUpdate();
+    static void releaseUsbEnumeration();
 
     bool begin(OnboardStorage& storage);
     void prepareForRestart(OnboardStorage& storage);

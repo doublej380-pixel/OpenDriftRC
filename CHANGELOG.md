@@ -39,6 +39,55 @@
   builds now use native TinyUSB and dual 3 MB OTA slots while keeping NVS and
   FFat addresses unchanged. Existing official installs require a full
   PlatformIO upload to install the new partition table first.
+- Reports two active MSC LUNs through TinyUSB's count-based callback, which
+  TinyUSB converts to the correct zero-based maximum LUN value of one.
+- Extends USB SD serial diagnostics with callback busy returns, request
+  mismatches, invalid requests, callback wait time, and worker state so host
+  stalls can be separated from successful low-level SD transactions.
+- Serves the read-only USB SD volume one 512-byte sector per callback. TinyUSB
+  continues larger READ(10) commands through short reads, while the shorter
+  callback wait and Arduino SD single-block path reduce USB task starvation
+  risk without changing normal SD mounting or blackbox logging.
+- Reduces the AMOLED horizontal page-swipe commit distance from 40 to 24
+  pixels while retaining horizontal direction validation.
+- Adds momentum-aware AMOLED page swipes: preview begins after 6 pixels, short
+  fast flicks commit using projected travel, and release velocity shortens the
+  remaining page animation. Slow small movements still settle back.
+- Reads the FT3168 point count and coordinates in one repeated-start I2C
+  transaction and reduces the touch-release hold from 35 ms to 18 ms, lowering
+  swipe sampling overhead and flick-release latency.
+- Places the firmware updater on primary LUN 0 and the read-only SD card on
+  LUN 1, and advertises the ESP32-S3 full-speed connection as USB 1.1 to avoid
+  Windows 11 dual-LUN enumeration stalls while retaining both volumes.
+- Disconnects maintenance-mode USB at the start of application setup and
+  reconnects only after both LUNs are fully initialized, preventing Windows
+  from caching the SD LUN's early unnamed/no-media state.
+- Gates TinyUSB synchronously at its initial mount callback, before Arduino
+  enters application setup, so Windows cannot probe either LUN during the
+  framework's otherwise unavoidable pre-setup USB enumeration.
+- Normalizes TinyUSB's command-relative READ(10) offset before accessing SD
+  sectors, allowing Windows reads larger than the 4096-byte USB MSC buffer
+  instead of rejecting their second and subsequent chunks.
+- Batches aligned USB reads through the SD driver's multi-block command instead
+  of issuing a separate SPI command for every 512-byte sector.
+- Adds once-per-second USB serial telemetry for SD MSC read counts, failures,
+  transfer sizes, callback latency, and failure stage while in maintenance mode.
+- Raises the AMOLED SD SPI clock from 10 MHz to a conservative 20 MHz after
+  diagnostics confirmed large host metadata scans were transfer-bound with no
+  raw SD read failures.
+- Defers USB SD telemetry until mass-storage reads have been idle for two
+  seconds, preventing CDC diagnostics from competing with sustained MSC traffic
+  on the shared full-speed USB controller.
+- Moves USB SD reads out of TinyUSB's high-priority callback into a dedicated
+  low-priority worker with a bounded handoff buffer. Slow card transactions can
+  no longer freeze the USB task and maintenance UI together.
+- Waits cooperatively for ordinary worker reads to complete as one MSC callback,
+  avoiding rapid TinyUSB busy retries that Windows treated as an I/O error.
+- Keeps explicitly requested USB maintenance mode latched across unexpected
+  software/watchdog resets so actuator initialization cannot follow a failed
+  maintenance session. Intentional restart and completed updates clear it.
+- Periodically yields during sustained SD MSC scans so TinyUSB's high-priority
+  task cannot starve ESP32 idle/watchdog work during long host metadata reads.
 - Adds RTC-backed automatic maintenance recovery after three unfinished boots
   across software/watchdog resets. Normal startup is confirmed after 15 seconds
   in the main loop; intentional maintenance restarts do not count as failures.

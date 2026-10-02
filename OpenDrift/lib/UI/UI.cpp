@@ -1329,7 +1329,8 @@ bool UI::prepareSwipePreview(
 
 
 void UI::finishSwipePreview(
-    bool commit
+    bool commit,
+    float releaseVelocityX
 )
 {
     #if defined(OPENDRIFT_BOARD_AMOLED_164)
@@ -1354,8 +1355,31 @@ void UI::finishSwipePreview(
         :
         0;
 
-    animateTransition(startOffset, endOffset, swipePreviewDirection,
-        constrain(abs(endOffset - startOffset) * 220 / UI_CANVAS_WIDTH, 70, 220));
+    uint32_t durationMs =
+        constrain(abs(endOffset - startOffset) * 220 / UI_CANVAS_WIDTH, 70, 220);
+
+    if(commit)
+    {
+        const float velocityTowardTarget =
+            swipePreviewDirection > 0
+                ? -releaseVelocityX
+                : releaseVelocityX;
+
+        if(velocityTowardTarget > 0.0f)
+        {
+            const uint32_t momentumReduction = constrain(
+                static_cast<uint32_t>(velocityTowardTarget / 8.0f),
+                0UL,
+                100UL
+            );
+            durationMs = max(
+                static_cast<uint32_t>(70),
+                durationMs - min(durationMs, momentumReduction)
+            );
+        }
+    }
+
+    animateTransition(startOffset, endOffset, swipePreviewDirection, durationMs);
     reportTransitionTiming();
 
     if(commit)
@@ -6585,6 +6609,11 @@ void UI::update(
         swipePreviewOffset = 0;
 
         lastSwipePreviewAt = 0;
+
+        swipeLastX = touchStartX;
+        swipeLastSampleAt = millis();
+        swipeLastMoveAt = 0;
+        swipeVelocityX = 0.0f;
         #endif
 
         if(heldRepeatButton != 0)
@@ -6654,8 +6683,38 @@ void UI::update(
         trackingSwipe
     )
     {
+        const unsigned long now = millis();
+        const int currentX = touch.getX();
+
+        if(currentX != swipeLastX)
+        {
+            const unsigned long elapsedMs = now - swipeLastSampleAt;
+            if(elapsedMs > 0)
+            {
+                const float instantVelocity =
+                    (currentX - swipeLastX) * 1000.0f / elapsedMs;
+
+                if(
+                    swipeVelocityX == 0.0f ||
+                    (instantVelocity < 0.0f) != (swipeVelocityX < 0.0f)
+                )
+                {
+                    swipeVelocityX = instantVelocity;
+                }
+                else
+                {
+                    swipeVelocityX =
+                        swipeVelocityX * 0.55f + instantVelocity * 0.45f;
+                }
+            }
+
+            swipeLastX = currentX;
+            swipeLastSampleAt = now;
+            swipeLastMoveAt = now;
+        }
+
         int delta =
-            touch.getX()
+            currentX
             -
             touchStartX;
 
@@ -6665,8 +6724,8 @@ void UI::update(
             touchStartY;
 
         if(
-            abs(delta) > 12 &&
-            abs(delta) > abs(deltaY) + 6
+            abs(delta) > SWIPE_PREVIEW_DISTANCE_PX &&
+            abs(delta) > abs(deltaY) + 3
         )
         {
             int8_t direction =
@@ -6925,12 +6984,33 @@ void UI::update(
             #if defined(OPENDRIFT_BOARD_AMOLED_164)
             if(swipePreviewActive)
             {
-                bool commit =
-                    abs(delta) > 72 &&
+                const float releaseVelocityX =
+                    swipeLastMoveAt != 0 &&
+                    millis() - swipeLastMoveAt <= SWIPE_FLICK_MEMORY_MS
+                        ? swipeVelocityX
+                        : 0.0f;
+                const float projectedDelta =
+                    delta +
+                    releaseVelocityX * SWIPE_FLICK_PROJECTION_SECONDS;
+                const bool horizontal =
                     abs(delta) > abs(deltaY);
+                const bool flickingSameDirection =
+                    (delta < 0 && releaseVelocityX < 0.0f) ||
+                    (delta > 0 && releaseVelocityX > 0.0f);
+                const bool quickFlick =
+                    abs(delta) > SWIPE_FLICK_MIN_DISTANCE_PX &&
+                    fabsf(projectedDelta) > SWIPE_FLICK_PROJECTED_DISTANCE_PX &&
+                    flickingSameDirection;
+                bool commit =
+                    horizontal &&
+                    (
+                        abs(delta) > SWIPE_COMMIT_DISTANCE_PX ||
+                        quickFlick
+                    );
 
                 finishSwipePreview(
-                    commit
+                    commit,
+                    releaseVelocityX
                 );
             }
             else

@@ -2,22 +2,78 @@
 
 #if defined(OPENDRIFT_BOARD_AMOLED_164)
 #include <SD.h>
+#include <vfs_api.h>
+extern "C" {
+#include <ff.h>
+#include <diskio.h>
+}
+
+DRESULT ff_sd_read(uint8_t pdrv, uint8_t* buffer, DWORD sector, UINT count);
 
 static constexpr int SD_CS_PIN = 38;
 static constexpr int SD_MOSI_PIN = 39;
 static constexpr int SD_MISO_PIN = 40;
 static constexpr int SD_CLOCK_PIN = 41;
-static constexpr uint32_t SD_FREQUENCY_HZ = 10000000;
+static constexpr uint32_t SD_FREQUENCY_HZ = 20000000;
+static constexpr uint32_t USB_SD_READ_CHUNK_SIZE = 512;
+
+class OpenDriftSDFS : public fs::SDFS
+{
+public:
+    OpenDriftSDFS() : SDFS(fs::FSImplPtr(new VFSImpl())) {}
+
+    bool readRAW(
+        uint8_t* buffer,
+        uint32_t sector,
+        uint32_t sectorCount
+    )
+    {
+        return
+            _pdrv != 0xFF &&
+            sectorCount > 0 &&
+            ff_sd_read(_pdrv, buffer, sector, sectorCount) == RES_OK;
+    }
+};
+
+static OpenDriftSDFS storageSd;
 
 #if defined(OPENDRIFT_USB_MAINTENANCE)
 OnboardStorage* OnboardStorage::activeInstance = nullptr;
 
-// OnboardStorage is constructed before FirmwareMSC, making the SD card LUN 0
-// and the writable firmware updater LUN 1. TinyUSB uses this callback for the
+// TinyUSB's callback expects the active LUN count and converts it to the
+// highest zero-based LUN in the USB response. OpenDrift always constructs
+// FirmwareMSC as LUN 0 and the SD disk as LUN 1, so the count is two.
+extern "C" uint8_t tud_msc_get_maxlun_cb(void)
+{
+    return 2;
+}
+
+// UsbMaintenance is constructed first, making the firmware updater LUN 0 and
+// the SD card LUN 1. TinyUSB uses this callback for the
 // SCSI write-protect bit reported to the host.
 extern "C" bool tud_msc_is_writable_cb(uint8_t lun)
 {
-    return lun != 0;
+    return lun == 0;
+}
+
+// The ESP32-S3 uses a full-speed PHY. Advertising USB 1.1 avoids Windows 11
+// dual-LUN enumeration failures seen with the framework's USB 2.0 descriptor.
+// bcdDevice is advanced so Windows refreshes the corrected device layout.
+static constexpr uint8_t OPENDRIFT_USB_DEVICE_DESCRIPTOR[] = {
+    18, 0x01,
+    0x10, 0x01,
+    0xEF, 0x02, 0x01,
+    64,
+    0x3A, 0x30,
+    0x02, 0x00,
+    0x01, 0x01,
+    0x01, 0x02, 0x03,
+    0x01
+};
+
+extern "C" const uint8_t* tud_descriptor_device_cb(void)
+{
+    return OPENDRIFT_USB_DEVICE_DESCRIPTOR;
 }
 #endif
 #endif
@@ -38,7 +94,7 @@ bool OnboardStorage::begin()
         SD_CS_PIN
     );
 
-    sdAvailable = SD.begin(
+    sdAvailable = storageSd.begin(
         SD_CS_PIN,
         sdSpi,
         SD_FREQUENCY_HZ,
@@ -47,9 +103,9 @@ bool OnboardStorage::begin()
         false
     );
 
-    if(!sdAvailable || SD.cardType() == CARD_NONE)
+    if(!sdAvailable || storageSd.cardType() == CARD_NONE)
     {
-        SD.end();
+        storageSd.end();
         sdAvailable = false;
     }
 
@@ -73,7 +129,7 @@ bool OnboardStorage::isSdAvailable() const
 fs::FS* OnboardStorage::fileSystem()
 {
     #if defined(OPENDRIFT_BOARD_AMOLED_164)
-    return sdAvailable ? static_cast<fs::FS*>(&SD) : nullptr;
+    return sdAvailable ? static_cast<fs::FS*>(&storageSd) : nullptr;
     #else
     return nullptr;
     #endif
@@ -89,7 +145,7 @@ const char* OnboardStorage::storageName() const
 uint64_t OnboardStorage::cardSizeBytes() const
 {
     #if defined(OPENDRIFT_BOARD_AMOLED_164)
-    return sdAvailable ? SD.cardSize() : 0;
+    return sdAvailable ? storageSd.cardSize() : 0;
     #else
     return 0;
     #endif
@@ -101,8 +157,8 @@ uint64_t OnboardStorage::freeBytes() const
     #if defined(OPENDRIFT_BOARD_AMOLED_164)
     if(!sdAvailable) return 0;
 
-    const uint64_t total = SD.totalBytes();
-    const uint64_t used = SD.usedBytes();
+    const uint64_t total = storageSd.totalBytes();
+    const uint64_t used = storageSd.usedBytes();
     return total > used ? total - used : 0;
     #else
     return 0;
@@ -113,9 +169,31 @@ uint64_t OnboardStorage::freeBytes() const
 #if defined(OPENDRIFT_USB_MAINTENANCE) && defined(OPENDRIFT_BOARD_AMOLED_164)
 bool OnboardStorage::beginUsbMassStorage()
 {
-    if(!sdAvailable || SD.numSectors() == 0 || SD.sectorSize() == 0)
+    if(
+        !sdAvailable ||
+        storageSd.numSectors() == 0 ||
+        storageSd.sectorSize() == 0
+    )
     {
         return false;
+    }
+
+    if(usbReadTaskHandle == nullptr)
+    {
+        const BaseType_t taskCreated = xTaskCreatePinnedToCore(
+            readWorkerTask,
+            "usb-sd-read",
+            4096,
+            this,
+            1,
+            &usbReadTaskHandle,
+            ARDUINO_RUNNING_CORE
+        );
+        if(taskCreated != pdPASS)
+        {
+            usbReadTaskHandle = nullptr;
+            return false;
+        }
     }
 
     activeInstance = this;
@@ -129,8 +207,8 @@ bool OnboardStorage::beginUsbMassStorage()
     usbDisk.onStartStop(handleStartStop);
 
     const bool started = usbDisk.begin(
-        SD.numSectors(),
-        SD.sectorSize()
+        storageSd.numSectors(),
+        storageSd.sectorSize()
     );
 
     usbDisk.mediaPresent(started);
@@ -141,6 +219,32 @@ bool OnboardStorage::beginUsbMassStorage()
 bool OnboardStorage::wasEjected() const
 {
     return ejected;
+}
+
+
+OnboardStorage::UsbReadDiagnostics
+OnboardStorage::getUsbReadDiagnostics() const
+{
+    UsbReadDiagnostics diagnostics;
+    diagnostics.reads = usbReadCount;
+    diagnostics.failures = usbReadFailures;
+    diagnostics.bytes = usbReadBytes;
+    diagnostics.lastDurationUs = usbReadLastDurationUs;
+    diagnostics.maxDurationUs = usbReadMaxDurationUs;
+    diagnostics.lastLba = usbReadLastLba;
+    diagnostics.lastOffset = usbReadLastOffset;
+    diagnostics.lastSize = usbReadLastSize;
+    diagnostics.lastReadAtMs = usbReadLastAtMs;
+    diagnostics.lastError = usbReadLastError;
+    diagnostics.callbacks = usbReadCallbackCount;
+    diagnostics.busyReturns = usbReadBusyReturns;
+    diagnostics.requestMismatches = usbReadRequestMismatches;
+    diagnostics.invalidRequests = usbReadInvalidRequests;
+    diagnostics.lastCallbackWaitUs = usbReadLastCallbackWaitUs;
+    diagnostics.maxCallbackWaitUs = usbReadMaxCallbackWaitUs;
+    diagnostics.lastCallbackAtMs = usbReadLastCallbackAtMs;
+    diagnostics.workerState = static_cast<uint8_t>(usbReadState);
+    return diagnostics;
 }
 
 
@@ -160,54 +264,260 @@ int32_t OnboardStorage::readBlocks(
     uint32_t bufferSize
 )
 {
+    OnboardStorage* instance = activeInstance;
+    if(instance != nullptr)
+    {
+        instance->usbReadCallbackCount++;
+        instance->usbReadLastCallbackAtMs = millis();
+    }
+
     if(
-        activeInstance == nullptr ||
-        !activeInstance->sdAvailable ||
-        buffer == nullptr
+        instance == nullptr ||
+        buffer == nullptr ||
+        bufferSize == 0 ||
+        bufferSize > sizeof(instance->usbReadWorkerBuffer)
     )
     {
+        if(instance != nullptr) instance->usbReadInvalidRequests++;
         return -1;
     }
 
-    const uint32_t sectorSize = SD.sectorSize();
+    // Keep the TinyUSB task's synchronous wait to one physical sector. A
+    // short read is explicitly supported by TinyUSB; it advances the offset
+    // and invokes this callback again for the remainder of the READ(10).
+    // This also keeps Arduino SD.h on its single-block CMD17 path instead of
+    // the separate CMD18 multi-block implementation.
+    const uint32_t readSize = min(bufferSize, USB_SD_READ_CHUNK_SIZE);
+
+    bool startRead = false;
+    bool requestMismatch = false;
+
+    portENTER_CRITICAL(&instance->usbReadMux);
+    const bool sameRequest =
+        instance->usbReadRequestLba == lba &&
+        instance->usbReadRequestOffset == offset &&
+        instance->usbReadRequestSize == readSize;
+
+    if(instance->usbReadState == USB_READ_IDLE)
+    {
+        instance->usbReadRequestLba = lba;
+        instance->usbReadRequestOffset = offset;
+        instance->usbReadRequestSize = readSize;
+        instance->usbReadState = USB_READ_REQUESTED;
+        startRead = true;
+    }
+    else if(!sameRequest)
+    {
+        requestMismatch = true;
+    }
+    portEXIT_CRITICAL(&instance->usbReadMux);
+
+    if(startRead)
+    {
+        xTaskNotifyGive(instance->usbReadTaskHandle);
+    }
+
+    if(requestMismatch)
+    {
+        instance->usbReadRequestMismatches++;
+        return -1;
+    }
+
+    const uint32_t waitStartedUs = micros();
+    for(;;)
+    {
+        bool deliverRead = false;
+        int32_t result = 0;
+
+        portENTER_CRITICAL(&instance->usbReadMux);
+        if(instance->usbReadState == USB_READ_READY)
+        {
+            instance->usbReadState = USB_READ_DELIVERING;
+            result = instance->usbReadWorkerResult;
+            deliverRead = true;
+        }
+        portEXIT_CRITICAL(&instance->usbReadMux);
+
+        if(deliverRead)
+        {
+            const uint32_t waitUs = micros() - waitStartedUs;
+            instance->usbReadLastCallbackWaitUs = waitUs;
+            if(waitUs > instance->usbReadMaxCallbackWaitUs)
+            {
+                instance->usbReadMaxCallbackWaitUs = waitUs;
+            }
+
+            if(result > 0)
+            {
+                memcpy(buffer, instance->usbReadWorkerBuffer, result);
+            }
+
+            portENTER_CRITICAL(&instance->usbReadMux);
+            instance->usbReadState = USB_READ_IDLE;
+            portEXIT_CRITICAL(&instance->usbReadMux);
+            return result;
+        }
+
+        // Wait cooperatively so a normal SD transaction completes as one USB
+        // callback. If a card operation is unusually slow, return busy after
+        // a bounded interval and let TinyUSB retry the same request later.
+        const uint32_t waitUs = micros() - waitStartedUs;
+        if(waitUs >= 250000UL)
+        {
+            instance->usbReadBusyReturns++;
+            instance->usbReadLastCallbackWaitUs = waitUs;
+            if(waitUs > instance->usbReadMaxCallbackWaitUs)
+            {
+                instance->usbReadMaxCallbackWaitUs = waitUs;
+            }
+            return 0;
+        }
+        delay(1);
+    }
+}
+
+
+void OnboardStorage::readWorkerTask(void* context)
+{
+    OnboardStorage* instance = static_cast<OnboardStorage*>(context);
+    for(;;)
+    {
+        ulTaskNotifyTake(pdTRUE, portMAX_DELAY);
+
+        uint32_t lba = 0;
+        uint32_t offset = 0;
+        uint32_t size = 0;
+        bool run = false;
+
+        portENTER_CRITICAL(&instance->usbReadMux);
+        if(instance->usbReadState == USB_READ_REQUESTED)
+        {
+            instance->usbReadState = USB_READ_RUNNING;
+            lba = instance->usbReadRequestLba;
+            offset = instance->usbReadRequestOffset;
+            size = instance->usbReadRequestSize;
+            run = true;
+        }
+        portEXIT_CRITICAL(&instance->usbReadMux);
+
+        if(!run) continue;
+
+        const int32_t result = instance->performRead(
+            lba,
+            offset,
+            instance->usbReadWorkerBuffer,
+            size
+        );
+
+        portENTER_CRITICAL(&instance->usbReadMux);
+        instance->usbReadWorkerResult = result;
+        instance->usbReadState = USB_READ_READY;
+        portEXIT_CRITICAL(&instance->usbReadMux);
+    }
+}
+
+
+int32_t OnboardStorage::performRead(
+    uint32_t lba,
+    uint32_t offset,
+    void* buffer,
+    uint32_t bufferSize
+)
+{
+    OnboardStorage* instance = this;
+
+    const uint32_t startedUs = micros();
+    instance->usbReadCount++;
+    instance->usbReadLastLba = lba;
+    instance->usbReadLastOffset = offset;
+    instance->usbReadLastSize = bufferSize;
+
+    const auto finish = [instance, startedUs](
+        int32_t result,
+        uint8_t error
+    ) -> int32_t
+    {
+        const uint32_t duration = micros() - startedUs;
+        instance->usbReadLastDurationUs = duration;
+        instance->usbReadLastAtMs = millis();
+        if(duration > instance->usbReadMaxDurationUs)
+        {
+            instance->usbReadMaxDurationUs = duration;
+        }
+        instance->usbReadLastError = error;
+        if(result < 0)
+        {
+            instance->usbReadFailures++;
+        }
+        else
+        {
+            instance->usbReadBytes += static_cast<uint32_t>(result);
+        }
+        return result;
+    };
+
+    if(!instance->sdAvailable || buffer == nullptr)
+    {
+        return finish(-1, 1);
+    }
+
+    const uint32_t sectorSize = storageSd.sectorSize();
     static uint8_t partialSector[512];
 
-    if(sectorSize != sizeof(partialSector) || offset >= sectorSize)
+    if(sectorSize != sizeof(partialSector))
     {
-        return -1;
+        return finish(-1, 2);
+    }
+
+    // TinyUSB keeps lba fixed for one SCSI READ(10) command and advances
+    // offset across successive endpoint-buffer callbacks. Windows commonly
+    // issues reads larger than the 4096-byte USB buffer, so normalize that
+    // command-relative offset back into an SD sector and byte offset.
+    const uint64_t firstByte =
+        static_cast<uint64_t>(lba) * sectorSize + offset;
+    const uint64_t mediaBytes =
+        static_cast<uint64_t>(storageSd.numSectors()) * sectorSize;
+
+    if(firstByte >= mediaBytes || bufferSize > mediaBytes - firstByte)
+    {
+        return finish(-1, 3);
     }
 
     uint8_t* destination = static_cast<uint8_t*>(buffer);
     uint32_t remaining = bufferSize;
-    uint32_t currentLba = lba;
-    uint32_t currentOffset = offset;
-    const uint32_t sectorCount = SD.numSectors();
+    uint32_t currentLba = static_cast<uint32_t>(firstByte / sectorSize);
+    uint32_t currentOffset = static_cast<uint32_t>(firstByte % sectorSize);
+    const uint32_t sectorCount = storageSd.numSectors();
 
     while(remaining > 0)
     {
         if(currentLba >= sectorCount)
         {
-            return -1;
+            return finish(-1, 4);
         }
 
-        // TinyUSB normally requests complete aligned sectors. Read those
-        // directly into its transfer buffer to keep the USB task stack small.
+        // Use one SD multi-block transaction for each aligned USB chunk.
         if(currentOffset == 0 && remaining >= sectorSize)
         {
-            if(!SD.readRAW(destination, currentLba))
+            const uint32_t sectorsToRead = min(
+                remaining / sectorSize,
+                sectorCount - currentLba
+            );
+            if(!storageSd.readRAW(destination, currentLba, sectorsToRead))
             {
-                return -1;
+                return finish(-1, 5);
             }
 
-            destination += sectorSize;
-            remaining -= sectorSize;
-            currentLba++;
+            const uint32_t bytesRead = sectorsToRead * sectorSize;
+            destination += bytesRead;
+            remaining -= bytesRead;
+            currentLba += sectorsToRead;
             continue;
         }
 
-        if(!SD.readRAW(partialSector, currentLba))
+        if(!storageSd.readRAW(partialSector, currentLba, 1))
         {
-            return -1;
+            return finish(-1, 6);
         }
 
         const uint32_t amount = min(
@@ -222,7 +532,14 @@ int32_t OnboardStorage::readBlocks(
         currentOffset = 0;
     }
 
-    return bufferSize;
+    // Sustained host scans can otherwise keep this worker continuously ready.
+    // Yield periodically so the same-core loop and idle tasks remain healthy.
+    if((instance->usbReadCount & 0x1FU) == 0)
+    {
+        delay(1);
+    }
+
+    return finish(static_cast<int32_t>(bufferSize), 0);
 }
 
 

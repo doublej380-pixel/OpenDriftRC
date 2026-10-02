@@ -15,10 +15,23 @@ static volatile UsbMaintenance::UpdateState firmwareUpdateState =
     UsbMaintenance::UPDATE_IDLE;
 static volatile size_t firmwareUpdateBytes = 0;
 static volatile uint32_t firmwareUpdateRevision = 0;
+static volatile bool usbEnumerationReleased = false;
 
 static constexpr const char* UPDATE_NAMESPACE = "od-usb";
 static constexpr const char* UPDATE_PENDING_KEY = "pending";
 static constexpr const char* UPDATE_SOURCE_KEY = "source";
+
+
+extern "C" void __real_tud_mount_cb(void);
+
+// Arduino starts TinyUSB before setup(). Intercept the first completed USB
+// configuration synchronously so hosts cannot probe MSC until setup has
+// initialized both LUNs. The framework callback still receives every mount.
+extern "C" void __wrap_tud_mount_cb(void)
+{
+    __real_tud_mount_cb();
+    if(!usbEnumerationReleased) tud_disconnect();
+}
 
 
 static void setUpdateMarker()
@@ -77,6 +90,9 @@ static void handleFirmwareEvent(
 
         case ARDUINO_FIRMWARE_MSC_END_EVENT:
             if(data != nullptr) firmwareUpdateBytes = data->end.size;
+            // FirmwareMSC restarts directly after a successful update. Clear
+            // the maintenance latch so the new image enters normal mode.
+            maintenanceBootMagic = 0;
             firmwareUpdateState = UsbMaintenance::UPDATE_COMPLETE;
             break;
 
@@ -122,9 +138,9 @@ void UsbMaintenance::markBootHealthy()
 bool UsbMaintenance::consumeBootRequest()
 {
     #if defined(OPENDRIFT_USB_MAINTENANCE)
-    const bool requested = maintenanceBootMagic == MAINTENANCE_BOOT_MAGIC;
-    maintenanceBootMagic = 0;
-    return requested;
+    // Keep maintenance latched through unexpected software/watchdog resets.
+    // Intentional restart and successful firmware update paths clear it.
+    return maintenanceBootMagic == MAINTENANCE_BOOT_MAGIC;
     #else
     return false;
     #endif
@@ -159,6 +175,15 @@ bool UsbMaintenance::consumeCompletedUpdate()
 }
 
 
+void UsbMaintenance::releaseUsbEnumeration()
+{
+    #if defined(OPENDRIFT_USB_MAINTENANCE)
+    usbEnumerationReleased = true;
+    tud_connect();
+    #endif
+}
+
+
 bool UsbMaintenance::begin(OnboardStorage& storage)
 {
     #if defined(OPENDRIFT_USB_MAINTENANCE)
@@ -170,13 +195,12 @@ bool UsbMaintenance::begin(OnboardStorage& storage)
     firmwareReady = firmwareDisk.begin();
     sdReady = storage.isSdAvailable() && storage.beginUsbMassStorage();
 
-    // Native USB is already enumerated before Arduino setup() runs. At that
-    // point both MSC LUNs report no media, so desktop hosts back off to a slow
-    // polling interval. Reconnect after the drives are ready so the host sees
-    // their final state during enumeration instead of roughly 30 seconds later.
+    // setup() disconnects maintenance boots before initialization. Reconnect
+    // only after both LUNs expose their final identity, capacity, and media
+    // state so Windows does not cache an unnamed second disk.
     tud_disconnect();
     delay(150);
-    tud_connect();
+    releaseUsbEnumeration();
 
     return firmwareReady || sdReady;
     #else
@@ -195,6 +219,7 @@ bool UsbMaintenance::firmwareDriveReady() const
 void UsbMaintenance::prepareForRestart(OnboardStorage& storage)
 {
     #if defined(OPENDRIFT_USB_MAINTENANCE)
+    maintenanceBootMagic = 0;
     if(firmwareUpdateState != UPDATE_COMPLETE) clearUpdateMarker();
 
     if(sdReady)
