@@ -7,6 +7,7 @@
 #include "GyroController.h"
 #include "RadioInput.h"
 #include "BlackboxLogger.h"
+#include "ControlDiagnostics.h"
 
 #if defined(OPENDRIFT_BOARD_AMOLED_164)
 #include "Backgrounds.h"
@@ -30,6 +31,7 @@ public:
     );
 
     void update();
+    void setControlDiagnostics(ControlDiagnostics& capture) { diagnostics = &capture; }
 
     #if defined(OPENDRIFT_BOARD_AMOLED_164)
     void setBackgroundStore(
@@ -61,6 +63,8 @@ private:
     RadioInput* throttleRadio = nullptr;
 
     BlackboxLogger* blackbox = nullptr;
+    ControlDiagnostics* diagnostics = nullptr;
+    void handleDiagnosticsDownload();
 
     #if defined(OPENDRIFT_BOARD_AMOLED_164)
     Backgrounds* backgrounds = nullptr;

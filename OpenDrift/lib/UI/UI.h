@@ -113,6 +113,17 @@ private:
     #if defined(OPENDRIFT_BOARD_AMOLED_164)
     LGFX_Sprite panelCanvas;
     bool panelCanvasReady = false;
+    uint16_t* transitionCurrentPixels = nullptr;
+    uint16_t* transitionIncomingPixels = nullptr;
+    uint16_t* transitionBackgroundPixels = nullptr;
+    bool transitionPixelsReady = false;
+    uint32_t transitionFrames = 0;
+    uint32_t transitionComposeUs = 0;
+    uint32_t transitionTransferUs = 0;
+    uint32_t transitionStartedUs = 0;
+    void prepareTransitionPixels();
+    void animateTransition(int16_t start, int16_t end, int8_t direction, uint32_t durationMs);
+    void reportTransitionTiming();
     BlackboxArchive* blackboxArchive = nullptr;
     bool blackboxProgressVisible = false;
     uint8_t lastBlackboxProgress = 255;

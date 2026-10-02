@@ -1047,27 +1047,9 @@ void UI::changePage(
         const int16_t endOffset =
             direction > 0 ? -UI_CANVAS_WIDTH : UI_CANVAS_WIDTH;
 
-        for(uint8_t frame = 1; frame <= 12; frame++)
-        {
-            int32_t eased =
-                (int32_t)frame *
-                (int32_t)frame *
-                (3 * 12 - 2 * frame);
-
-            int16_t offset =
-                startOffset +
-                (
-                    (int32_t)(endOffset - startOffset) *
-                    eased
-                )
-                /
-                (12 * 12 * 12);
-
-            flushTransitionDisplay(
-                offset,
-                direction
-            );
-        }
+        prepareTransitionPixels();
+        animateTransition(startOffset, endOffset, direction, 220);
+        reportTransitionTiming();
 
         page =
             targetPage;
@@ -1331,6 +1313,8 @@ bool UI::prepareSwipePreview(
     swipePreviewActive =
         true;
 
+    prepareTransitionPixels();
+
     swipePreviewDirection =
         direction;
 
@@ -1370,27 +1354,9 @@ void UI::finishSwipePreview(
         :
         0;
 
-    for(uint8_t frame = 1; frame <= 6; frame++)
-    {
-        int32_t eased =
-            (int32_t)frame *
-            (int32_t)frame *
-            (3 * 6 - 2 * frame);
-
-        int16_t offset =
-            startOffset +
-            (
-                (int32_t)(endOffset - startOffset) *
-                eased
-            )
-            /
-            (6 * 6 * 6);
-
-        flushTransitionDisplay(
-            offset,
-            swipePreviewDirection
-        );
-    }
+    animateTransition(startOffset, endOffset, swipePreviewDirection,
+        constrain(abs(endOffset - startOffset) * 220 / UI_CANVAS_WIDTH, 70, 220));
+    reportTransitionTiming();
 
     if(commit)
     {
@@ -1675,6 +1641,75 @@ void UI::flushDisplay(
 }
 
 
+#if defined(OPENDRIFT_BOARD_AMOLED_164)
+void UI::prepareTransitionPixels()
+{
+    transitionPixelsReady = false;
+    transitionFrames = transitionComposeUs = transitionTransferUs = 0;
+    const size_t pixels = UI_CANVAS_WIDTH * UI_CANVAS_HEIGHT;
+    if(transitionCurrentPixels == nullptr)
+    {
+        // Three physical-layout buffers: two transparent page overlays and
+        // the stationary background. No allocation happens per animation frame.
+        transitionCurrentPixels = static_cast<uint16_t*>(heap_caps_malloc(
+            pixels * sizeof(uint16_t) * 3, MALLOC_CAP_SPIRAM | MALLOC_CAP_8BIT));
+        if(transitionCurrentPixels != nullptr)
+        {
+            transitionIncomingPixels = transitionCurrentPixels + pixels;
+            transitionBackgroundPixels = transitionIncomingPixels + pixels;
+        }
+    }
+    if(transitionCurrentPixels != nullptr && canUseRawAmoledBuffers())
+    {
+        const auto* current = static_cast<const uint16_t*>(canvas.getBuffer());
+        const auto* incoming = static_cast<const uint16_t*>(transitionCanvas.getBuffer());
+        for(int x = 0; x < UI_CANVAS_WIDTH; ++x)
+        {
+            const size_t row = (UI_CANVAS_WIDTH - 1 - x) * UI_CANVAS_HEIGHT;
+            for(int y = 0; y < UI_CANVAS_HEIGHT; ++y)
+            {
+                const size_t source = y * UI_CANVAS_WIDTH + x;
+                transitionCurrentPixels[row + y] = current[source];
+                transitionIncomingPixels[row + y] = incoming[source];
+                transitionBackgroundPixels[row + y] = readBackgroundPixelRaw(x, y);
+            }
+        }
+        transitionPixelsReady = true;
+    }
+    transitionStartedUs = micros();
+}
+
+void UI::animateTransition(int16_t start, int16_t end, int8_t direction, uint32_t durationMs)
+{
+    const uint32_t started = micros();
+    const uint32_t duration = durationMs * 1000UL;
+    for(;;)
+    {
+        const uint32_t frameStarted = micros();
+        const uint32_t elapsed = frameStarted - started;
+        const float t = min(1.0f, elapsed / static_cast<float>(duration));
+        const float eased = t * t * (3.0f - 2.0f * t);
+        flushTransitionDisplay(start + static_cast<int16_t>((end - start) * eased), direction);
+        if(elapsed >= duration) break;
+        // Pace short frames, but never add another full interval to a slow
+        // transfer. The independent control task continues throughout.
+        while(micros() - frameStarted < 16667UL) delay(1);
+    }
+}
+
+void UI::reportTransitionTiming()
+{
+    if(transitionFrames == 0) return;
+    const uint32_t elapsed = micros() - transitionStartedUs;
+    Serial.printf("UI swipe: %lu frames, %.1f fps, compose %.2f ms, transfer %.2f ms, cache=%s\n",
+        (unsigned long)transitionFrames,
+        elapsed ? transitionFrames * 1000000.0f / elapsed : 0.0f,
+        transitionComposeUs / (1000.0f * transitionFrames),
+        transitionTransferUs / (1000.0f * transitionFrames),
+        transitionPixelsReady ? "ON" : "OFF");
+}
+#endif
+
 void UI::flushTransitionDisplay(
     int16_t xOffset,
     int8_t direction
@@ -1691,6 +1726,7 @@ void UI::flushTransitionDisplay(
         return;
     }
 
+    const uint32_t composeStarted = micros();
     uint16_t* current =
         static_cast<uint16_t*>(
             canvas.getBuffer()
@@ -1716,7 +1752,31 @@ void UI::flushTransitionDisplay(
             -UI_CANVAS_WIDTH
         );
 
-    for(int y = 0; y < UI_CANVAS_HEIGHT; y++)
+    if(transitionPixelsReady)
+    {
+        // Horizontal UI movement becomes contiguous physical scanline copies.
+        // Merge sequentially in PSRAM rather than writing rotated pixels with
+        // a large stride. Background/panel tint remain fixed during the swipe.
+        for(int x = 0; x < UI_CANVAS_WIDTH; ++x)
+        {
+            const int currentX = x - xOffset;
+            const int incomingX = x - incomingOffset;
+            const uint16_t* overlay = nullptr;
+            if(currentX >= 0 && currentX < UI_CANVAS_WIDTH)
+                overlay = transitionCurrentPixels + (UI_CANVAS_WIDTH - 1 - currentX) * UI_CANVAS_HEIGHT;
+            else if(incomingX >= 0 && incomingX < UI_CANVAS_WIDTH)
+                overlay = transitionIncomingPixels + (UI_CANVAS_WIDTH - 1 - incomingX) * UI_CANVAS_HEIGHT;
+            const size_t row = (UI_CANVAS_WIDTH - 1 - x) * UI_CANVAS_HEIGHT;
+            for(int y = 0; y < UI_CANVAS_HEIGHT; ++y)
+            {
+                const uint16_t pageColor = overlay ? overlay[y] : 0;
+                target[row + y] = pageColor == OD_PANEL_RAW
+                    ? blendPanelRaw(transitionBackgroundPixels[row + y])
+                    : (pageColor ? pageColor : transitionBackgroundPixels[row + y]);
+            }
+        }
+    }
+    else for(int y = 0; y < UI_CANVAS_HEIGHT; y++)
     {
         for(int x = 0; x < UI_CANVAS_WIDTH; x++)
         {
@@ -1781,11 +1841,15 @@ void UI::flushTransitionDisplay(
 
     drawFixedPageDots();
 
+    const uint32_t transferStarted = micros();
+    transitionComposeUs += transferStarted - composeStarted;
     panelCanvas.pushSprite(
         display,
         0,
         0
     );
+    transitionTransferUs += micros() - transferStarted;
+    ++transitionFrames;
     #else
     if(
         display == nullptr ||
@@ -6448,7 +6512,8 @@ void UI::update(
         #if defined(OPENDRIFT_BOARD_AMOLED_164)
         !swipePreviewActive &&
         #endif
-        millis() - lastRadioRefresh > 250
+        millis() - lastRadioRefresh >
+            ((page == PAGE_RADIO || page == PAGE_STEERING) ? 50UL : 250UL)
     )
     {
         if(page == PAGE_DRIVE)
@@ -6628,20 +6693,22 @@ void UI::update(
                     );
 
                 if(
-                    millis() - lastSwipePreviewAt > 12 ||
-                    abs(offset - swipePreviewOffset) > 10
+                    millis() - lastSwipePreviewAt >= 16 &&
+                    offset != swipePreviewOffset
                 )
                 {
                     swipePreviewOffset =
                         offset;
+
+                    // Count composition/transfer time toward the next frame,
+                    // rather than adding another delay after every push.
+                    lastSwipePreviewAt = millis();
 
                     flushTransitionDisplay(
                         swipePreviewOffset,
                         swipePreviewDirection
                     );
 
-                    lastSwipePreviewAt =
-                        millis();
                 }
 
                 lastTouchState =

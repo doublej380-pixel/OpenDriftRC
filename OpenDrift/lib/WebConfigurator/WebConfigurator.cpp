@@ -57,6 +57,22 @@ void WebConfigurator::begin(
     blackbox =
         &blackboxRef;
 
+    server.on("/diagnostics/start", HTTP_POST, [this]() {
+        if(diagnostics == nullptr || !diagnostics->start())
+        {
+            server.send(503, "text/plain", "Diagnostic RAM unavailable or SD export in progress");
+            return;
+        }
+        server.sendHeader("Location", "/");
+        server.send(303);
+    });
+    server.on("/diagnostics/stop", HTTP_POST, [this]() {
+        if(diagnostics != nullptr) diagnostics->stop();
+        server.sendHeader("Location", "/");
+        server.send(303);
+    });
+    server.on("/control-diagnostics.csv", HTTP_GET, [this]() { handleDiagnosticsDownload(); });
+
     server.on(
         "/",
         HTTP_GET,
@@ -588,6 +604,14 @@ void WebConfigurator::handleRoot()
     html += F("<button type='submit'>Save Settings</button></form>");
     html += F("<form id='restartForm' method='post' action='/restart' onsubmit=\"return confirm('Restart OpenDrift now? Steering will be unavailable during boot.')\"></form>");
     html += F("<form id='factoryResetForm' method='post' action='/factory-reset' onsubmit=\"return confirm('Erase all OpenDrift settings and restart? This cannot be undone.')\"></form>");
+
+    if(diagnostics != nullptr)
+    {
+        html += F("<div class='card'><h2>Control diagnostics</h2><p>Record 45 seconds of IMU and output timing at the control-loop rate.</p><p class='sub'>Start just before a short test. Capture stops automatically or when its RAM buffer fills. Park before downloading. Dump to SD also saves this capture as a matching numbered timing CSV. Power cycling clears the RAM copy. Starting again replaces it.</p><p>");
+        html += diagnostics->isCapturing() ? "Recording: " : "Stopped: ";
+        html += String(diagnostics->count());
+        html += F(" samples</p><form method='post' action='/diagnostics/start'><button type='submit'>Start diagnostic capture</button></form><form method='post' action='/diagnostics/stop'><button type='submit'>Stop capture</button></form><a href='/control-diagnostics.csv'>Download timing CSV</a></div>");
+    }
 
     #if defined(OPENDRIFT_BOARD_AMOLED_164)
     html += F("<div class='card' id='backgrounds'><h2>AMOLED Backgrounds</h2>");
@@ -1298,6 +1322,38 @@ bool WebConfigurator::profileRowMatches(int index)
         server.arg("name").equalsIgnoreCase(profile->name);
 }
 
+
+
+void WebConfigurator::handleDiagnosticsDownload()
+{
+    if(diagnostics == nullptr || diagnostics->count() == 0)
+    {
+        server.send(404, "text/plain", "No diagnostic capture. Start a capture first.");
+        return;
+    }
+    if(diagnostics->isCapturing())
+    {
+        server.send(409, "text/plain", "Stop the capture or wait 45 seconds before downloading.");
+        return;
+    }
+    server.sendHeader("Content-Disposition", "attachment; filename=opendrift-control-diagnostics.csv");
+    server.setContentLength(CONTENT_LENGTH_UNKNOWN);
+    server.send(200, "text/csv", "");
+    server.sendContent(ControlDiagnostics::header());
+    String chunk;
+    chunk.reserve(4096);
+    char line[320];
+    const size_t count = diagnostics->count();
+    for(size_t i = 0; i < count && server.client().connected(); ++i)
+    {
+        const size_t size = diagnostics->format(i, line, sizeof(line));
+        if(chunk.length() + size > 4096) { server.sendContent(chunk); chunk = ""; }
+        chunk.concat(line, size);
+        if((i & 127) == 0) delay(0);
+    }
+    if(chunk.length()) server.sendContent(chunk);
+    server.sendContent("");
+}
 
 
 void WebConfigurator::handleLogDownload()

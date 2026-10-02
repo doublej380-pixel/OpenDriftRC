@@ -1,6 +1,54 @@
 # Changelog
 
-## v1.0.9 - 2026-09-27
+## v1.0.9 - 2026-10-01
+
+### October 1 acquisition, display, logging, and recovery updates
+
+- Adds QMI8658 locked acquisition with availability checks, bounded lock delay,
+  one counter/accel/gyro burst, repeated-sample detection, and failed-burst lock
+  release. Verifies gyro range, ODR, LPF, sensor enables, and acquisition mode
+  using hardware register readback instead of assuming configuration succeeded.
+- Adds per-stage IMU startup diagnostics. Observed locking-handshake failures
+  now trigger a full sensor reset and verified restoration of the previous
+  asynchronous SensorLib reads instead of a boot loop. The underlying handshake
+  failure remains under investigation; fallback samples explicitly report
+  `locked=0` and are not claimed to be coherent locked samples.
+- Invalidates yaw after three consecutive stale/failed sample ticks, rather
+  than treating a non-advancing sample stream as healthy indefinitely.
+- Adds an explicitly armed, up-to-45-second RAM diagnostic capture at every
+  controller tick. Its CSV includes loop spacing/work time, I2C waits/read
+  duration, sample counters/freshness, error counters, effective gain, yaw,
+  correction, commanded servo pulse, and applied LPF. CSV formatting and
+  downloads stay outside the real-time task; normal blackbox formats remain
+  unchanged. Capture capacity falls back to smaller allocations if needed.
+- Makes SD dumps save matching numbered blackbox and diagnostic CSV files.
+  Screen, web, and radio dump actions share the same path. Active diagnostics
+  freeze during export, capture restart is blocked until saving finishes, and
+  progress spans both files. Existing files are preserved; internal-flash
+  dumps remain blackbox-only. A timing capture must be armed before the run.
+- Optimizes AMOLED swipes with reusable physical-layout PSRAM caches and
+  sequential composition while preserving stationary backgrounds and panel
+  transparency. Replaces fixed-frame release animations with elapsed-time
+  easing and removes the additional post-transfer preview delay. Live Radio
+  and Steering refresh changes from 250 ms to 50 ms. Serial swipe reports
+  expose delivered FPS and mean composition/transfer times; 60 FPS is not
+  guaranteed. The cache uses 766,080 bytes and has an uncached fallback.
+- Enables USB maintenance on all four official AMOLED V1/V2 PWM/CRSF targets,
+  not just the GPIO8 recovery target. Firmware updating works without an SD
+  card; an inserted card adds the separate read-only log volume. Official
+  builds now use native TinyUSB and dual 3 MB OTA slots while keeping NVS and
+  FFat addresses unchanged. Existing official installs require a full
+  PlatformIO upload to install the new partition table first.
+- Adds RTC-backed automatic maintenance recovery after three unfinished boots
+  across software/watchdog resets. Normal startup is confirmed after 15 seconds
+  in the main loop; intentional maintenance restarts do not count as failures.
+  Recovery bypasses controller/actuator startup and SD mounting, and the USB
+  updater can run without a functioning display. Cold power loss/brownout
+  resets the audit; this is not recovery from an invalid app or bootloader.
+- Adds acquisition, export-freezing, and boot-recovery host tests plus detailed
+  IMU diagnostic and screen-performance testing documentation. Hardware tune,
+  pinouts, controller math, and servo frequencies are not changed by this batch.
+
 
 ### Control response and driver authority
 
@@ -123,7 +171,7 @@
   intentionally excluded from public release assets and the web flasher.
 - Adds a private Waveshare AMOLED V2 CRSF recovery target that moves a damaged
   GPIO16 throttle output to GPIO8 without changing the official build pinouts.
-- Gives that private recovery target an isolated USB maintenance mode backed by
+- Gives all AMOLED targets an isolated USB maintenance mode backed by
   dual OTA app partitions. Its writable firmware volume accepts a complete
   `firmware.bin`, verifies it, selects the new partition, and reboots
   automatically; an installed microSD card is exposed separately as a genuine
@@ -135,8 +183,7 @@
 - Makes the maintenance restart close both mass-storage devices and logically
   disconnect USB before rebooting. USB is re-enumerated only after its media
   are ready, reducing slow drive discovery on desktop Linux.
-- Adds a visibly marked, private USB OTA test-payload target for validating the
-  complete update path without changing or publishing official firmware.
+- Removes the private USB OTA test-payload target after update-path validation.
 - Adds the experimental **GroundTX** surface-radio interface prototype for the
   RadioMaster MT12. It currently demonstrates safe, memory-only setup screens
   and mix workflows without modifying the active EdgeTX model.

@@ -21,6 +21,18 @@ public:
     bool isHealthy() const;
     bool isAccelHealthy() const;
 
+    struct SampleDiagnostics
+    {
+        uint32_t sampleCounter = 0;
+        uint32_t counterDelta = 0;
+        uint32_t readUs = 0;
+        uint32_t readErrors = 0;
+        uint32_t noDataCount = 0;
+        bool fresh = false;
+        bool locked = false;
+    };
+    const SampleDiagnostics& getSampleDiagnostics() const { return diagnostics; }
+
 
     float getGyroX();
     float getGyroY();
@@ -38,6 +50,12 @@ public:
 private:
 
     SensorQMI8658 qmi;
+    SampleDiagnostics diagnostics;
+    bool counterReady = false;
+    bool configureLocking();
+    bool verifyGyroConfiguration(uint8_t mode);
+    bool readRegisters(uint8_t address, uint8_t* buffer, size_t length);
+    bool readCoherentSample();
 
     float gyroX = 0;
     float gyroY = 0;

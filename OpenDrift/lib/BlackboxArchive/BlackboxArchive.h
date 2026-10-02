@@ -4,6 +4,7 @@
 #include <FS.h>
 
 #include "BlackboxLogger.h"
+#include "ControlDiagnostics.h"
 
 
 class BlackboxArchive
@@ -29,6 +30,7 @@ public:
         uint64_t preferredFreeBytes = 0
     );
     void update(bool parked);
+    void setControlDiagnostics(ControlDiagnostics& value) { diagnostics = &value; }
     bool requestSave(bool allowNoSignalBench = false);
 
     Status getStatus() const;
@@ -79,6 +81,12 @@ private:
     static constexpr size_t FREE_SPACE_MARGIN = 65536;
 
     BlackboxLogger* logger = nullptr;
+    ControlDiagnostics* diagnostics = nullptr;
+    size_t diagnosticRecords = 0;
+    size_t diagnosticIndex = 0;
+    bool savingDiagnostics = false;
+    char diagnosticPath[64] = {};
+    static constexpr const char* DIAGNOSTIC_TEMP_PATH = "/opendrift-diagnostics.tmp";
     fs::FS* storage = nullptr;
     const char* storageLabel = "internal flash";
     bool csvOutput = false;

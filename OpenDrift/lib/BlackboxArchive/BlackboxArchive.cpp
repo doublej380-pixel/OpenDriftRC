@@ -204,7 +204,7 @@ uint8_t BlackboxArchive::getProgress() const
 
     return (uint8_t)min(
         (size_t)99,
-        (archiveIndex * 100U) / snapshotRecords
+        ((archiveIndex + diagnosticIndex) * 100U) / (snapshotRecords + diagnosticRecords)
     );
 }
 
@@ -312,15 +312,24 @@ bool BlackboxArchive::openCsvArchive(File& file) const
 
 bool BlackboxArchive::startSave()
 {
+    diagnosticRecords = 0;
+    diagnosticIndex = 0;
+    savingDiagnostics = false;
+    diagnosticPath[0] = '\0';
+    // The SD archive and its timing companion share one frozen snapshot.
+    // Internal flash retains its existing blackbox-only behavior.
+    if(csvOutput && diagnostics != nullptr && diagnostics->beginExport())
+        diagnosticRecords = diagnostics->count();
     snapshotRecords = logger->getRecordCount();
     snapshotRecordSize = logger->getBinaryRecordSize();
 
     const size_t required = csvOutput
-        ? snapshotRecords * 704UL + FREE_SPACE_MARGIN
+        ? snapshotRecords * 704UL + diagnosticRecords * 320UL + FREE_SPACE_MARGIN
         : sizeof(Header) + snapshotRecords * snapshotRecordSize + FREE_SPACE_MARGIN;
 
     if(storage == nullptr || freeStorageBytes < required)
     {
+        if(diagnostics != nullptr && diagnosticRecords) diagnostics->endExport();
         state = NO_SPACE;
         resultShownAtMs = millis();
         return false;
@@ -330,6 +339,7 @@ bool BlackboxArchive::startSave()
 
     if(csvOutput && !prepareNextCsvArchivePath())
     {
+        if(diagnostics != nullptr && diagnosticRecords) diagnostics->endExport();
         logger->setPaused(false);
         state = FAILED;
         resultShownAtMs = millis();
@@ -341,6 +351,7 @@ bool BlackboxArchive::startSave()
 
     if(!output)
     {
+        if(diagnostics != nullptr && diagnosticRecords) diagnostics->endExport();
         logger->setPaused(false);
         state = FAILED;
         resultShownAtMs = millis();
@@ -381,6 +392,23 @@ bool BlackboxArchive::startSave()
 
 void BlackboxArchive::writeNextChunk()
 {
+    if(savingDiagnostics)
+    {
+        char line[320];
+        const size_t count = min((size_t)12, diagnosticRecords - diagnosticIndex);
+        for(size_t index = 0; index < count; ++index)
+        {
+            const size_t length = diagnostics->format(diagnosticIndex + index, line, sizeof(line));
+            if(length == 0 || output.write(reinterpret_cast<const uint8_t*>(line), length) != length)
+            {
+                abortSave(FAILED);
+                return;
+            }
+        }
+        diagnosticIndex += count;
+        if(diagnosticIndex >= diagnosticRecords) finishSave();
+        return;
+    }
     if(csvOutput)
     {
         char line[704];
@@ -449,6 +477,20 @@ void BlackboxArchive::writeNextChunk()
 
 void BlackboxArchive::finishSave()
 {
+    if(savingDiagnostics)
+    {
+        output.flush();
+        output.close();
+        const bool ok = !storage->exists(diagnosticPath) &&
+            storage->rename(DIAGNOSTIC_TEMP_PATH, diagnosticPath);
+        if(!ok) { abortSave(FAILED); return; }
+        diagnostics->endExport();
+        savingDiagnostics = false;
+        allowUnconfirmedParkedDuringSave = false;
+        state = SAVED;
+        resultShownAtMs = millis();
+        return;
+    }
     Header header = {
         MAGIC,
         VERSION,
@@ -517,6 +559,7 @@ void BlackboxArchive::finishSave()
 
     if(!ok)
     {
+        if(diagnostics != nullptr && diagnosticRecords) diagnostics->endExport();
         if(storage->exists(tempPath())) storage->remove(tempPath());
         pendingCsvPath[0] = '\0';
         allowUnconfirmedParkedDuringSave = false;
@@ -538,6 +581,20 @@ void BlackboxArchive::finishSave()
     }
     archivedRecords = header.recordCount;
     archivedDurationMs = header.durationMs;
+    if(diagnosticRecords != 0)
+    {
+        savingDiagnostics = true;
+        if(storage->exists(DIAGNOSTIC_TEMP_PATH)) storage->remove(DIAGNOSTIC_TEMP_PATH);
+        output = storage->open(DIAGNOSTIC_TEMP_PATH, FILE_WRITE);
+        const char* timingHeader = ControlDiagnostics::header();
+        if(!output || output.print(timingHeader) != strlen(timingHeader))
+        {
+            abortSave(FAILED);
+            return;
+        }
+        // Keep SAVING/progress active until both files have been completed.
+        return;
+    }
     allowUnconfirmedParkedDuringSave = false;
     state = SAVED;
     resultShownAtMs = millis();
@@ -547,6 +604,10 @@ void BlackboxArchive::finishSave()
 void BlackboxArchive::abortSave(Status reason)
 {
     if(output) output.close();
+    if(storage != nullptr && savingDiagnostics && storage->exists(DIAGNOSTIC_TEMP_PATH))
+        storage->remove(DIAGNOSTIC_TEMP_PATH);
+    if(diagnostics != nullptr && diagnosticRecords) diagnostics->endExport();
+    savingDiagnostics = false;
     if(storage != nullptr && storage->exists(tempPath())) storage->remove(tempPath());
     pendingCsvPath[0] = '\0';
     if(logger != nullptr) logger->setPaused(false);
@@ -760,7 +821,10 @@ bool BlackboxArchive::prepareNextCsvArchivePath()
             (unsigned long)nextCsvIndex++
         );
 
-        if(!storage->exists(pendingCsvPath)) return true;
+        snprintf(diagnosticPath, sizeof(diagnosticPath),
+            "/opendrift-diagnostics-%04lu.csv", (unsigned long)(nextCsvIndex - 1));
+        if(!storage->exists(pendingCsvPath) &&
+            (!diagnosticRecords || !storage->exists(diagnosticPath))) return true;
     }
 
     pendingCsvPath[0] = '\0';

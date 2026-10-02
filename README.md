@@ -424,6 +424,43 @@ The dedicated AMOLED **Blackbox** page shows the current RAM records, used and
 available space, captured duration, archive destination, saved-log statistics,
 and dump progress. It also provides logging, dump, and RAM-clear controls.
 
+For acquisition/wobble testing, the web configurator's **Control diagnostics**
+card captures up to 45 seconds at control-loop rate. Start it before driving.
+With an SD card, the ordinary dump action also saves a matching numbered
+`opendrift-diagnostics-0001.csv` beside the blackbox CSV. Wait until dump
+completion before powering off. Without SD, download the timing CSV over WiFi
+before restarting; internal-flash dumps do not include this RAM-only capture.
+See [IMU diagnostics](OpenDrift/docs/IMU_DIAGNOSTICS.md) and
+[screen performance testing](OpenDrift/docs/SCREEN_PERFORMANCE.md).
+
+### AMOLED USB maintenance and boot recovery
+
+All AMOLED V1/V2 PWM/CRSF builds, including the private GPIO8 target, support
+USB maintenance. **No SD card is required for firmware updates.** Hold **USB
+MODE** on the System page for 1.5 seconds while parked. The board restarts into
+an isolated mode with steering, throttle, and controller tasks inactive.
+Connect a data-capable USB cable and copy the correct build's application
+`firmware.bin` onto the firmware-update drive. Wait for **Update Complete**
+and automatic reboot; do not disconnect during writing. An inserted SD card
+appears separately as a read-only log drive. The maintenance restart button
+disconnects the volumes before returning to normal operation.
+
+For official builds previously using the single-app partition layout, install
+this source once through a normal PlatformIO upload: an app-only USB update
+cannot install a new partition table. The new layout keeps NVS and FFat at
+their existing addresses, but back up your tune/logs before upgrading. USB
+serial ports may re-enumerate after the switch to native TinyUSB. Do not erase
+the whole chip as part of the normal upgrade.
+
+After three consecutive unfinished boots across software/watchdog resets,
+the next boot enters USB recovery before the IMU, outputs, and controller are
+started. Automatic recovery skips SD mounting so a bad card cannot block the
+updater. Successful normal startup clears the RTC failure audit after 15
+seconds. Intentional USB-mode changes are excluded. Cold power loss/brownout
+starts a fresh audit; corrupt apps/bootloaders still require hardware BOOT
+recovery. The headless private Matrix builds retain their existing USB serial
+configuration; this AMOLED maintenance interface is not enabled on Matrix.
+
 The web configurator shows the current log size and provides:
 
 - `Download CSV`

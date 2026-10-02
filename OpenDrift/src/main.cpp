@@ -78,6 +78,7 @@ AuxChannelOutputs auxChannelOutputs;
 #endif
 
 BlackboxLogger blackbox;
+ControlDiagnostics controlDiagnostics;
 
 #if defined(OPENDRIFT_BOARD_AMOLED_164)
 Backgrounds backgrounds;
@@ -211,6 +212,9 @@ volatile bool gyroCalibrationRequested = false;
 #if defined(OPENDRIFT_USB_MAINTENANCE)
 volatile bool usbMaintenanceRequested = false;
 bool usbMaintenanceActive = false;
+bool usbMaintenanceDisplayAvailable = false;
+bool normalBootNeedsConfirmation = false;
+uint32_t normalBootReadyAt = 0;
 bool usbMaintenanceLastTouch = false;
 bool firmwareUpdateCompletedAtBoot = false;
 uint32_t lastUsbUpdateRevision = 0;
@@ -258,6 +262,7 @@ void flushUsbMaintenanceCanvas()
 
 void drawUsbMaintenanceScreen()
 {
+    if(!usbMaintenanceDisplayAvailable) return;
     if(!usbMaintenanceCanvasReady)
     {
         const bool usePsram = psramFound();
@@ -1101,6 +1106,11 @@ float mapGainPulse(
 
 void runControlIteration()
 {
+    const uint32_t iterationStartedUs = micros();
+    static uint32_t previousIterationUs = 0;
+    const uint32_t intervalUs = previousIterationUs == 0 ? 0 : iterationStartedUs - previousIterationUs;
+    previousIterationUs = iterationStartedUs;
+    static uint32_t totalI2cMisses = 0;
     #if defined(OPENDRIFT_INPUT_CRSF)
     bool crsfSignal =
         crsf.hasSignal(
@@ -1179,12 +1189,14 @@ void runControlIteration()
     static uint8_t i2cMisses = 0;
     static float lastYaw = 0.0f;
 
+    const uint32_t busWaitStartedUs = micros();
     bool i2cReady =
         i2cBusMutex == nullptr ||
         xSemaphoreTake(
             i2cBusMutex,
             pdMS_TO_TICKS(2)
         ) == pdTRUE;
+    const uint32_t busWaitUs = micros() - busWaitStartedUs;
 
     if(i2cReady)
     {
@@ -1221,6 +1233,7 @@ void runControlIteration()
     }
     else
     {
+        ++totalI2cMisses;
         if(i2cMisses < 255)
         {
             i2cMisses++;
@@ -1439,6 +1452,20 @@ void runControlIteration()
     portEXIT_CRITICAL(
         &controlTelemetryMux
     );
+
+    const auto& sample = imu.getSampleDiagnostics();
+    controlDiagnostics.record({
+        iterationStartedUs, intervalUs, micros() - iterationStartedUs, busWaitUs,
+        i2cReady ? sample.readUs : 0, sample.sampleCounter,
+        i2cReady ? sample.counterDelta : 0, sample.readErrors, sample.noDataCount,
+        totalI2cMisses, controllerYaw, gyro.getGain(), gyroCorrection,
+        steeringServo.getPulseMicroseconds(),
+        (uint32_t)((i2cReady ? 1 : 0) |
+            (i2cReady && imu.lastGyroReadOk() ? 2 : 0) |
+            (i2cReady && sample.fresh ? 4 : 0) |
+            (sample.locked ? 8 : 0) | (steeringSignal ? 16 : 0)),
+        imu.getGyroLpfMode()
+    });
 }
 
 
@@ -1556,7 +1583,17 @@ void updateBlackboxAvailability()
 
 void setup()
 {
+    #if defined(OPENDRIFT_USB_MAINTENANCE)
+    const bool manualMaintenance = UsbMaintenance::consumeBootRequest();
+    const bool automaticRecovery = !manualMaintenance && UsbMaintenance::recordBootAttempt(
+        esp_reset_reason() == ESP_RST_POWERON || esp_reset_reason() == ESP_RST_BROWNOUT);
+    const bool enterMaintenance = manualMaintenance || automaticRecovery;
+    #endif
     Serial.begin(115200);
+    webConfig.setControlDiagnostics(controlDiagnostics);
+    #if defined(OPENDRIFT_BOARD_AMOLED_164)
+    blackboxArchive.setControlDiagnostics(controlDiagnostics);
+    #endif
 
     #if defined(OPENDRIFT_BOARD_AMOLED_164)
     // Give the external panel and sensor rails time to settle before touching
@@ -1705,7 +1742,12 @@ void setup()
     // REMOVABLE STORAGE
     //-------------------
 
+    #if defined(OPENDRIFT_USB_MAINTENANCE)
+    // A bad card must not block firmware recovery after repeated boot failures.
+    const bool sdCardOk = !automaticRecovery && onboardStorage.begin();
+    #else
     const bool sdCardOk = onboardStorage.begin();
+    #endif
 
     char sdMessage[64];
     snprintf(
@@ -1726,8 +1768,10 @@ void setup()
     );
 
     #if defined(OPENDRIFT_USB_MAINTENANCE)
-    if(UsbMaintenance::consumeBootRequest())
+    if(enterMaintenance)
     {
+        UsbMaintenance::markBootHealthy();
+        if(automaticRecovery) Serial.println("USB recovery: three unfinished boots; SD mounting skipped");
         bootConsole.log(
             "usb: entering isolated maintenance mode",
             "[WAIT]",
@@ -1743,8 +1787,9 @@ void setup()
 
         usbMaintenance.begin(onboardStorage);
         usbMaintenanceActive = true;
+        usbMaintenanceDisplayAvailable = displayOk;
         lastUsbUpdateRevision = usbMaintenance.getUpdateRevision();
-        drawUsbMaintenanceScreen();
+        if(displayOk) drawUsbMaintenanceScreen();
 
         Serial.printf(
             "USB maintenance: firmware=%s sd=%s\n",
@@ -1837,7 +1882,7 @@ void setup()
         #endif
 
         bootConsole.log(
-            "qmi8658: probe failed; safe reboot",
+            "qmi8658: initialization failed; safe reboot",
             "[FAIL]",
             TFT_RED
         );
@@ -2472,6 +2517,10 @@ void setup()
 
     if(taskStarted == pdPASS)
     {
+        #if defined(OPENDRIFT_USB_MAINTENANCE)
+        normalBootReadyAt = millis();
+        normalBootNeedsConfirmation = true;
+        #endif
         Serial.printf(
             "Controller: %lu Hz task online\n",
             (unsigned long)controlLoopHz
@@ -2534,6 +2583,13 @@ void loop()
         usbMaintenanceLastTouch = touched;
         delay(10);
         return;
+    }
+
+    if(normalBootNeedsConfirmation && millis() - normalBootReadyAt >= 15000UL)
+    {
+        UsbMaintenance::markBootHealthy();
+        normalBootNeedsConfirmation = false;
+        Serial.println("Boot recovery: normal startup confirmed");
     }
 
     if(usbMaintenanceRequested)

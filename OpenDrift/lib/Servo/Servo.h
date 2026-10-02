@@ -20,6 +20,7 @@ public:
     void center();
 
     int getPosition();
+    float getPulseMicroseconds() const { return currentPulse; }
 
     void noteCommandPulse(int us);
     int getCommandPosition();

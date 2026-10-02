@@ -1,4 +1,5 @@
 #include "UsbMaintenance.h"
+#include "BootRecovery.h"
 
 #if defined(OPENDRIFT_USB_MAINTENANCE)
 #include <esp_attr.h>
@@ -8,6 +9,7 @@
 
 static constexpr uint32_t MAINTENANCE_BOOT_MAGIC = 0x4F445553UL;
 RTC_NOINIT_ATTR static uint32_t maintenanceBootMagic;
+RTC_NOINIT_ATTR static BootRecovery bootRecovery;
 
 static volatile UsbMaintenance::UpdateState firmwareUpdateState =
     UsbMaintenance::UPDATE_IDLE;
@@ -96,6 +98,23 @@ void UsbMaintenance::armNextBoot()
 {
     #if defined(OPENDRIFT_USB_MAINTENANCE)
     maintenanceBootMagic = MAINTENANCE_BOOT_MAGIC;
+    bootRecovery.healthy(); // Intentional mode changes are not failed boots.
+    #endif
+}
+
+bool UsbMaintenance::recordBootAttempt(bool coldBoot)
+{
+    #if defined(OPENDRIFT_USB_MAINTENANCE)
+    return bootRecovery.begin(coldBoot);
+    #else
+    return false;
+    #endif
+}
+
+void UsbMaintenance::markBootHealthy()
+{
+    #if defined(OPENDRIFT_USB_MAINTENANCE)
+    bootRecovery.healthy();
     #endif
 }
 

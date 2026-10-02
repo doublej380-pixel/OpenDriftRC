@@ -22,6 +22,8 @@ public:
 
     static void armNextBoot();
     static bool consumeBootRequest();
+    static bool recordBootAttempt(bool coldBoot);
+    static void markBootHealthy();
     static bool consumeCompletedUpdate();
 
     bool begin(OnboardStorage& storage);
