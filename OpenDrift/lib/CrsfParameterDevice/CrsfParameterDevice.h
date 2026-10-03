@@ -8,6 +8,7 @@
 #include "Settings.h"
 #include "Servo.h"
 #include "BlackboxArchive.h"
+#include "ControlDiagnostics.h"
 #include "ParameterCatalog.h"
 
 
@@ -29,6 +30,14 @@ public:
 
     void setBlackboxArchive(
         BlackboxArchive& archive
+    );
+
+    void setControlDiagnostics(
+        ControlDiagnostics& diagnostics
+    );
+
+    void setUsbMaintenanceCallback(
+        void (*callback)()
     );
 
 
@@ -57,6 +66,8 @@ private:
     RadioInput* steeringRadio = nullptr;
     ServoOutput* steeringServo = nullptr;
     BlackboxArchive* blackboxArchive = nullptr;
+    ControlDiagnostics* controlDiagnostics = nullptr;
+    void (*usbMaintenanceCallback)() = nullptr;
     bool settingsChanged = false;
 
     void processFrame(

@@ -55,7 +55,9 @@ namespace OpenDriftParameters
             {Id::LIVE_GAIN, "", "Live Gain", Type::NUMBER, 0.0f, 6.0f, Defaults::GYRO_GAIN, 0.05f, 2, "x", nullptr, R},
             {Id::DRIVER_PRIORITY, "driverPrio", "Driver Priority", Type::NUMBER, 0.0f, 50.0f, Defaults::DRIVER_PRIORITY, 1.0f, 0, "%", nullptr, P | F},
             {Id::THROTTLE_RATE, "thrOutHz", "Throttle Rate*", Type::SELECTION, 0.0f, 2.0f, 0.0f, 1.0f, 0, "", "50 Hz;250 Hz;333 Hz", P},
-            {Id::ARCHIVE_LOG, "", "Log", Type::ACTION, 0.0f, 8.0f, 0.0f, 1.0f, 0, "", "PARK;READY;BUSY;DONE;EMPTY;FULL;FAIL;STOP;NA", NONE}
+            {Id::ARCHIVE_LOG, "", "Save Logs", Type::ACTION, 0.0f, 8.0f, 0.0f, 1.0f, 0, "", "PARK CAR;PRESS;SAVING;SAVED;NO LOG;NO SPACE;FAILED;CANCELLED;UNAVAILABLE", NONE},
+            {Id::CONTROL_DIAGNOSTICS, "", "Diagnostics", Type::ACTION, 0.0f, 3.0f, 0.0f, 1.0f, 0, "", "READY;START;RECORDING;CAPTURED", A},
+            {Id::USB_MAINTENANCE, "", "USB Mode", Type::ACTION, 0.0f, 1.0f, 0.0f, 1.0f, 0, "", "PRESS;REBOOTING", A}
         };
 
         int32_t scale(const Definition& definition, float value)

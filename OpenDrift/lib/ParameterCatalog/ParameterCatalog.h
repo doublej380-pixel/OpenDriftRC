@@ -51,7 +51,9 @@ namespace OpenDriftParameters
         ARCHIVE_LOG = 40,
         // Published CRSF IDs are permanent. ID 41 belonged to the retired
         // gyro-output hysteresis experiment and must never be reused.
-        RETIRED_GYRO_HYSTERESIS = 41
+        RETIRED_GYRO_HYSTERESIS = 41,
+        CONTROL_DIAGNOSTICS = 42,
+        USB_MAINTENANCE = 43
     };
 
     enum class Type : uint8_t
@@ -91,7 +93,7 @@ namespace OpenDriftParameters
 
     // Published CRSF IDs are a compatibility contract. Never renumber an ID;
     // leave a tombstone in the catalog if a parameter is retired.
-    static constexpr uint8_t MAX_PUBLISHED_ID = 41;
+    static constexpr uint8_t MAX_PUBLISHED_ID = 43;
 
     const Definition* find(Id id);
     const Definition* find(uint8_t id);

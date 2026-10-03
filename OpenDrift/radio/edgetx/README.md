@@ -48,3 +48,22 @@ because those pins carry the CRSF UART.
 low-bandwidth mode, `120 Hz` reduces sensor phase delay, and `Off` bypasses the
 sensor LPF. `Smoothing 0.00` is a true software-filter bypass. Blackbox logs
 record the active selection in `gyro_lpf_mode` as 0, 1, or 2 respectively.
+
+## Trackside diagnostic capture
+
+The AMOLED CRSF builds expose two live action rows in the tool:
+
+1. Enable normal blackbox logging, select `Diagnostics`, and press Enter
+   immediately before driving. Confirm the row changes to `RECORDING`.
+2. Complete the short test within 45 seconds, then park the car.
+3. Select `Save Logs` and press Enter. Keep the car parked and powered while
+   the row says `SAVING`; wait until it says `SAVED`.
+
+With a microSD card installed, this creates a matching numbered blackbox and
+timing-diagnostic CSV pair. Starting `Diagnostics` again replaces an unsaved
+RAM timing capture. Do not power-cycle before `Save Logs` reaches `SAVED`.
+
+If the touchscreen or WiFi is unavailable, select `USB Mode` and press Enter.
+OpenDrift centers steering and throttle, disables both outputs, and reboots into
+the same isolated USB maintenance mode used by the on-screen button. Connect
+USB only after the car is safely parked and the wheels are clear.

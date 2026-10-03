@@ -14,6 +14,8 @@ local function newField(id)
   if id >= 28 and id <= 31 then field[11] = true end   -- calibration action
   if id == 37 then field[15] = true end                -- derived live gain
   if id == 40 then field[17] = true end                -- archive action/status
+  if id == 42 then field[18] = true end                -- diagnostics action/status
+  if id == 43 then field[19] = true end                -- USB maintenance reboot
   return field
 end
 
@@ -27,6 +29,7 @@ local requestIndex = 1
 local nextGainRequest = 0
 local nextCalibrationRequest = 0
 local nextArchiveRequest = 0
+local nextDiagnosticsRequest = 0
 local pushFailed = 0
 local pushedThisFrame = false
 
@@ -217,7 +220,7 @@ end
 
 local function adjust(step)
   local field = fields[selected]
-  if field[10] or field[11] or field[15] or field[17] then return end
+  if field[10] or field[11] or field[15] or field[17] or field[18] or field[19] then return end
   if field.value == nil then return end
   field.value = math.max(field[3], math.min(field[4], field.value + step * field[5]))
   writeField(field)
@@ -232,6 +235,7 @@ local function init()
   nextGainRequest = 0
   nextCalibrationRequest = 0
   nextArchiveRequest = 0
+  nextDiagnosticsRequest = 0
   pushFailed = 0
   requestField({0})
 end
@@ -276,6 +280,22 @@ local function run(event)
         field.value = status
         nextArchiveRequest = 0
       end
+    elseif field[18] then
+      -- READY or CAPTURED starts a fresh timing capture. Starting again
+      -- intentionally replaces the previous RAM-only diagnostic capture.
+      if field.value == 0 or field.value == 3 then
+        local status = field.value
+        field.value = 1
+        writeField(field)
+        field.value = status
+        nextDiagnosticsRequest = 0
+      end
+    elseif field[19] then
+      -- Firmware centers and detaches both outputs before rebooting into the
+      -- isolated USB maintenance environment.
+      field.value = 1
+      writeField(field)
+      field.value = 0
     elseif field[11] then
       field.value = 1
       writeField(field)
@@ -301,6 +321,10 @@ local function run(event)
 
   if now >= nextArchiveRequest and requestField(findField(40)) then
     nextArchiveRequest = now + 25
+  end
+
+  if now >= nextDiagnosticsRequest and requestField(findField(42)) then
+    nextDiagnosticsRequest = now + 25
   end
 
   if now >= nextRequest and requestField(fields[requestIndex]) then

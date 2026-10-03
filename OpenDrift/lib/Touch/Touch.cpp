@@ -6,6 +6,7 @@
 static constexpr uint8_t FT3168_ADDR = 0x38;
 static constexpr unsigned long FT3168_RELEASE_HOLD_MS = 18;
 static constexpr unsigned long FT3168_READ_FAILURE_HOLD_MS = 80;
+static constexpr uint8_t FT3168_DISABLE_AFTER_FAILURES = 16;
 
 Touch::Touch()
 {
@@ -14,6 +15,10 @@ Touch::Touch()
 
 bool Touch::begin()
 {
+    touchReadFailures = 0;
+    pressed = false;
+    trackingTouch = false;
+
     Wire.setClock(
         300000
     );
@@ -103,7 +108,10 @@ void Touch::update()
         sizeof(data)
     ))
     {
-        touchReadFailures++;
+        if(touchReadFailures < UINT8_MAX)
+        {
+            touchReadFailures++;
+        }
 
         if(
             touchReadFailures >= 8 &&
@@ -114,6 +122,17 @@ void Touch::update()
                 millis();
 
             Serial.println("Touch read unstable");
+        }
+
+        if(touchReadFailures >= FT3168_DISABLE_AFTER_FAILURES)
+        {
+            // A missing or wedged touch controller must not keep occupying the
+            // IMU's shared I2C bus. A reboot performs the normal probe/retry
+            // sequence again; CRSF and USB maintenance remain available.
+            touchOnline = false;
+            pressed = false;
+            trackingTouch = false;
+            Serial.println("Touch disabled after repeated I2C failures");
         }
 
         if(millis() - lastEventMs > FT3168_READ_FAILURE_HOLD_MS)
@@ -241,6 +260,8 @@ bool Touch::begin()
 
     touch.disable_auto_sleep();
 
+    touchOnline = true;
+
     return true;
 }
 
@@ -283,6 +304,12 @@ void Touch::update()
 bool Touch::isTouched()
 {
     return pressed;
+}
+
+
+bool Touch::isOnline() const
+{
+    return touchOnline;
 }
 
 

@@ -26,6 +26,17 @@
   freeze during export, capture restart is blocked until saving finishes, and
   progress spans both files. Existing files are preserved; internal-flash
   dumps remain blackbox-only. A timing capture must be armed before the run.
+- Adds EdgeTX **Diagnostics** and **Save Logs** actions with live capture/save
+  status, allowing a complete paired SD logging workflow without WiFi.
+- Adds an EdgeTX **USB Mode** action that uses the existing output-safe
+  maintenance reboot path when touch or WiFi is unavailable.
+- Prevents AMOLED touch traffic from blocking the 333 Hz IMU/control deadline.
+  Idle touch polling now runs at 30 Hz, active gestures at 125 Hz, both bus
+  acquisitions are non-blocking, and a repeatedly failing touch controller is
+  taken off shared I2C. An offline controller is safely reprobed every five
+  seconds so transient normal-boot failures can recover without a reboot.
+- Initializes and wakes the AMOLED FT3168 before the QMI8658 SensorLib reset
+  sequence, matching the clean-bus order that remains reliable in USB mode.
 - Optimizes AMOLED swipes with reusable physical-layout PSRAM caches and
   sequential composition while preserving stationary backgrounds and panel
   transparency. Replaces fixed-frame release animations with elapsed-time

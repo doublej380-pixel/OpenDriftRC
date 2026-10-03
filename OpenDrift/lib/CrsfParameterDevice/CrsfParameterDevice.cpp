@@ -48,6 +48,22 @@ void CrsfParameterDevice::setBlackboxArchive(
 }
 
 
+void CrsfParameterDevice::setControlDiagnostics(
+    ControlDiagnostics& diagnostics
+)
+{
+    controlDiagnostics = &diagnostics;
+}
+
+
+void CrsfParameterDevice::setUsbMaintenanceCallback(
+    void (*callback)()
+)
+{
+    usbMaintenanceCallback = callback;
+}
+
+
 bool CrsfParameterDevice::consumeSettingsChanged()
 {
     bool changed = settingsChanged;
@@ -299,7 +315,11 @@ void CrsfParameterDevice::writeParameter(
         return;
     }
 
-    if(parameter == (uint8_t)OpenDriftParameters::Id::ARCHIVE_LOG)
+    if(
+        parameter == (uint8_t)OpenDriftParameters::Id::ARCHIVE_LOG ||
+        parameter == (uint8_t)OpenDriftParameters::Id::CONTROL_DIAGNOSTICS ||
+        parameter == (uint8_t)OpenDriftParameters::Id::USB_MAINTENANCE
+    )
     {
         setScaledValue(parameter, value);
     }
@@ -367,6 +387,18 @@ int32_t CrsfParameterDevice::getScaledValue(
             return blackboxArchive != nullptr
                 ? (int32_t)blackboxArchive->getStatus()
                 : (int32_t)BlackboxArchive::UNAVAILABLE;
+        case 42:
+            if(controlDiagnostics == nullptr)
+            {
+                return 0;
+            }
+            if(controlDiagnostics->isCapturing())
+            {
+                return 2;
+            }
+            return controlDiagnostics->count() > 0 ? 3 : 0;
+        case 43:
+            return 0;
         #if defined(OPENDRIFT_BOARD_AMOLED_164) && !defined(OPENDRIFT_BOARD_MATRIX)
         case 35: return settings->getDisplayRotation() == 2 ? 1 : 0;
         #endif
@@ -436,6 +468,18 @@ void CrsfParameterDevice::setScaledValue(
             if(value == 1 && blackboxArchive != nullptr)
             {
                 blackboxArchive->requestSave();
+            }
+            break;
+        case 42:
+            if(value == 1 && controlDiagnostics != nullptr)
+            {
+                controlDiagnostics->start();
+            }
+            break;
+        case 43:
+            if(value == 1 && usbMaintenanceCallback != nullptr)
+            {
+                usbMaintenanceCallback();
             }
             break;
         case 27:

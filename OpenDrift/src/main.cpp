@@ -1197,7 +1197,7 @@ void runControlIteration()
         i2cBusMutex == nullptr ||
         xSemaphoreTake(
             i2cBusMutex,
-            pdMS_TO_TICKS(2)
+            0
         ) == pdTRUE;
     const uint32_t busWaitUs = micros() - busWaitStartedUs;
 
@@ -1852,6 +1852,53 @@ void setup()
     ui.setBlackboxArchive(blackboxArchive);
     #endif
 
+    #if !defined(OPENDRIFT_HEADLESS)
+    bool touchOk = false;
+
+    #if defined(OPENDRIFT_BOARD_AMOLED_164)
+    //-------------------
+    // TOUCH (BEFORE IMU)
+    //-------------------
+
+    // USB maintenance proves that the FT3168 starts reliably on a clean bus.
+    // Wake it before SensorLib performs the QMI8658 reset/locking sequence;
+    // later Wire.begin() calls preserve the controller's normal-mode state.
+    Serial.println("Starting Touch before IMU");
+
+    Wire.begin(I2C_SDA_PIN, I2C_SCL_PIN);
+    Wire.setTimeOut(5);
+    Wire.setClock(300000);
+
+    for(uint8_t attempt = 1; attempt <= STARTUP_RETRY_COUNT; attempt++)
+    {
+        if(attempt > 1)
+        {
+            releaseI2cBus();
+            Wire.begin(I2C_SDA_PIN, I2C_SCL_PIN);
+            Wire.setTimeOut(5);
+            Wire.setClock(300000);
+            delay(50);
+        }
+
+        touchOk = touch.begin();
+
+        Serial.printf(
+            "Touch pre-IMU init attempt %u/%u: %s\n",
+            attempt,
+            STARTUP_RETRY_COUNT,
+            touchOk ? "OK" : "FAIL"
+        );
+
+        if(touchOk)
+        {
+            break;
+        }
+
+        delay(150);
+    }
+    #endif
+    #endif
+
     //-------------------
     // IMU
     //-------------------
@@ -1929,40 +1976,11 @@ void setup()
     // TOUCH
     //-------------------
 
-    // Probe touch before attaching either actuator output. Touch is useful
-    // but not safety-critical: a failed controller must never brick the gyro.
+    // Touch is useful but not safety-critical: a failed controller must never
+    // prevent the gyro from starting. AMOLED was already initialized on the
+    // clean bus before the IMU; the round display initializes here as before.
+    #if !defined(OPENDRIFT_BOARD_AMOLED_164)
     Serial.println("Starting Touch");
-
-    bool touchOk = false;
-
-    #if defined(OPENDRIFT_BOARD_AMOLED_164)
-    for(uint8_t attempt = 1; attempt <= STARTUP_RETRY_COUNT; attempt++)
-    {
-        if(attempt > 1)
-        {
-            releaseI2cBus();
-            Wire.begin(I2C_SDA_PIN, I2C_SCL_PIN);
-            Wire.setClock(300000);
-            delay(50);
-        }
-
-        touchOk = touch.begin();
-
-        Serial.printf(
-            "Touch init attempt %u/%u: %s\n",
-            attempt,
-            STARTUP_RETRY_COUNT,
-            touchOk ? "OK" : "FAIL"
-        );
-
-        if(touchOk)
-        {
-            break;
-        }
-
-        delay(150);
-    }
-    #else
     touchOk = touch.begin();
     #endif
 
@@ -2059,6 +2077,10 @@ void setup()
 
     #if defined(OPENDRIFT_BOARD_AMOLED_164)
     crsfParameters.setBlackboxArchive(blackboxArchive);
+    crsfParameters.setControlDiagnostics(controlDiagnostics);
+    #if defined(OPENDRIFT_USB_MAINTENANCE)
+    crsfParameters.setUsbMaintenanceCallback(requestUsbMaintenance);
+    #endif
     #endif
 
     bool steeringRadioOk = steeringRadio.beginExternal();
@@ -2703,21 +2725,53 @@ void loop()
     }
 
     #if !defined(OPENDRIFT_HEADLESS)
-    if(i2cBusMutex != nullptr)
-    {
-        xSemaphoreTake(
-            i2cBusMutex,
-            portMAX_DELAY
-        );
-    }
+    // Touch is a human-speed input sharing I2C with the time-critical IMU.
+    // Poll slowly while idle, speed up only during an active gesture, and
+    // never queue behind the control task. The control task likewise skips a
+    // sample instead of adding milliseconds of phase delay if a touch read is
+    // already in progress.
+    static uint32_t lastTouchPollMs = 0;
+    static uint32_t lastTouchRecoveryMs = 0;
+    const uint32_t touchPollNowMs = millis();
+    const uint32_t touchPollIntervalMs = touch.isTouched() ? 8U : 33U;
 
-    touch.update();
+    const bool touchRecoveryDue =
+        !touch.isOnline() &&
+        touchPollNowMs - lastTouchRecoveryMs >= 5000U;
+    const bool touchPollDue =
+        touch.isOnline() &&
+        touchPollNowMs - lastTouchPollMs >= touchPollIntervalMs;
 
-    if(i2cBusMutex != nullptr)
+    if(touchRecoveryDue || touchPollDue)
     {
-        xSemaphoreGive(
-            i2cBusMutex
-        );
+        bool touchBusReady =
+            i2cBusMutex == nullptr ||
+            xSemaphoreTake(i2cBusMutex, 0) == pdTRUE;
+
+        if(touchBusReady)
+        {
+            if(touchRecoveryDue)
+            {
+                lastTouchRecoveryMs = touchPollNowMs;
+
+                if(touch.begin())
+                {
+                    touch.setRotation(settings.getDisplayRotation());
+                    lastTouchPollMs = touchPollNowMs;
+                    Serial.println("Touch recovered during normal operation");
+                }
+            }
+            else
+            {
+                touch.update();
+                lastTouchPollMs = touchPollNowMs;
+            }
+
+            if(i2cBusMutex != nullptr)
+            {
+                xSemaphoreGive(i2cBusMutex);
+            }
+        }
     }
     #endif
 

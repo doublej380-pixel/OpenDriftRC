@@ -43,13 +43,16 @@ paired SD dumps remain usable, but locked-read benefits are not active.
 2. Keep your current tune, LPF, servo frequency, and CH3 behavior unchanged for
    the first comparison. Enable the normal blackbox too.
 3. In the web configurator, find **Control diagnostics** and press **Start
-   diagnostic capture** immediately before the run.
+   diagnostic capture** immediately before the run. With an AMOLED CRSF build,
+   the same capture can be armed from EdgeTX: select **Diagnostics**, press
+   Enter, and confirm that its status changes to **RECORDING**.
 4. Within 45 seconds, include a few seconds at rest, sustained left and right
    drifts, and several entries/transitions. Note roughly when wobble occurs.
 5. Park. Capture stops after 45 seconds or when the buffer fills; you can also
    press **Stop capture**. Reload the page to see the current capture state.
 6. With an SD card installed, press the screen's **Dump to SD card** button.
-   The same dump action from the web configurator or radio also saves both
+   The same dump action from the web configurator or the EdgeTX **Save Logs**
+   row also saves both
    files. Wait for the dump to finish before restarting or entering USB mode.
    The card gets a matching numbered pair, for example:
    `opendrift-blackbox-0001.csv` and `opendrift-diagnostics-0001.csv`.

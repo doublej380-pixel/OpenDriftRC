@@ -49,6 +49,8 @@ public:
 
     void update();
 
+    bool isOnline() const;
+
 
     bool isTouched();
 
