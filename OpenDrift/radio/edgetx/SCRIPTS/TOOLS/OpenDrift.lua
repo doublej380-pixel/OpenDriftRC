@@ -8,6 +8,52 @@ local RADIO = 0xEA
 -- no Lua edit when their catalog definition changes.
 local fields = {}
 
+-- Presentation only: permanent IDs stay unchanged, and all values/limits are
+-- still discovered from firmware. Match the web configurator's section order.
+-- Unrecognized future parameters remain accessible in Other Settings.
+local groups = {
+  {"Drive & Limits", {1, 37, 2, 3, 16}},
+  {"Response", {4, 32, 10, 26, 36}},
+  {"Transition/PCA", {9, 38}},
+  {"Drift Assist", {8, 7, 5, 6}},
+  {"Servo", {15, 25, 39, 14, 13, 11, 12}},
+  {"Display", {35}},
+  {"Endpoints", {27, 28, 29, 30, 31}},
+  {"CH3 Gain Range", {33, 34}},
+  {"Aux Outputs", {17, 18, 19, 20, 21, 22, 23, 24}},
+  {"Blackbox", {40}},
+  {"Diagnostics", {42}},
+  {"System / USB", {43}},
+  {"Other Settings", {}}
+}
+
+local function presentation(id)
+  for groupIndex, group in ipairs(groups) do
+    for order, parameterId in ipairs(group[2]) do
+      if parameterId == id then return groupIndex, order end
+    end
+  end
+  return #groups, id
+end
+
+local function sortFields()
+  -- EdgeTX's restricted Lua runtime may omit the table library. Discovery
+  -- lists are small; insertion sort needs only ordinary array operations.
+  for index = 2, #fields do
+    local field = fields[index]
+    local group, order = presentation(field[1])
+    local previous = index - 1
+    while previous >= 1 do
+      local previousGroup, previousOrder = presentation(fields[previous][1])
+      if previousGroup < group or
+          (previousGroup == group and previousOrder <= order) then break end
+      fields[previous + 1] = fields[previous]
+      previous = previous - 1
+    end
+    fields[previous + 1] = field
+  end
+end
+
 local function newField(id)
   local field = {id, "Parameter " .. tostring(id), 0, 0, 1, 0, false}
   if id == 27 then field[10] = true end                 -- derived status
@@ -98,6 +144,7 @@ local function consumeTelemetry()
           fields[#fields + 1] = newField(data[index])
           index = index + 1
         end
+        sortFields()
         selected = 1
         scroll = 1
         requestIndex = 1
@@ -213,6 +260,14 @@ end
 
 local function moveSelection(step)
   selected = math.max(1, math.min(#fields, selected + step))
+  local group = presentation(fields[selected][1])
+  local first = selected
+  while first > 1 and presentation(fields[first - 1][1]) == group do
+    first = first - 1
+  end
+  if scroll < first or presentation(fields[scroll][1]) ~= group then
+    scroll = first
+  end
   if selected < scroll then scroll = selected end
   if selected > scroll + 3 then scroll = selected - 3 end
   requestField(fields[selected])
@@ -334,7 +389,8 @@ local function run(event)
   end
 
   lcd.clear()
-  lcd.drawText(1, 0, "OpenDrift CRSF", INVERS)
+  local selectedGroup = presentation(fields[selected][1])
+  lcd.drawText(1, 0, groups[selectedGroup][1], INVERS)
   local linkText = connected and "LINK" or "WAIT"
   if pushFailed ~= 0 and now - pushFailed < 50 then linkText = "BUSY" end
   lcd.drawText(127, 0, linkText, RIGHT + INVERS)
@@ -354,7 +410,7 @@ local function run(event)
 
   for row = 0, 3 do
     local index = scroll + row
-    if index <= #fields then
+    if index <= #fields and presentation(fields[index][1]) == selectedGroup then
       local field = fields[index]
       local flags = index == selected and INVERS or 0
       if editing and index == selected then flags = flags + BLINK end

@@ -1586,6 +1586,14 @@ void updateBlackboxAvailability()
 
 void setup()
 {
+    const uint32_t bootStartedMs = millis();
+    uint32_t lastBootStageMs = bootStartedMs;
+    auto bootTiming = [&](const char* stage) {
+        const uint32_t now = millis();
+        Serial.printf("Boot timing: %s %lu ms (total %lu ms)\n", stage,
+            (unsigned long)(now - lastBootStageMs), (unsigned long)(now - bootStartedMs));
+        lastBootStageMs = now;
+    };
     #if defined(OPENDRIFT_USB_MAINTENANCE)
     const bool manualMaintenance = UsbMaintenance::consumeBootRequest();
     const bool automaticRecovery = !manualMaintenance && UsbMaintenance::recordBootAttempt(
@@ -1726,6 +1734,7 @@ void setup()
 
     bool settingsOk =
         settings.begin();
+    bootTiming("panel/settings");
 
     #if defined(OPENDRIFT_USB_MAINTENANCE)
     firmwareUpdateCompletedAtBoot =
@@ -1763,6 +1772,7 @@ void setup()
     #else
     const bool sdCardOk = onboardStorage.begin();
     #endif
+    bootTiming("SD mount");
 
     char sdMessage[64];
     snprintf(
@@ -1822,6 +1832,7 @@ void setup()
     // First-use FFat formatting happens before actuator/control tasks exist.
     // Runtime uploads are explicitly a stationary maintenance operation.
     const bool backgroundsOk = backgrounds.begin();
+    bootTiming("background storage");
 
     char backgroundMessage[72];
     snprintf(
@@ -1841,12 +1852,15 @@ void setup()
     );
 
     webConfig.setBackgroundStore(backgrounds);
+    const uint64_t archiveFreeBytes = onboardStorage.freeBytes();
+    bootTiming("storage free-space scan");
     blackboxArchive.begin(
         blackbox,
         onboardStorage.fileSystem(),
         onboardStorage.isSdAvailable() ? "SD card" : nullptr,
-        onboardStorage.freeBytes()
+        archiveFreeBytes
     );
+    bootTiming("saved-log discovery/statistics");
     webConfig.setBlackboxArchive(blackboxArchive);
     ui.setBackgroundStore(backgrounds);
     ui.setBlackboxArchive(blackboxArchive);
@@ -1959,6 +1973,7 @@ void setup()
     }
 
     Serial.println("IMU OK");
+    bootTiming("touch/IMU initialization");
 
     bootConsole.log(
         "qmi8658: 6-axis inertial sensor ready"
@@ -2360,6 +2375,7 @@ void setup()
         ? "Gyro calibrated"
         : "Gyro bias rejected; zero offset retained"
     );
+    bootTiming("outputs/calibration");
 
     bootConsole.log(
         gyroBiasOk
@@ -2551,6 +2567,7 @@ void setup()
             &controlTaskHandle,
             1
         );
+    bootTiming("network/UI/task startup");
 
     if(taskStarted == pdPASS)
     {
@@ -2582,6 +2599,7 @@ void loop()
     {
         static uint32_t lastReportedUsbSdActivity = 0;
         static uint32_t lastUsbSdReportAtMs = 0;
+        static uint32_t lastUsbSdReportBytes = 0;
         const OnboardStorage::UsbReadDiagnostics sd =
             onboardStorage.getUsbReadDiagnostics();
         const uint32_t sdActivity =
@@ -2594,8 +2612,17 @@ void loop()
              millis() - lastUsbSdReportAtMs >= 5000UL)
         )
         {
+            const uint32_t reportAtMs = millis();
+            const uint32_t reportIntervalMs = reportAtMs - lastUsbSdReportAtMs;
+            const uint32_t bytesSinceReport = sd.bytes - lastUsbSdReportBytes;
+            const uint32_t rateKiB = reportIntervalMs == 0 ? 0 :
+                static_cast<uint32_t>(
+                    (static_cast<uint64_t>(bytesSinceReport) * 1000UL) /
+                    (static_cast<uint64_t>(reportIntervalMs) * 1024UL)
+                );
             lastReportedUsbSdActivity = sdActivity;
-            lastUsbSdReportAtMs = millis();
+            lastUsbSdReportAtMs = reportAtMs;
+            lastUsbSdReportBytes = sd.bytes;
             Serial.printf(
                 "USB SD reads=%lu fail=%lu bytes=%lu io_last=%luus io_max=%luus lba=%lu off=%lu size=%lu err=%u cb=%lu busy=%lu mismatch=%lu invalid=%lu wait_last=%luus wait_max=%luus state=%u\n",
                 (unsigned long)sd.reads,
@@ -2614,6 +2641,12 @@ void loop()
                 (unsigned long)sd.lastCallbackWaitUs,
                 (unsigned long)sd.maxCallbackWaitUs,
                 sd.workerState
+            );
+            Serial.printf(
+                "USB SD activity: uptime=%lums interval=%lums rate=%luKiB/s\n",
+                (unsigned long)reportAtMs,
+                (unsigned long)reportIntervalMs,
+                (unsigned long)rateKiB
             );
         }
 

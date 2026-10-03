@@ -20,6 +20,10 @@ math, servo driver, output pins, and normal blackbox format.
 - Read back gyro range, ODR, LPF selection, sensor enables, and sync mode after
   configuration. Report a failed configuration rather than assuming it applied.
 
+Normal boots now use the track-validated asynchronous acquisition directly.
+The locked path is an explicit developer experiment via `IMU::begin(true)`;
+ordinary `begin()` calls do not repeat the failing handshake/reset each boot.
+
 The protocol was checked against the QMI8658A datasheet's register locking
 section as well as the supplied QMI8658C document. Hardware testing is still
 required; host tests cannot verify the chip's actual lock timing.
@@ -112,6 +116,8 @@ g++ -std=c++11 -Itest/imu_host -Ilib/IMU test/imu_host/test.cpp lib/IMU/IMU.cpp 
 /tmp/opendrift-imu-test
 g++ -std=c++11 -Itest/imu_host -Ilib/ControlDiagnostics test/imu_host/diagnostics.cpp lib/ControlDiagnostics/ControlDiagnostics.cpp -o /tmp/opendrift-diagnostics-test
 /tmp/opendrift-diagnostics-test
+g++ -std=c++11 -Ilib/BlackboxArchive test/imu_host/csv_archive_stats.cpp -o /tmp/opendrift-csv-test
+/tmp/opendrift-csv-test
 ```
 
 This compiles the actual IMU implementation against a fake transport and tests
@@ -119,3 +125,8 @@ signed decoding/scaling, counter wrap, repeated/unavailable samples, short-read
 lock cleanup, and LPF mode changes. The second test verifies capture freezing,
 snapshot protection during SD export, CSV formatting, and timed capture stop.
 No hardware is accessed; SD filesystem behavior needs an on-board test.
+
+Startup serial output includes `Boot timing:` lines. When evaluating boot
+speed, send those lines and total power-on-to-ready time with the SD card
+installed. Comparing a second boot without SD can isolate storage work. Rail
+settling and stationary calibration remain intentional startup safeguards.

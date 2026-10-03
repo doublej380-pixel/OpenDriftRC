@@ -38,7 +38,9 @@ but ordinary accessors are now thin views over the store.
    `WebConfigurator::parameterInput()` for numeric web fields.
 7. No EdgeTX edit is required for an ordinary value. The tool discovers
    available parameters, names, limits, precision, increments, and choices
-   from CRSF. Only a new action or derived status may need special behavior.
+   from CRSF. New IDs appear in Other Settings until placed in the Lua
+   `groups` presentation table; this table controls section/order only, not
+   values or limits. Only a new action or derived status needs special behavior.
 8. Add blackbox columns only when the value or its intermediate output is
    useful for diagnosing vehicle behavior.
 

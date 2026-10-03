@@ -8,6 +8,7 @@
 
 #if defined(OPENDRIFT_USB_MAINTENANCE)
 #include <USBMSC.h>
+#include <freertos/semphr.h>
 #endif
 #endif
 
@@ -69,6 +70,7 @@ private:
     USBMSC usbDisk;
     volatile bool ejected = false;
     TaskHandle_t usbReadTaskHandle = nullptr;
+    SemaphoreHandle_t usbReadComplete = nullptr;
     portMUX_TYPE usbReadMux = portMUX_INITIALIZER_UNLOCKED;
     volatile UsbReadState usbReadState = USB_READ_IDLE;
     uint32_t usbReadRequestLba = 0;

@@ -1,4 +1,5 @@
 #include "BlackboxArchive.h"
+#include "CsvArchiveStats.h"
 
 #include <FFat.h>
 
@@ -51,59 +52,19 @@ bool BlackboxArchive::begin(
 
             if(file)
             {
-                bool headerRow = true;
-                bool atLineStart = false;
-                bool timestampValid = false;
-                uint32_t timestamp = 0;
-                uint32_t firstTimestamp = 0;
-                uint32_t lastTimestamp = 0;
+                CsvArchiveStats stats;
 
-                while(file.available())
+                // The old per-byte File::read() took a VFS/filesystem path for
+                // every character. Scan blocks while preserving exact stats.
+                uint8_t scanBuffer[4096];
+                size_t bytesRead = 0;
+                while((bytesRead = file.read(scanBuffer, sizeof(scanBuffer))) > 0)
                 {
-                    const char value = (char)file.read();
-
-                    if(headerRow)
-                    {
-                        if(value == '\n')
-                        {
-                            headerRow = false;
-                            atLineStart = true;
-                        }
-                        continue;
-                    }
-
-                    if(atLineStart)
-                    {
-                        if(value >= '0' && value <= '9')
-                        {
-                            timestamp = timestamp * 10U + (uint32_t)(value - '0');
-                            timestampValid = true;
-                            continue;
-                        }
-
-                        if(value == ',' && timestampValid)
-                        {
-                            if(archivedRecords == 0) firstTimestamp = timestamp;
-                            lastTimestamp = timestamp;
-                        }
-
-                        atLineStart = false;
-                    }
-
-                    if(value == '\n')
-                    {
-                        archivedRecords++;
-                        atLineStart = true;
-                        timestampValid = false;
-                        timestamp = 0;
-                    }
+                    stats.consume(scanBuffer, bytesRead);
                 }
                 file.close();
-
-                if(archivedRecords > 1)
-                {
-                    archivedDurationMs = lastTimestamp - firstTimestamp;
-                }
+                archivedRecords = stats.records;
+                archivedDurationMs = stats.durationMs();
             }
         }
         else

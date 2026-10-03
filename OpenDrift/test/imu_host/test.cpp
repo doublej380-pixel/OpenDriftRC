@@ -18,7 +18,7 @@ static void axis(int address, int16_t value)
 int main()
 {
     IMU imu;
-    assert(imu.begin());
+    assert(imu.begin(true));
     assert(imu.getSampleDiagnostics().locked);
     Wire.registers[0x2D] = 1;
     counter(0xFFFFFE);
@@ -52,7 +52,7 @@ int main()
     assert(imu.setGyroLpfMode(2) && Wire.registers[6] == 0);
     hostLockingFails = true;
     IMU fallback;
-    assert(fallback.begin());
+    assert(fallback.begin(true));
     assert(!fallback.getSampleDiagnostics().locked);
     assert(Wire.registers[8] == 3); // Both sensors enabled, sync cleared.
     counter(12);
@@ -60,5 +60,8 @@ int main()
     assert(fallback.lastGyroReadOk());
     assert(fallback.getYawRate() == -200.0f);
     assert(fallback.setGyroLpfMode(1));
+    IMU normal;
+    assert(normal.begin()); // No failed locking attempt is needed by default.
+    assert(!normal.getSampleDiagnostics().locked);
     std::puts("IMU host tests passed");
 }

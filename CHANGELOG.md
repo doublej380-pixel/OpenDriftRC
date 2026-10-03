@@ -2,6 +2,65 @@
 
 ## v1.0.9 - 2026-10-01
 
+### October 3 developer and AI handoff
+
+- Adds `OpenDrift/docs/PROJECT_CONTEXT.md` and a README entry point covering
+  the project history, simplified-controller rationale, contributor credits,
+  catalog/store architecture, build routing, diagnostics, safety contracts,
+  and current/deferred work. Includes a reusable AI onboarding prompt and
+  explicitly distinguishes user reports, measured findings, and hypotheses.
+- Records the trackside touch/IMU contention breakthrough and the requirement
+  to preserve nonblocking bus access during polish. The context is a dated,
+  curated summary rather than a verbatim export of all previous conversations.
+
+### October 3 USB SD performance polish
+
+- Removes forced 512-byte USB SD chunks; reads can now fill the existing
+  4 KB MSC/worker buffers in one request. Keeps individual CMD17 SD reads to
+  avoid reintroducing the earlier CMD18 stalls.
+- Replaces millisecond completion polling with a worker-signalled semaphore;
+  retains bounded waiting, busy retries, read-only SD access, firmware-updater
+  behavior, and the existing Windows-compatible descriptors/LUN order.
+- Adds maintenance SD throughput/uptime reports and a documented host/card
+  test plan. Hardware excerpts show no SD read failures or busy retries;
+  direct Linux mounts took 4.84/5.79 seconds with a subsequent 3.29 ms directory
+  listing, but graphical opening still hesitates on Windows and Linux. The
+  complete cause remains unresolved and further investigation is deferred
+  at the owner's request; no universal mount-time improvement is claimed.
+
+### October 3 radio menu polish
+
+- Groups the EdgeTX OpenDrift settings in web-configurator order rather than
+  permanent CRSF ID order. Section headers and section-bounded scrolling keep
+  related controls together while retaining the live gain/calibration display
+  and existing actions. Unsupported sections are skipped; unknown future IDs
+  remain accessible under Other Settings.
+- Keeps over-the-air IDs, firmware-discovered values/limits, tunes, and
+  controller behavior unchanged. Adds Lua navigation tests covering forward
+  and backward section crossings, board-specific lists, and future parameters.
+- Replaces the initially used `table.sort` with insertion sort for EdgeTX
+  runtimes without the table library. Regression tests disable that library;
+  the owner confirms the corrected script works on the radio.
+
+### October 3 boot-time polish
+
+- Normal startup now selects the track-validated asynchronous IMU path directly,
+  avoiding the repeated experimental locking handshake and fallback reset.
+  Developers can explicitly request locked acquisition with `IMU::begin(true)`;
+  failed experimental attempts retain the full reset/recovery safeguards.
+- Restores SD archive record-count/duration statistics using 4 KB block reads
+  instead of per-character filesystem reads. Streaming parser state preserves
+  correctness across headers, timestamps, and rows split between blocks.
+- Adds serial `Boot timing:` measurements for panel/settings, SD mounting,
+  background storage, free-space scanning, saved-log statistics, touch/IMU,
+  output/calibration, and network/UI/task startup. Remaining delays must be
+  measured on hardware; no fixed boot-time improvement is claimed.
+- Keeps power-rail settling, stationary calibration, touch scheduling, saved
+  tunes, and actuator pinouts unchanged. Adds chunk-boundary and timestamp-wrap
+  regression tests for the saved CSV statistics parser.
+- Owner confirms normal boot speed is restored; the track-validated runtime
+  touch/IMU timing and controller behavior are unchanged.
+
 ### October 1 acquisition, display, logging, and recovery updates
 
 - Adds QMI8658 locked acquisition with availability checks, bounded lock delay,

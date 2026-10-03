@@ -17,6 +17,17 @@ change the value, and press again to finish. Changes are applied live and are
 saved by OpenDrift's normal delayed settings writer. A successful radio write
 also requests an immediate refresh of the current OpenDrift display page.
 
+The development script in `SCRIPTS/TOOLS/OpenDrift.lua` groups settings like
+the web configurator: Drive & Limits, Response, Transition/Driver Priority,
+Drift Assist, Servo, Display, Endpoints, CH3 Gain Range, Auxiliary Outputs,
+Blackbox, Diagnostics, and System/USB. The header shows the current section;
+keep turning the roller to move into the next section. Empty sections are
+skipped automatically for the connected board. Live gain and endpoint status
+remain visible, with the capture-position reminder shown for endpoint actions.
+New firmware parameters not yet assigned a section appear in Other Settings.
+Copy the repository script for these changes; older release downloads remain
+unchanged until a release is published. No firmware flash is required.
+
 Physical endpoint calibration sets the servo's hard output limits and is shared with both displays. The header and
 `Endpoints` row show `NO`, `PARTIAL`, or `YES`. To calibrate from the radio:
 

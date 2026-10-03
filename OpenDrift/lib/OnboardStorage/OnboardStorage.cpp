@@ -15,7 +15,7 @@ static constexpr int SD_MOSI_PIN = 39;
 static constexpr int SD_MISO_PIN = 40;
 static constexpr int SD_CLOCK_PIN = 41;
 static constexpr uint32_t SD_FREQUENCY_HZ = 20000000;
-static constexpr uint32_t USB_SD_READ_CHUNK_SIZE = 512;
+static constexpr uint32_t USB_SD_READ_CHUNK_SIZE = 4096;
 
 class OpenDriftSDFS : public fs::SDFS
 {
@@ -180,6 +180,11 @@ bool OnboardStorage::beginUsbMassStorage()
 
     if(usbReadTaskHandle == nullptr)
     {
+        if(usbReadComplete == nullptr)
+        {
+            usbReadComplete = xSemaphoreCreateBinary();
+            if(usbReadComplete == nullptr) return false;
+        }
         const BaseType_t taskCreated = xTaskCreatePinnedToCore(
             readWorkerTask,
             "usb-sd-read",
@@ -282,11 +287,9 @@ int32_t OnboardStorage::readBlocks(
         return -1;
     }
 
-    // Keep the TinyUSB task's synchronous wait to one physical sector. A
-    // short read is explicitly supported by TinyUSB; it advances the offset
-    // and invokes this callback again for the remainder of the READ(10).
-    // This also keeps Arduino SD.h on its single-block CMD17 path instead of
-    // the separate CMD18 multi-block implementation.
+    // Fill the existing TinyUSB-sized buffer in one worker request rather
+    // than forcing eight 512-byte callbacks for each 4 KB host read. The
+    // worker still uses CMD17 per sector; batching does not enable CMD18.
     const uint32_t readSize = min(bufferSize, USB_SD_READ_CHUNK_SIZE);
 
     bool startRead = false;
@@ -314,6 +317,9 @@ int32_t OnboardStorage::readBlocks(
 
     if(startRead)
     {
+        // A completion token is only a wakeup hint: the protected state above
+        // remains authoritative, including after a slow-read/busy retry.
+        xSemaphoreTake(instance->usbReadComplete, 0);
         xTaskNotifyGive(instance->usbReadTaskHandle);
     }
 
@@ -372,7 +378,13 @@ int32_t OnboardStorage::readBlocks(
             }
             return 0;
         }
-        delay(1);
+        const uint32_t remainingUs = 250000UL - waitUs;
+        const TickType_t waitTicks = pdMS_TO_TICKS(
+            (remainingUs + 999UL) / 1000UL
+        );
+        // Block until the worker signals completion, not until the next
+        // millisecond polling tick. Never hold the state mutex while waiting.
+        xSemaphoreTake(instance->usbReadComplete, waitTicks);
     }
 }
 
@@ -413,6 +425,7 @@ void OnboardStorage::readWorkerTask(void* context)
         instance->usbReadWorkerResult = result;
         instance->usbReadState = USB_READ_READY;
         portEXIT_CRITICAL(&instance->usbReadMux);
+        xSemaphoreGive(instance->usbReadComplete);
     }
 }
 
@@ -469,10 +482,8 @@ int32_t OnboardStorage::performRead(
         return finish(-1, 2);
     }
 
-    // TinyUSB keeps lba fixed for one SCSI READ(10) command and advances
-    // offset across successive endpoint-buffer callbacks. Windows commonly
-    // issues reads larger than the 4096-byte USB buffer, so normalize that
-    // command-relative offset back into an SD sector and byte offset.
+    // Normalize the callback's block/byte address. TinyUSB revisions may
+    // advance lba or offset between chunks; both forms map to the same bytes.
     const uint64_t firstByte =
         static_cast<uint64_t>(lba) * sectorSize + offset;
     const uint64_t mediaBytes =
@@ -496,13 +507,11 @@ int32_t OnboardStorage::performRead(
             return finish(-1, 4);
         }
 
-        // Use one SD multi-block transaction for each aligned USB chunk.
+        // Keep the known-working single-block SD path even when the USB
+        // request spans multiple sectors. CMD18 previously caused stalls.
         if(currentOffset == 0 && remaining >= sectorSize)
         {
-            const uint32_t sectorsToRead = min(
-                remaining / sectorSize,
-                sectorCount - currentLba
-            );
+            const uint32_t sectorsToRead = 1;
             if(!storageSd.readRAW(destination, currentLba, sectorsToRead))
             {
                 return finish(-1, 5);

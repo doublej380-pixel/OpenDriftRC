@@ -9,7 +9,9 @@ class IMU
 {
 public:
 
-    bool begin();
+    // Locked acquisition remains experimental; normal boots use the validated
+    // asynchronous track baseline without retrying the failed CTRL9 handshake.
+    bool begin(bool tryLocking = false);
 
     bool setGyroLpfMode(uint8_t mode);
     uint8_t getGyroLpfMode() const;

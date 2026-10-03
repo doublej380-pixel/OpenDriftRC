@@ -3,7 +3,7 @@
 #include <math.h>
 
 
-bool IMU::begin()
+bool IMU::begin(bool tryLocking)
 {
     Wire.begin(SDA_PIN, SCL_PIN);
 
@@ -48,7 +48,7 @@ bool IMU::begin()
     counterReady = false;
     if(!stage("disable accelerometer", qmi.disableAccelerometer())) return false;
     if(!stage("disable gyroscope", qmi.disableGyroscope())) return false;
-    if(!stage("locking", configureLocking()))
+    if(tryLocking && !stage("locking", configureLocking()))
     {
         // Locking is an acquisition enhancement, not a prerequisite for the
         // previously working gyro. Reset fully: a failed CTRL9 handshake can
@@ -62,6 +62,11 @@ bool IMU::begin()
         if(!stage("async gyroscope config", qmi.configGyroscope(
             SensorQMI8658::GYR_RANGE_1024DPS, SensorQMI8658::GYR_ODR_896_8Hz,
             SensorQMI8658::LPF_MODE_0))) return false;
+        if(!stage("async mode", qmi.disableSyncSampleMode())) return false;
+    }
+    if(!tryLocking)
+    {
+        Serial.println("QMI acquisition: asynchronous (locking experiment skipped)");
         if(!stage("async mode", qmi.disableSyncSampleMode())) return false;
     }
     if(!stage("enable accelerometer", qmi.enableAccelerometer())) return false;

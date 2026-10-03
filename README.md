@@ -8,6 +8,12 @@ OpenDrift v1.0 uses a dedicated selectable-rate control task, a single gyro filt
 
 See the current [Technical Tuning Reference](OpenDrift/docs/Tuning.md) for the setup order, symptom table, surface-profile workflow, and findings from real track testing. The public [tuning guide](https://opendriftrc.com/tuning/) provides the shorter trackside workflow.
 
+Developers and AI assistants can start with the
+[project context and handoff](OpenDrift/docs/PROJECT_CONTEXT.md), covering the
+development history, architecture, validated findings, safety constraints,
+current local work, and deferred investigations. It is a dated summary, not
+a verbatim chat archive; verify it against the current source.
+
 ## Install Firmware
 
 Visit [opendriftrc.com](https://opendriftrc.com) for the project overview, [wiring reference](https://opendriftrc.com/wiring/), and Open Beta firmware. The [browser installer](https://opendriftrc.com/flash/) provides current AMOLED images with either PWM or CRSF receiver support, without an account, source compilation, or command-line tools. Historical round-display releases remain available but are frozen.
@@ -444,6 +450,13 @@ Connect a data-capable USB cable and copy the correct build's application
 and automatic reboot; do not disconnect during writing. An inserted SD card
 appears separately as a read-only log drive. The maintenance restart button
 disconnects the volumes before returning to normal operation.
+
+The SD-ready indication reports device-side readiness, not completion of the
+computer's filesystem mount. USB SD reads now use up to the existing 4 KB
+buffer with event-driven completion instead of per-sector polling. See
+[USB SD performance testing](OpenDrift/docs/USB_SD_PERFORMANCE.md) if the
+drive appears but takes a long time to open; hardware validation is still
+required to measure the improvement.
 
 For official builds previously using the single-app partition layout, install
 this source once through a normal PlatformIO upload: an app-only USB update
