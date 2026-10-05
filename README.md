@@ -459,7 +459,8 @@ drive appears but takes a long time to open; hardware validation is still
 required to measure the improvement.
 
 For official builds previously using the single-app partition layout, install
-this source once through a normal PlatformIO upload: an app-only USB update
+the full factory image once through the webflasher or perform a normal full
+PlatformIO upload: an app-only USB update
 cannot install a new partition table. The new layout keeps NVS and FFat at
 their existing addresses, but back up your tune/logs before upgrading. USB
 serial ports may re-enumerate after the switch to native TinyUSB. Do not erase

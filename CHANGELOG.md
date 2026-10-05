@@ -1,6 +1,17 @@
 # Changelog
 
-## v1.0.9 - 2026-10-01
+## v1.0.9 - 2026-10-05
+
+### Official release
+
+- Publishes four Waveshare AMOLED 1.64 V1/V2 PWM/CRSF builds, with factory
+  and app-only update images, the latest OpenDrift.lua, experimental GroundTX.lua,
+  and SHA256 checksums. Matrix and personal recovery builds remain excluded.
+- Updates the production website, tuning, connection, background, and blackbox
+  guides; selects 1.0.9 as recommended while preserving historical releases.
+- Documents the one-time full factory/PlatformIO partition migration required
+  before app-only USB updates, parked-only storage writes, and remaining USB
+  SD opening delays. Credits J3vb and uarenotreal in the release notes.
 
 ### October 3 developer and AI handoff
 
