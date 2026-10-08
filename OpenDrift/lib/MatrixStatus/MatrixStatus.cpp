@@ -1,6 +1,6 @@
 #include "MatrixStatus.h"
 
-#if defined(OPENDRIFT_BOARD_MATRIX)
+#if defined(OPENDRIFT_BOARD_MATRIX) || defined(OPENDRIFT_BOARD_ZERO)
 
 void MatrixStatus::begin()
 {
@@ -86,6 +86,23 @@ void MatrixStatus::render()
     }
 
     clear();
+
+    #if defined(OPENDRIFT_BOARD_ZERO)
+    // Single RGB LED: never run 8x8 drawing/rotation on this hardware.
+    uint32_t color = pixels.Color(0, 28, 32); // Boot: cyan.
+    switch(state)
+    {
+        case State::Boot: break;
+        case State::Calibrating: color = pixels.Color(30, 18, 0); break;
+        case State::Ready: color = pixels.Color(0, 32, 5); break;
+        case State::NoSignal: color = pixels.Color(36, 0, 0); break;
+        case State::Error: color = pixels.Color(36, 0, 18); break;
+    }
+    pixels.setPixelColor(0, color);
+    pixels.show();
+    dirty = false;
+    return;
+    #endif
 
     switch(state)
     {

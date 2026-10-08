@@ -1,6 +1,6 @@
 #pragma once
 
-#if defined(OPENDRIFT_BOARD_MATRIX)
+#if defined(OPENDRIFT_BOARD_MATRIX) || defined(OPENDRIFT_BOARD_ZERO)
 
 #include <Arduino.h>
 #include <Adafruit_NeoPixel.h>
@@ -28,14 +28,23 @@ public:
     );
 
 private:
+    #if defined(OPENDRIFT_BOARD_ZERO)
+    static constexpr uint8_t DATA_PIN = 21;
+    static constexpr uint8_t PIXEL_COUNT = 1;
+    #else
     static constexpr uint8_t DATA_PIN = 14;
     static constexpr uint8_t PIXEL_COUNT = 64;
+    #endif
     static constexpr uint8_t BRIGHTNESS = 10;
 
     Adafruit_NeoPixel pixels = Adafruit_NeoPixel(
         PIXEL_COUNT,
         DATA_PIN,
+        #if defined(OPENDRIFT_BOARD_ZERO)
+        NEO_GRB + NEO_KHZ800
+        #else
         NEO_RGB + NEO_KHZ800
+        #endif
     );
 
     State state = State::Boot;

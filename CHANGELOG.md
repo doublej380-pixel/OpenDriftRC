@@ -1,5 +1,23 @@
 # Changelog
 
+## Unreleased - Experimental S3-Zero / MPU6050 port - 2026-10-08
+
+- Adds separate headless PWM and CRSF development targets for the Waveshare
+  ESP32-S3-Zero FH4R2 (4 MB flash / 2 MB PSRAM), based on Matrix routing.
+  The HPI D24 setup uses PWM with the factory gyro fully disabled.
+- Adds an external MPU6050 driver with address detection, coherent burst reads,
+  fresh-data checks, configuration readback, stale-data protection, and actual
+  20/98/256 Hz filter choices discovered by the existing web/Lua interfaces.
+- Uses the onboard single RGB LED for boot, calibration, signal, and error
+  status; isolates saved Zero settings from Matrix/AMOLED settings. Preserves
+  existing controller math and existing hardware pin assignments.
+- Adds wiring, power/logic-level precautions, initial flashing instructions,
+  limitations, and a motor-disconnected bench checklist in
+  `OpenDrift/docs/S3_ZERO_MPU6050.md`, plus MPU6050 host regression tests.
+- Both Zero targets, Matrix PWM/CRSF, and AMOLED V2 CRSF compile successfully;
+  MPU6050/QMI host tests and Lua menu tests pass. Hardware validation is still
+  pending. No release binaries, release tag, or public webflasher changes.
+
 ## v1.0.9 - 2026-10-05
 
 ### Official release

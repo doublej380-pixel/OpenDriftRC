@@ -3,6 +3,7 @@
 #include <math.h>
 
 
+#if !defined(OPENDRIFT_IMU_MPU6050)
 bool IMU::begin(bool tryLocking)
 {
     Wire.begin(SDA_PIN, SCL_PIN);
@@ -294,6 +295,8 @@ bool IMU::setGyroLpfMode(uint8_t mode)
     return true;
 }
 
+
+#endif // QMI8658 backend; MPU6050 supplies the same acquisition interface.
 
 uint8_t IMU::getGyroLpfMode() const
 {

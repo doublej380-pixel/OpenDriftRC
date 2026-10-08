@@ -214,7 +214,11 @@ namespace
 
 bool Settings::begin()
 {
-    #if defined(OPENDRIFT_BOARD_MATRIX) && defined(OPENDRIFT_INPUT_CRSF)
+    #if defined(OPENDRIFT_BOARD_ZERO) && defined(OPENDRIFT_INPUT_CRSF)
+    prefs.begin("ODZeroCRSF", false);
+    #elif defined(OPENDRIFT_BOARD_ZERO)
+    prefs.begin("ODZeroPWM", false);
+    #elif defined(OPENDRIFT_BOARD_MATRIX) && defined(OPENDRIFT_INPUT_CRSF)
     // The private Matrix experiments must not inherit actuator calibration or
     // tuning from any display-equipped OpenDrift build.
     prefs.begin("ODMatrixCRSF", false);

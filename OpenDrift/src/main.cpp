@@ -13,7 +13,7 @@
 #include "Touch.h"
 #include "UI.h"
 #endif
-#if defined(OPENDRIFT_BOARD_MATRIX)
+#if defined(OPENDRIFT_BOARD_MATRIX) || defined(OPENDRIFT_BOARD_ZERO)
 #include "MatrixStatus.h"
 #endif
 #include "IMU.h"
@@ -56,7 +56,7 @@ Touch touch;
 UI ui;
 #endif
 
-#if defined(OPENDRIFT_BOARD_MATRIX)
+#if defined(OPENDRIFT_BOARD_MATRIX) || defined(OPENDRIFT_BOARD_ZERO)
 MatrixStatus matrixStatus;
 #endif
 
@@ -144,7 +144,7 @@ TaskHandle_t crsfTaskHandle = nullptr;
 #endif
 
 #if defined(OPENDRIFT_INPUT_CRSF)
-#if defined(OPENDRIFT_BOARD_MATRIX)
+#if defined(OPENDRIFT_BOARD_MATRIX) || defined(OPENDRIFT_BOARD_ZERO)
 #define SERVO_OUTPUT_PIN 1
 #define CRSF_RX_PIN 3
 #define CRSF_TX_PIN 4
@@ -173,7 +173,7 @@ static constexpr uint32_t CRSF_SIGNAL_TIMEOUT_MS = 50;
 static constexpr uint32_t CRSF_THROTTLE_NEUTRAL_MS = 500;
 static constexpr int CRSF_THROTTLE_NEUTRAL_BAND_US = 50;
 #else
-#if defined(OPENDRIFT_BOARD_MATRIX)
+#if defined(OPENDRIFT_BOARD_MATRIX) || defined(OPENDRIFT_BOARD_ZERO)
 #define SERVO_OUTPUT_PIN 3
 #define RADIO_STEERING_PIN 1
 #define RADIO_THROTTLE_PIN 2
@@ -187,7 +187,7 @@ static constexpr int CRSF_THROTTLE_NEUTRAL_BAND_US = 50;
 #define RADIO_THROTTLE_PIN 16
 #endif
 #endif
-#if defined(OPENDRIFT_BOARD_MATRIX)
+#if defined(OPENDRIFT_BOARD_MATRIX) || defined(OPENDRIFT_BOARD_ZERO)
 #define SHARED_GAIN_THROTTLE_PIN 4
 #elif defined(OPENDRIFT_AMOLED_V2)
 #define SHARED_GAIN_THROTTLE_PIN 2
@@ -547,7 +547,7 @@ void applyDisplayRotation()
         return;
     }
 
-    #if defined(OPENDRIFT_BOARD_MATRIX)
+    #if defined(OPENDRIFT_BOARD_MATRIX) || defined(OPENDRIFT_BOARD_ZERO)
     matrixStatus.setRotation(rotation);
     #elif defined(OPENDRIFT_BOARD_AMOLED_164)
     lcd.setRotation(rotation);
@@ -1649,11 +1649,15 @@ void setup()
     digitalWrite(2, HIGH);
     #endif
 
-    #if defined(OPENDRIFT_BOARD_MATRIX)
+    #if defined(OPENDRIFT_BOARD_MATRIX) || defined(OPENDRIFT_BOARD_ZERO)
     matrixStatus.begin();
     bootConsole.begin();
     bootConsole.log(
+        #if defined(OPENDRIFT_BOARD_ZERO)
+        "ws2812: single status LED online on gpio21"
+        #else
         "ws2812: low-brightness status matrix online"
+        #endif
     );
     #else
     bool displayOk = false;
@@ -1953,12 +1957,12 @@ void setup()
 
     if(!imuOk)
     {
-        #if defined(OPENDRIFT_BOARD_MATRIX)
+        #if defined(OPENDRIFT_BOARD_MATRIX) || defined(OPENDRIFT_BOARD_ZERO)
         matrixStatus.setState(MatrixStatus::State::Error);
         #endif
 
         bootConsole.log(
-            "qmi8658: initialization failed; safe reboot",
+            "imu: initialization failed; safe reboot",
             "[FAIL]",
             TFT_RED
         );
@@ -1976,7 +1980,7 @@ void setup()
     bootTiming("touch/IMU initialization");
 
     bootConsole.log(
-        "qmi8658: 6-axis inertial sensor ready"
+        "imu: 6-axis inertial sensor ready"
     );
 
     // Calibrate with the same hardware filter used while driving.
@@ -2024,7 +2028,7 @@ void setup()
         controlLoopHz
     ))
     {
-        #if defined(OPENDRIFT_BOARD_MATRIX)
+        #if defined(OPENDRIFT_BOARD_MATRIX) || defined(OPENDRIFT_BOARD_ZERO)
         matrixStatus.setState(MatrixStatus::State::Error);
         #endif
 
@@ -2056,7 +2060,7 @@ void setup()
 
     bootConsole.log(
         #if defined(OPENDRIFT_INPUT_CRSF)
-        #if defined(OPENDRIFT_BOARD_MATRIX)
+        #if defined(OPENDRIFT_BOARD_MATRIX) || defined(OPENDRIFT_BOARD_ZERO)
         "ledc: steering servo output attached on gpio1"
         #elif defined(OPENDRIFT_AMOLED_V2)
         "ledc: steering servo output attached on gpio15"
@@ -2064,7 +2068,7 @@ void setup()
         "ledc: steering servo output attached on gpio15"
         #endif
         #else
-        #if defined(OPENDRIFT_BOARD_MATRIX)
+        #if defined(OPENDRIFT_BOARD_MATRIX) || defined(OPENDRIFT_BOARD_ZERO)
         "ledc: steering servo output attached on gpio3"
         #elif defined(OPENDRIFT_AMOLED_V2)
         "ledc: steering servo output attached on gpio1"
@@ -2168,7 +2172,7 @@ void setup()
 
     #if defined(OPENDRIFT_INPUT_CRSF)
     bootConsole.log(
-        #if defined(OPENDRIFT_BOARD_MATRIX)
+        #if defined(OPENDRIFT_BOARD_MATRIX) || defined(OPENDRIFT_BOARD_ZERO)
         "ledc: esc neutral output attached on gpio2",
         #elif defined(OPENDRIFT_CRSF_V2_THROTTLE_GPIO8)
         "ledc: esc neutral output attached on gpio8",
@@ -2202,7 +2206,7 @@ void setup()
 
     bootConsole.log(
         #if defined(OPENDRIFT_INPUT_CRSF)
-        #if defined(OPENDRIFT_BOARD_MATRIX)
+        #if defined(OPENDRIFT_BOARD_MATRIX) || defined(OPENDRIFT_BOARD_ZERO)
         "gpio3/4: crsf rx/tx; gpio1/2: servo/esc out"
         #elif defined(OPENDRIFT_AMOLED_V2)
         "gpio1/2: crsf rx/tx; gpio15/16: servo/esc out"
@@ -2211,7 +2215,7 @@ void setup()
         #endif
         #else
         pin18ThrottleOutputMode
-        #if defined(OPENDRIFT_BOARD_MATRIX)
+        #if defined(OPENDRIFT_BOARD_MATRIX) || defined(OPENDRIFT_BOARD_ZERO)
         ? "gpio4: throttle passthrough output"
         : "gpio4: gyro gain adjustment input"
         #elif defined(OPENDRIFT_AMOLED_V2)
@@ -2312,12 +2316,12 @@ void setup()
     //-------------------
 
     bootConsole.log(
-        "qmi8658: measuring stationary gyro bias",
+        "imu: measuring stationary gyro bias",
         "[....]",
         TFT_CYAN
     );
 
-    #if defined(OPENDRIFT_BOARD_MATRIX)
+    #if defined(OPENDRIFT_BOARD_MATRIX) || defined(OPENDRIFT_BOARD_ZERO)
     matrixStatus.setState(
         MatrixStatus::State::Calibrating
     );
@@ -2379,8 +2383,8 @@ void setup()
 
     bootConsole.log(
         gyroBiasOk
-        ? "qmi8658: gyro bias calibration complete"
-        : "qmi8658: gyro bias rejected (movement), using zero offset",
+        ? "imu: gyro bias calibration complete"
+        : "imu: gyro bias rejected (movement), using zero offset",
         gyroBiasOk ? "[ OK ]" : "[WARN]",
         gyroBiasOk ? TFT_GREEN : TFT_YELLOW
     );
@@ -2584,7 +2588,7 @@ void setup()
     {
         Serial.println("Controller: task start failed");
 
-        #if defined(OPENDRIFT_BOARD_MATRIX)
+        #if defined(OPENDRIFT_BOARD_MATRIX) || defined(OPENDRIFT_BOARD_ZERO)
         matrixStatus.setState(MatrixStatus::State::Error);
         #endif
     }
@@ -2979,7 +2983,7 @@ void loop()
     blackboxArchive.update(archiveParked);
     #endif
 
-    #if defined(OPENDRIFT_BOARD_MATRIX)
+    #if defined(OPENDRIFT_BOARD_MATRIX) || defined(OPENDRIFT_BOARD_ZERO)
     matrixStatus.update(
         telemetry.steeringSignal,
         wifi.isEnabled(),

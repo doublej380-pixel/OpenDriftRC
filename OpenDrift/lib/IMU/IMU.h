@@ -2,7 +2,9 @@
 
 #include <Arduino.h>
 #include <Wire.h>
+#if !defined(OPENDRIFT_IMU_MPU6050)
 #include "SensorQMI8658.hpp"
+#endif
 
 
 class IMU
@@ -51,7 +53,13 @@ public:
 
 private:
 
+    #if defined(OPENDRIFT_IMU_MPU6050)
+    uint8_t mpuAddress = 0x68;
+    bool mpuConfigured = false;
+    bool writeRegister(uint8_t address, uint8_t value);
+    #else
     SensorQMI8658 qmi;
+    #endif
     SampleDiagnostics diagnostics;
     bool counterReady = false;
     bool configureLocking();
@@ -96,7 +104,7 @@ private:
     uint32_t lastUpdateMicros = 0;
 
 
-    #if defined(OPENDRIFT_BOARD_MATRIX)
+    #if defined(OPENDRIFT_BOARD_MATRIX) || defined(OPENDRIFT_BOARD_ZERO)
     static constexpr int SDA_PIN = 11;
     static constexpr int SCL_PIN = 12;
     #elif defined(OPENDRIFT_BOARD_AMOLED_164)

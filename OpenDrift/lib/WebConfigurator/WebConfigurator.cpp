@@ -302,7 +302,7 @@ void WebConfigurator::handleRoot()
     #if defined(OPENDRIFT_INPUT_CRSF)
     #if defined(OPENDRIFT_CRSF_V2_THROTTLE_GPIO8)
     html += F("</div><div class='pill'>CRSF: GPIO 1 RX / 2 TX &middot; ESC: GPIO 8");
-    #elif defined(OPENDRIFT_BOARD_MATRIX)
+    #elif defined(OPENDRIFT_BOARD_MATRIX) || defined(OPENDRIFT_BOARD_ZERO)
     html += F("</div><div class='pill'>CRSF: GPIO 3 RX / 4 TX");
     #elif defined(OPENDRIFT_AMOLED_V2)
     html += F("</div><div class='pill'>CRSF: GPIO 1 RX / 2 TX");
@@ -310,7 +310,7 @@ void WebConfigurator::handleRoot()
     html += F("</div><div class='pill'>CRSF: GPIO 17 RX / 18 TX");
     #endif
     #else
-    #if defined(OPENDRIFT_BOARD_MATRIX)
+    #if defined(OPENDRIFT_BOARD_MATRIX) || defined(OPENDRIFT_BOARD_ZERO)
     html += F("</div><div class='pill'>GPIO 4: ");
     #elif defined(OPENDRIFT_AMOLED_V2)
     html += F("</div><div class='pill'>GPIO 2: ");
@@ -401,11 +401,23 @@ void WebConfigurator::handleRoot()
     html += parameterInput(OpenDriftParameters::Id::SMOOTHING, "gyroSmoothing", String(settings->getGyroSmoothing(), 2));
     html += F("<label>Gyro sensor LPF</label><select name='gyroLpfMode'><option value='0'");
     if(settings->getGyroLpfMode() == 0) html += F(" selected");
+    #if defined(OPENDRIFT_IMU_MPU6050)
+    html += F(">20 Hz - filtered</option><option value='1'");
+    #else
     html += F(">24 Hz - original</option><option value='1'");
+    #endif
     if(settings->getGyroLpfMode() == 1) html += F(" selected");
+    #if defined(OPENDRIFT_IMU_MPU6050)
+    html += F(">98 Hz - lower latency</option><option value='2'");
+    #else
     html += F(">120 Hz - low latency</option><option value='2'");
+    #endif
     if(settings->getGyroLpfMode() == 2) html += F(" selected");
+    #if defined(OPENDRIFT_IMU_MPU6050)
+    html += F(">256 Hz - widest bandwidth (not bypass)</option></select>");
+    #else
     html += F(">Off - raw bandwidth</option></select>");
+    #endif
     html += parameterInput(OpenDriftParameters::Id::PREDICTION, "predictionStrength", String(settings->getPredictionStrength()));
     html += parameterInput(OpenDriftParameters::Id::ANTI_WOBBLE, "huntStrength", String(settings->getGyroHuntStrength()));
     html += F("<label>Anti Wobble scale</label><select name='antiWobbleScale'><option value='0'");
@@ -506,7 +518,7 @@ void WebConfigurator::handleRoot()
     #if defined(OPENDRIFT_INPUT_CRSF)
     #if defined(OPENDRIFT_CRSF_V2_THROTTLE_GPIO8)
     html += F("Personal V2 GPIO8 recovery build: CRSF channel 3 controls gyro gain. GPIO 15 drives the steering servo. GPIO 8 actively outputs neutral throttle during failsafe and passes throttle only after a valid neutral hold. Receiver TX feeds GPIO 1; receiver RX connects to GPIO 2. GPIO 8 is reserved and unavailable as an auxiliary output.");
-    #elif defined(OPENDRIFT_BOARD_MATRIX)
+    #elif defined(OPENDRIFT_BOARD_MATRIX) || defined(OPENDRIFT_BOARD_ZERO)
     html += F("CRSF channel 3 controls gyro gain. GPIO 1 drives the steering servo. GPIO 2 actively outputs neutral throttle during failsafe and passes throttle only after a valid neutral hold. Receiver TX feeds GPIO 3; receiver RX connects to GPIO 4.");
     #elif defined(OPENDRIFT_AMOLED_V2)
     html += F("CRSF channel 3 controls gyro gain. GPIO 15 drives the steering servo. GPIO 16 actively outputs neutral throttle during failsafe and passes throttle only after a valid neutral hold. Receiver TX feeds GPIO 1; receiver RX connects to GPIO 2.");
@@ -519,7 +531,7 @@ void WebConfigurator::handleRoot()
     html += input("Gain high", "gainMax", String(settings->getGainMax()));
     html += F("</div>");
     html += checkbox(
-        #if defined(OPENDRIFT_BOARD_MATRIX)
+        #if defined(OPENDRIFT_BOARD_MATRIX) || defined(OPENDRIFT_BOARD_ZERO)
         "Use GPIO 4 as throttle output instead of gyro gain input",
         #elif defined(OPENDRIFT_AMOLED_V2)
         "Use GPIO 2 as throttle output instead of gyro gain input",

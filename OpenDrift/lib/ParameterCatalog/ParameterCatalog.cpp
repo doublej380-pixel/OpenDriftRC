@@ -47,7 +47,11 @@ namespace OpenDriftParameters
             {Id::CAPTURE_CENTER, "", "Capture Center", Type::ACTION, 0.0f, 1.0f, 0.0f, 1.0f, 0, "", "READY;CAPTURE", NONE},
             {Id::CAPTURE_RIGHT, "", "Capture Right", Type::ACTION, 0.0f, 1.0f, 0.0f, 1.0f, 0, "", "READY;CAPTURE", NONE},
             {Id::RESET_CALIBRATION, "", "Reset Cal", Type::ACTION, 0.0f, 1.0f, 0.0f, 1.0f, 0, "", "READY;RESET", NONE},
+            #if defined(OPENDRIFT_IMU_MPU6050)
+            {Id::GYRO_LPF, "gyroLpf", "Gyro LPF", Type::SELECTION, 0.0f, 2.0f, Defaults::GYRO_LPF, 1.0f, 0, "", "20 Hz;98 Hz;256 Hz", P},
+            #else
             {Id::GYRO_LPF, "gyroLpf", "Gyro LPF", Type::SELECTION, 0.0f, 2.0f, Defaults::GYRO_LPF, 1.0f, 0, "", "24 Hz;120 Hz;Off", P},
+            #endif
             {Id::CHANNEL_3_GAIN_MIN, "ch3GainLo", "CH3 Gain Min", Type::NUMBER, 0.0f, 6.0f, Defaults::CHANNEL_3_GAIN_MIN, 0.05f, 2, "x", nullptr, P},
             {Id::CHANNEL_3_GAIN_MAX, "ch3GainHi", "CH3 Gain Max", Type::NUMBER, 0.0f, 6.0f, Defaults::CHANNEL_3_GAIN_MAX, 0.05f, 2, "x", nullptr, P},
             {Id::DISPLAY_ROTATION, "displayRot", "Display Rotation", Type::SELECTION, 0.0f, 3.0f, 0.0f, 1.0f, 0, "", "0 deg;90 CW;180 deg;90 CCW", P | D},
