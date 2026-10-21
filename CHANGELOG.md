@@ -8,7 +8,17 @@ not an official firmware release. No webflasher deployment or release assets
 are included. CH4 switch-transition regression tests pass; hardware arming and
 display/touch wake behavior still require motor-disconnected bench validation.
 Read `OpenDrift/docs/ARMING.md` before testing; strict parked steering lock
-disables physical endpoint capture/reset and 333 Hz requires a supported servo.
+requires arming on the Physical Endpoints page for screen calibration, and
+333 Hz requires a supported servo.
+
+## Unreleased - Armed screen endpoint calibration - 2026-10-21
+
+- Keeps the display, touch polling, and UI active when arming on the Physical
+  Endpoints page. Leaving that page while armed restores normal display sleep
+  and touch suspension.
+- Enables screen endpoint capture and hold-to-reset only while armed on that
+  page. Parked steering lock, arming interlocks, and other configuration locks
+  remain in effect. Endpoint captures retain their immediate persistence path.
 
 ## Unreleased - CH4 switch-transition fix - 2026-10-21
 

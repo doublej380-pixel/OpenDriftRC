@@ -92,6 +92,7 @@ std::atomic<bool> driveSleepRequested{false};
 std::atomic<bool> drivePeripheralsReady{false};
 std::atomic<uint8_t> driveArmReason{DriveArming::NO_LINK};
 bool driveConfigurationLocked = false; // Main-loop-owned peripheral state.
+bool driveUiLocked = false;
 #endif
 
 #if defined(OPENDRIFT_BOARD_AMOLED_164)
@@ -2695,20 +2696,26 @@ void serviceDriveMode()
         lastReportedArmed = armed;
     }
     const bool wanted = driveSleepRequested.load(std::memory_order_acquire);
+    // Revoke permission before any display wake delay.
+    if(!wanted) drivePeripheralsReady.store(false, std::memory_order_release);
+    #if !defined(OPENDRIFT_HEADLESS)
+    ui.setDriveArmed(armed);
+    const bool sleepUi = wanted && !ui.isSteeringCalibrationPage();
+    if(sleepUi != driveUiLocked)
+    {
+        touch.suspend(sleepUi);
+        ui.setDrivingSleep(sleepUi);
+        driveUiLocked = sleepUi;
+    }
+    #endif
     bool busy = false;
     #if defined(OPENDRIFT_BOARD_AMOLED_164)
     busy = blackboxArchive.isSaving();
     #endif
     if(!wanted)
     {
-        // Revoke permission before any wake delays or parked configuration.
-        drivePeripheralsReady.store(false, std::memory_order_release);
         if(driveConfigurationLocked)
         {
-            #if !defined(OPENDRIFT_HEADLESS)
-            ui.setDrivingSleep(false);
-            touch.suspend(false);
-            #endif
             driveConfigurationLocked = false;
             Serial.println("Drive mode: PARKED (CH4 off / safety lock)");
         }
@@ -2717,10 +2724,6 @@ void serviceDriveMode()
     {
         if(!driveConfigurationLocked)
         {
-            #if !defined(OPENDRIFT_HEADLESS)
-            touch.suspend(true);
-            ui.setDrivingSleep(true);
-            #endif
             driveConfigurationLocked = true;
             Serial.println("Drive mode: awaiting neutral; configuration suspended");
         }
@@ -2924,7 +2927,7 @@ void loop()
 
     if((touchRecoveryDue || touchPollDue)
         #if defined(OPENDRIFT_CH4_ARMING)
-        && !driveConfigurationLocked
+        && !driveUiLocked
         #endif
     )
     {
@@ -3085,7 +3088,7 @@ void loop()
     //-------------------
 
     #if defined(OPENDRIFT_CH4_ARMING)
-    if(!driveConfigurationLocked)
+    if(!driveUiLocked)
     #endif
     ui.update(
         touch,

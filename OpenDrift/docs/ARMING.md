@@ -30,23 +30,30 @@ receiver input GPIO and an extra wire. No channel mapping or pinout is changed.
 
 While driving, AMOLED sleep is commanded, UI redraws/animations stop, and all
 touch polling/recovery is suspended. A touch cannot wake the screen while armed.
+The Physical Endpoints page is the exception: open it while parked, then arm
+normally to keep the display and touch active for steering calibration. Capture
+and hold-to-reset are enabled only after arming succeeds. Leaving that page
+while armed restores display sleep and touch suspension. Disarming immediately
+locks steering again and disables capture/reset. Normal dimming still applies.
 The FT3168 remains electrically powered: deep sleep is deliberately not used
 without a verified hardware wake/reset path on the shared sensor I2C bus.
 See the [FT3168 datasheet](https://files.waveshare.com/wiki/common/DATA_SHEET_FT3168.pdf),
 sections 2.2–2.3, for its multi-slave sleep/wake limitations.
 
 Deferred settings saves and HTTP request handling are paused during the drive
-session. Radio parameter reads remain available; writes/actions are rejected
+session, except for the calibration page's existing immediate endpoint saves.
+Radio parameter reads remain available; writes/actions are rejected
 and answered with the current value, not queued for surprise execution later.
 CH3 gain still changes live during driving. Wi-Fi state is not changed by arming.
 Blackbox capture continues; archive writes are never initiated while armed.
 
-**Strict steering lock was selected by the owner.** Physical endpoint capture
-and reset are disabled in the screen/radio interfaces for this mode; the servo
-cannot sweep while parked, and a forced-center command must never be saved as
-a left/right endpoint. Existing calibrated endpoints are preserved. New physical
-endpoint calibration needs a separately authorized bench-mode workflow; do not
-expect the parked capture buttons to move the servo or establish endpoints.
+Steering remains locked while parked, so a forced-center command cannot be
+captured as an endpoint. Use the armed Physical Endpoints page for screen
+calibration, with the motor disconnected. Normal armed steering/gyro behavior
+and throttle output remain live; this exception only permits the calibration
+screen and its capture/reset actions. HTTP handling, radio writes/actions, and
+deferred settings persistence remain locked until disarming. Endpoint capture
+and reset use their existing immediate persistence path. Disarm after finishing.
 
 ## Motor-disconnected bench validation (required before driving)
 
@@ -64,6 +71,11 @@ expect the parked capture buttons to move the servo or establish endpoints.
    storage writes. Verify the save completes or safely cancels before driving.
 8. Test both display rotations and a repeated arm/disarm cycle; check serial
    `Drive mode:` events and verify calibration data remains unchanged.
+9. Open Physical Endpoints while parked: capture/reset must remain blocked.
+   Arm normally: display/touch stay active and capture/reset work. Disarm and
+   allow settings to save. Reboot and verify the saved endpoints. Repeat with
+   receiver loss during calibration: steering locks and capture/reset disable.
+   Swipe away while armed: display sleeps and touch stops until disarm.
 
 Serial `Arm status:` reports identify the blocking condition with decoded CH4
 and throttle pulse widths and the UI/storage readiness flag. Radio -100/+100

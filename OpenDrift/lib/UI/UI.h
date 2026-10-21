@@ -48,6 +48,8 @@ public:
 
     void requestRefresh();
     void setDrivingSleep(bool sleeping);
+    bool isSteeringCalibrationPage() const;
+    void setDriveArmed(bool armed);
 
     void setCalibrationCallback(
         void (*callback)()
@@ -76,6 +78,7 @@ public:
 
 private:
     bool drivingSleep = false;
+    bool driveArmed = false;
 
     #if defined(OPENDRIFT_BOARD_AMOLED_164)
     static constexpr int UI_CANVAS_WIDTH = 456;

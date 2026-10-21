@@ -953,6 +953,20 @@ void UI::requestRefresh()
     refreshRequested = true;
 }
 
+bool UI::isSteeringCalibrationPage() const
+{
+    return page == PAGE_STEERING_CAL;
+}
+
+void UI::setDriveArmed(bool armed)
+{
+    if(driveArmed == armed) return;
+    driveArmed = armed;
+    steeringCalibrationResetPoint = -1;
+    steeringCalibrationResetStartedAt = 0;
+    requestRefresh();
+}
+
 void UI::setDrivingSleep(bool sleeping)
 {
     if(drivingSleep == sleeping || display == nullptr) return;
@@ -3934,7 +3948,7 @@ void UI::drawSteeringCalibrationPage(
         );
 
     #if defined(OPENDRIFT_CH4_ARMING)
-    status = calibrationSaved ? "SAVED - STEERING LOCKED" : "PARKED: STEERING LOCKED";
+    if(!driveArmed) status = "ARM CH4 TO CALIBRATE";
     #endif
 
     uint16_t statusColor =
@@ -5677,10 +5691,12 @@ bool UI::captureSteeringCalibration(
 )
 {
     #if defined(OPENDRIFT_CH4_ARMING)
-    // Strict parked steering lock: never capture a forced-center pulse as an
-    // endpoint. An explicit bench-calibration policy must be chosen first.
-    steeringCalibrationError = true;
-    return false;
+    // Parked steering is forced to center and cannot supply endpoint samples.
+    if(!driveArmed || !isSteeringCalibrationPage())
+    {
+        steeringCalibrationError = true;
+        return false;
+    }
     #endif
     if(settings.isSteeringCalibrated())
     {
@@ -7091,12 +7107,13 @@ void UI::update(
         else if(
             millis() - steeringCalibrationResetStartedAt >= 1200 &&
             settings.isSteeringCalibrated() &&
+            #if defined(OPENDRIFT_CH4_ARMING)
+            driveArmed &&
+            #endif
             fabsf(gyro.getFilteredYaw()) < 5.0f
         )
         {
-            #if !defined(OPENDRIFT_CH4_ARMING)
             settings.clearSteeringCalibration();
-            #endif
 
             captureSteeringCalibration(
                 currentPoint,
