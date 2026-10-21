@@ -31,6 +31,7 @@ public:
     );
 
     void update();
+    void stop();
     void setControlDiagnostics(ControlDiagnostics& capture) { diagnostics = &capture; }
 
     #if defined(OPENDRIFT_BOARD_AMOLED_164)
@@ -73,6 +74,7 @@ private:
     #endif
 
     bool running = false;
+    bool routesRegistered = false;
 
     bool restartPending = false;
     uint32_t restartAtMs = 0;

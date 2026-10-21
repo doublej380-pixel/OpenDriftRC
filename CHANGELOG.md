@@ -1,5 +1,97 @@
 # Changelog
 
+## Experimental branch snapshot - 2026-10-21
+
+The controller cleanup, fixed 333 Hz steering rate, overhead reductions, Wi-Fi
+lifecycle changes, and CH4 arming changes below are a development/test snapshot,
+not an official firmware release. No webflasher deployment or release assets
+are included. CH4 switch-transition regression tests pass; hardware arming and
+display/touch wake behavior still require motor-disconnected bench validation.
+Read `OpenDrift/docs/ARMING.md` before testing; strict parked steering lock
+disables physical endpoint capture/reset and 333 Hz requires a supported servo.
+
+## Unreleased - CH4 switch-transition fix - 2026-10-21
+
+- Fixes a reproducible failure to arm when radio/receiver interpolation sends
+  intermediate CH4 pulses between off and on: retain the observed-off permission
+  through an unarmed rising sweep. Intermediate positions still never arm, and
+  leaving armed through the middle still disarms and requires off again.
+- Preserves high-at-boot/reconnect lockout, neutral hold, sensor/peripheral gates,
+  and output failsafes. Adds an interpolated-switch regression test and rate-limited
+  serial blocker reports with decoded CH4/throttle values and peripheral readiness.
+
+## Unreleased - CH4 parked/armed mode - 2026-10-21
+
+- Adds a CRSF CH4 drive interlock with fail-closed switch thresholds, required
+  low-switch observation after boot/link loss/sensor fault, and a 500 ms neutral
+  hold. Parked outputs are calibrated steering center and ESC neutral; raw radio
+  monitoring remains live. Motion history resets without changing gyro bias.
+- Main-loop readiness gates driving until configuration/UI work is suspended.
+  AMOLED sleeps while driving; touch polling/recovery and UI rendering stop,
+  then resume on disarm. FT3168 chip power remains on because deep sleep needs
+  a verified wake path; no unverified touch sleep registers are written.
+- Preserves CH3 live gain and link-loss neutral behavior. Settings persistence,
+  HTTP handling, and radio writes/actions are parked-only; radio reads continue
+  and rejected writes are not queued. Ongoing archive saves inhibit arming.
+- Implements the owner's strict steering-lock choice: physical endpoint capture/
+  reset is unavailable in screen/radio interfaces; existing calibration remains.
+  PWM targets are unchanged pending a dedicated arm-input pin/wiring choice.
+- Adds interlock and touch-suspension host tests and motor-disconnected bench
+  instructions in `OpenDrift/docs/ARMING.md`. Hardware validation is still required.
+
+## Unreleased - AMOLED Wi-Fi off by default - 2026-10-20
+
+- Defaults AMOLED Wi-Fi boot preference to off on fresh installs/factory resets,
+  preserving existing saved choices and other hardware defaults. On-demand
+  enabling from the screen remains available.
+- Explicitly selects WIFI_OFF on disabled startup, closes the HTTP client and
+  listener after shutdown/auto-off, and registers web routes only once across
+  toggles. Failed AP recovery also powers down any partially started driver.
+- Disabled health updates return immediately and HTTP polling stops. The Wi-Fi
+  driver deinitializes through Arduino's WIFI_OFF implementation; small retained
+  route tables and shared framework allocations are not claimed to vanish.
+
+## Unreleased - Remove Servo Quiet - 2026-10-20
+
+- Removes Servo Quiet from screen, web, and discovered radio controls. Keeps
+  ID 11 reserved and sanitizes old saved values to zero. The steering/output
+  path no longer suppresses small command changes; physical endpoint limits
+  and native PWM resolution remain intact. CSV retains its zero-valued field
+  for compatibility. Adds stale-write and persisted-value migration tests.
+
+## Unreleased - Runtime overhead pass and fixed steering rate - 2026-10-20
+
+- Makes steering/control 333 Hz only and retires the old rate selector without
+  reusing its ID. Stored 250 Hz settings migrate to 333 Hz; throttle output
+  retains its separate rate selection. Documentation requires a servo explicitly
+  rated for 333 Hz and warns that digital alone does not imply compatibility.
+- Skips logging-only IMU magnitude/tilt/disturbance calculations when blackbox
+  storage is unavailable or logging is disabled. Continuous acceleration-delta
+  filtering remains active for parked-only storage safety checks.
+- Adds a race-safe inactive diagnostic fast path and avoids constructing
+  control records unless a capture is armed. The recorder rechecks under its
+  existing lock so stop/export cannot accept late records.
+- Extends the generation-based controller snapshot with steering travel, CH3
+  gain range, and servo configuration. Live gain still maps every control tick;
+  servo configuration refreshes only on settings or physical endpoint changes.
+- Adds host checks for fixed-rate migration, idle diagnostics, and logging-metric
+  gating while preserving parked-motion detection. Actual on-device timing
+  improvements require measurement; no speedup percentage is claimed.
+
+## Unreleased - Controller simplification - 2026-10-20
+
+- Removes Drift Memory, its Memory Limit, Hold Assist, and the gyro sensor LPF
+  selector from non-MPU6050 builds. Their old parameter IDs remain reserved;
+  saved settings, profile imports, and stale clients cannot reactivate them.
+- Bypasses the QMI gyro hardware LPF from initialization onward and removes
+  memory feedback/hold-extension math on those builds. Countersteer, prediction,
+  Anti Wobble, and physical steering endpoint protection remain in place.
+- Keeps adjustable software Smoothing, with a new default of zero on those
+  builds. Existing saved smoothing values are preserved until changed/reset.
+- The experimental MPU6050 builds retain their previous controller behavior,
+  filter choices, controls, and defaults (including 0.10 smoothing). The shared
+  radio script uses firmware discovery to hide only unavailable controls.
+
 ## Unreleased - Experimental S3-Zero / MPU6050 port - 2026-10-08
 
 - Adds separate headless PWM and CRSF development targets for the Waveshare

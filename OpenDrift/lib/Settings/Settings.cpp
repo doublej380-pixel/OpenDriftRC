@@ -476,10 +476,14 @@ bool Settings::begin()
         OpenDriftParameters::Defaults::SERVO_QUIET
     );
 
+    #if defined(OPENDRIFT_IMU_MPU6050)
     controlLoopHz =
         prefs.getUShort(OpenDriftParameters::key(OpenDriftParameters::Id::SERVO_RATE), 250) == 333
         ? 333
         : 250;
+    #else
+    controlLoopHz = 333;
+    #endif
 
     // Keep this in the legacy scratch field until ParameterStore migration
     // below. Calling the public setter here would write the new store before
@@ -514,7 +518,7 @@ bool Settings::begin()
 
     wifiEnabled = prefs.getBool(
         "wifi",
-        true
+        OpenDriftParameters::Defaults::WIFI_ON_BOOT
     );
 
     wifiTimeout = prefs.getULong(
@@ -843,6 +847,13 @@ bool Settings::getControllerSnapshot(
     snapshot.antiWobbleScale = lroundf(values[(uint8_t)OpenDriftParameters::Id::ANTI_WOBBLE_SCALE]);
     snapshot.gyroLpfMode = lroundf(values[(uint8_t)OpenDriftParameters::Id::GYRO_LPF]);
     snapshot.gyroReverse = values[(uint8_t)OpenDriftParameters::Id::GYRO_REVERSE] >= 0.5f;
+    snapshot.radioSteeringTravel = lroundf(values[(uint8_t)OpenDriftParameters::Id::STEERING_TRAVEL]);
+    snapshot.channel3GainMin = values[(uint8_t)OpenDriftParameters::Id::CHANNEL_3_GAIN_MIN];
+    snapshot.channel3GainMax = values[(uint8_t)OpenDriftParameters::Id::CHANNEL_3_GAIN_MAX];
+    snapshot.servoCenter = lroundf(values[(uint8_t)OpenDriftParameters::Id::SERVO_CENTER]);
+    snapshot.servoTravel = lroundf(values[(uint8_t)OpenDriftParameters::Id::SERVO_TRAVEL]);
+    snapshot.servoQuiet = lroundf(values[(uint8_t)OpenDriftParameters::Id::SERVO_QUIET]);
+    snapshot.servoReverse = values[(uint8_t)OpenDriftParameters::Id::SERVO_REVERSE] >= 0.5f;
     return true;
 }
 
@@ -1100,9 +1111,13 @@ void Settings::setServoQuiet(int value)
 
 uint16_t Settings::getControlLoopHz()
 {
+    #if !defined(OPENDRIFT_IMU_MPU6050)
+    return 333;
+    #else
     return parameterStore.getInt(OpenDriftParameters::Id::SERVO_RATE) == 1
         ? 333
         : 250;
+    #endif
 }
 
 void Settings::setControlLoopHz(uint16_t value)

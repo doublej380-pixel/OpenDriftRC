@@ -14,6 +14,8 @@ template<class T, class L, class H> T constrain(T value, L low, H high)
 using std::max;
 struct FakeSerial
 {
+    void print(const char* value) { std::printf("%s", value); }
+    void println(int value) { std::printf("%d\n", value); }
     void println(const char* value) { std::puts(value); }
     template<class... T> void printf(const char* format, T... args) { std::printf(format, args...); }
 };

@@ -2,6 +2,7 @@
 
 #include <Arduino.h>
 #include <Wire.h>
+#include <atomic>
 #if !defined(OPENDRIFT_IMU_MPU6050)
 #include "SensorQMI8658.hpp"
 #endif
@@ -19,6 +20,10 @@ public:
     uint8_t getGyroLpfMode() const;
 
     void update();
+    void setLoggingMetricsEnabled(bool enabled)
+    {
+        loggingMetricsEnabled.store(enabled, std::memory_order_relaxed);
+    }
 
     bool isYawValid() const;
     bool lastGyroReadOk() const;
@@ -85,12 +90,21 @@ private:
     float surfaceDisturbanceScore = 0;
 
     bool accelFilterReady = false;
+    #if defined(OPENDRIFT_IMU_MPU6050)
+    std::atomic<bool> loggingMetricsEnabled{true};
+    #else
+    std::atomic<bool> loggingMetricsEnabled{false};
+    #endif
 
     uint8_t gyroReadFailures = 0;
     bool gyroReadOk = false;
     uint8_t accelReadFailures = 0;
 
+    #if defined(OPENDRIFT_IMU_MPU6050)
     uint8_t gyroLpfMode = 0;
+    #else
+    uint8_t gyroLpfMode = 2;
+    #endif
     uint8_t lpfRetryMode = 0;
     uint8_t lpfRetryCount = 0;
     uint32_t lpfLastAttemptMs = 0;

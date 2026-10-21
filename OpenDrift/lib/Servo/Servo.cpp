@@ -113,6 +113,7 @@ void ServoOutput::writeMicroseconds(float us)
 {
     float targetPulse = computePulse(us);
 
+    #if defined(OPENDRIFT_IMU_MPU6050)
     if(
         quietBand > 0 &&
         fabsf(targetPulse - currentPulse) <= quietBand
@@ -120,6 +121,7 @@ void ServoOutput::writeMicroseconds(float us)
     {
         return;
     }
+    #endif
 
     currentPulse =
         targetPulse;

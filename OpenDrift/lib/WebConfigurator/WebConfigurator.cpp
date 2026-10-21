@@ -57,6 +57,10 @@ void WebConfigurator::begin(
     blackbox =
         &blackboxRef;
 
+    if(running) return;
+    // Retain the small route table across toggles, but never duplicate it.
+    if(!routesRegistered)
+    {
     server.on("/diagnostics/start", HTTP_POST, [this]() {
         if(diagnostics == nullptr || !diagnostics->start())
         {
@@ -211,6 +215,9 @@ void WebConfigurator::begin(
         }
     );
 
+    routesRegistered = true;
+    }
+
     server.begin();
 
     running = true;
@@ -221,6 +228,17 @@ void WebConfigurator::begin(
 }
 
 
+
+void WebConfigurator::stop()
+{
+    if(!running) return;
+    server.client().stop();
+    server.stop();
+    running = false;
+    restartPending = false;
+    restartAtMs = 0;
+    Serial.println("Web configurator stopped");
+}
 
 void WebConfigurator::update()
 {
@@ -350,8 +368,6 @@ void WebConfigurator::handleRoot()
         html += String(settings->getProfileValue(*profile, OpenDriftParameters::Id::GYRO_GAIN), 2);
         html += F(" &middot; Prediction ");
         html += String((int)settings->getProfileValue(*profile, OpenDriftParameters::Id::PREDICTION));
-        html += F(" &middot; Hold ");
-        html += String((int)settings->getProfileValue(*profile, OpenDriftParameters::Id::HOLD_ASSIST));
         html += F(" &middot; Countersteer ");
         html += String((int)settings->getProfileValue(*profile, OpenDriftParameters::Id::COUNTERSTEER));
         html += F(" &middot; Transition speed ");
@@ -399,24 +415,14 @@ void WebConfigurator::handleRoot()
 
     html += F("<div class='card'><h2>OpenDrift v1.0 Response</h2><div class='row'>");
     html += parameterInput(OpenDriftParameters::Id::SMOOTHING, "gyroSmoothing", String(settings->getGyroSmoothing(), 2));
+    #if defined(OPENDRIFT_IMU_MPU6050)
     html += F("<label>Gyro sensor LPF</label><select name='gyroLpfMode'><option value='0'");
     if(settings->getGyroLpfMode() == 0) html += F(" selected");
-    #if defined(OPENDRIFT_IMU_MPU6050)
     html += F(">20 Hz - filtered</option><option value='1'");
-    #else
-    html += F(">24 Hz - original</option><option value='1'");
-    #endif
     if(settings->getGyroLpfMode() == 1) html += F(" selected");
-    #if defined(OPENDRIFT_IMU_MPU6050)
     html += F(">98 Hz - lower latency</option><option value='2'");
-    #else
-    html += F(">120 Hz - low latency</option><option value='2'");
-    #endif
     if(settings->getGyroLpfMode() == 2) html += F(" selected");
-    #if defined(OPENDRIFT_IMU_MPU6050)
     html += F(">256 Hz - widest bandwidth (not bypass)</option></select>");
-    #else
-    html += F(">Off - raw bandwidth</option></select>");
     #endif
     html += parameterInput(OpenDriftParameters::Id::PREDICTION, "predictionStrength", String(settings->getPredictionStrength()));
     html += parameterInput(OpenDriftParameters::Id::ANTI_WOBBLE, "huntStrength", String(settings->getGyroHuntStrength()));
@@ -428,25 +434,31 @@ void WebConfigurator::handleRoot()
     html += F("<p class='sub'>Anti Wobble controls the depth of OpenDrift's narrow, phase-aware wheel-wobble notch. Use 1/10 for the proven 2.5-3.6 Hz steering mode, or Micro for faster 5-15 Hz steering systems.</p>");
     html += F("</div></div>");
 
-    html += F("<div class='card'><h2>Transition &amp; Driver Priority</h2><p class='sub'>Transition Speed controls how quickly gyro correction reverses during a direction change. Driver Priority progressively reduces only fast direct gyro gain as you hold more steering, giving the driver more authority near full lock. Start at 0 and test 10-20; steady Countersteer Assist, Drift Memory, and Max Correction remain unchanged.</p><div class='row'>");
+    html += F("<div class='card'><h2>Transition &amp; Driver Priority</h2><p class='sub'>Transition Speed controls how quickly gyro correction reverses during a direction change. Driver Priority progressively reduces only fast direct gyro gain as you hold more steering, giving the driver more authority near full lock. Start at 0 and test 10-20; steady Countersteer Assist and Max Correction remain unchanged.</p><div class='row'>");
     html += parameterInput(OpenDriftParameters::Id::TRANSITION_SPEED, "transitionSpeed", String(settings->getGyroTransitionSpeed()));
     html += parameterInput(OpenDriftParameters::Id::DRIVER_PRIORITY, "driverPriority", String(settings->getDriverPriority()));
     html += F("</div></div>");
 
     html += F("<div class='card'><h2>Drift Assist</h2><p class='sub'>Countersteer Assist changes only the steady steering workload. Zero preserves the base v1.0 response; higher values let OpenDrift carry more of a settled drift.</p><div class='row'>");
     html += parameterInput(OpenDriftParameters::Id::COUNTERSTEER, "counterSteerAssist", String(settings->getGyroCounterSteerAssist()));
+    #if defined(OPENDRIFT_IMU_MPU6050)
     html += parameterInput(OpenDriftParameters::Id::HOLD_ASSIST, "gyroHoldBoost", String(settings->getGyroHoldBoost()));
     html += parameterInput(OpenDriftParameters::Id::DRIFT_MEMORY, "gyroIGain", String(settings->getGyroIntegralGain(), 2));
     html += parameterInput(OpenDriftParameters::Id::MEMORY_LIMIT, "gyroILimit", String(settings->getGyroIntegralLimit()));
+    #endif
     html += F("</div></div>");
 
     html += F("<div class='card'><h2>Servo</h2>");
     html += checkbox("Reverse servo", "servoReverse", settings->getServoReverse());
+    #if defined(OPENDRIFT_IMU_MPU6050)
     html += F("<label>Control and servo rate</label><select name='controlLoopHz'><option value='250'");
     if(settings->getControlLoopHz() == 250) html += F(" selected");
     html += F(">250 Hz - broad servo compatibility</option><option value='333'");
     if(settings->getControlLoopHz() == 333) html += F(" selected");
     html += F(">333 Hz - supported servos only</option></select><p class='sub'>250 Hz supports a broader range of digital servos. Select 333 Hz only when the servo manufacturer explicitly supports it. A restart is required after changing this setting.</p>");
+    #else
+    html += F("<p>Steering/control rate: <strong>333 Hz (fixed)</strong></p><p class='sub'>Requires a servo explicitly rated for 333 Hz. Analog and unsupported digital servos must not be connected.</p>");
+    #endif
     html += F("<label>Throttle output rate</label><select name='throttleOutputHz'><option value='50'");
     if(settings->getThrottleOutputHz() == 50) html += F(" selected");
     html += F(">50 Hz - broad ESC compatibility</option><option value='250'");
@@ -457,7 +469,9 @@ void WebConfigurator::handleRoot()
     html += F("<div class='row'>");
     html += parameterInput(OpenDriftParameters::Id::SERVO_CENTER, "servoCenter", String(settings->getServoCenter()), "Center pulse");
     html += parameterInput(OpenDriftParameters::Id::SERVO_TRAVEL, "servoTravel", String(settings->getServoTravel()), "Travel percent");
+    #if defined(OPENDRIFT_IMU_MPU6050)
     html += parameterInput(OpenDriftParameters::Id::SERVO_QUIET, "servoQuiet", String(settings->getServoQuiet()), "Quiet band us");
+    #endif
     html += F("</div></div>");
 
     #if defined(OPENDRIFT_BOARD_MATRIX)

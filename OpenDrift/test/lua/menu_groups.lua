@@ -74,4 +74,11 @@ tick(EVT_ROT_RIGHT)
 assert(selectedId() == 26)
 tick(EVT_ROT_RIGHT)
 assert(selectedId() == 43 and drawn[1].text == "System / USB")
+-- Simplified non-MPU firmware omits retired IDs; the same script still keeps
+-- MPU6050's legacy controls in their original groups when advertised above.
+discover({1,4,8,9,10,26,36})
+for _, id in ipairs({1,4,10,26,36,9,8}) do
+  assert(selectedId() == id, "Simplified firmware selection " .. id)
+  tick(EVT_ROT_RIGHT)
+end
 print("Lua menu grouping tests passed")

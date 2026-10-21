@@ -19,6 +19,7 @@ int main()
 {
     IMU imu;
     assert(imu.begin(true));
+    assert(imu.getGyroLpfMode() == 2 && Wire.registers[6] == 0);
     assert(imu.getSampleDiagnostics().locked);
     Wire.registers[0x2D] = 1;
     counter(0xFFFFFE);
@@ -48,11 +49,22 @@ int main()
     Wire.shortBurst = false;
     counter(6); imu.update();
     assert(imu.isYawValid() && imu.lastGyroReadOk());
+    assert(imu.getAccelMagnitude() == 0 && imu.getTiltRate() == 0);
+    imu.setLoggingMetricsEnabled(true);
+    counter(7); imu.update();
+    assert(std::fabs(imu.getAccelMagnitude() - 1.5f) < 0.0001f);
+    assert(imu.getTiltRate() > 100);
+    imu.setLoggingMetricsEnabled(false);
+    axis(0x35, 4096);
+    counter(8); imu.update();
+    assert(imu.getAccelMagnitude() == 0 && imu.getSurfaceDisturbanceScore() == 0);
+    assert(imu.getAccelDelta() > 0); // Parked detection still receives motion.
     assert(imu.setGyroLpfMode(1) && Wire.registers[6] == 0x70);
     assert(imu.setGyroLpfMode(2) && Wire.registers[6] == 0);
     hostLockingFails = true;
     IMU fallback;
     assert(fallback.begin(true));
+    assert(fallback.getGyroLpfMode() == 2 && Wire.registers[6] == 0);
     assert(!fallback.getSampleDiagnostics().locked);
     assert(Wire.registers[8] == 3); // Both sensors enabled, sync cleared.
     counter(12);
@@ -62,6 +74,7 @@ int main()
     assert(fallback.setGyroLpfMode(1));
     IMU normal;
     assert(normal.begin()); // No failed locking attempt is needed by default.
+    assert(normal.getGyroLpfMode() == 2 && Wire.registers[6] == 0);
     assert(!normal.getSampleDiagnostics().locked);
     std::puts("IMU host tests passed");
 }

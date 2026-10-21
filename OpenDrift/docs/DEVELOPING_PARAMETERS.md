@@ -59,6 +59,31 @@ carrying `PROFILE`. Profiles from v1 through v11 are migrated on load.
 Published IDs are array indices and over-the-air compatibility identifiers.
 They must never be renumbered or reused, even after a parameter is retired.
 
+The October 20 runtime pass also retires servo-rate ID 25 at fixed selection
+index 1 (333 Hz). Its old 250 Hz value is sanitized on load. Throttle-rate ID 39
+remains independent. Servo/control settings are cached in `ControllerSnapshot`;
+physical calibration is checked separately so captures/resets update the output
+even without a catalog-generation change. Logging-only sensor metrics are gated,
+but acceleration-delta filtering for parked detection must always remain active.
+
+Servo Quiet ID 11 is likewise reserved, hidden, and fixed at zero. Its legacy
+CSV field is retained, but normal output code no longer suppresses small pulse
+changes. Do not recycle the ID or reintroduce a quiet-band gate in the driver.
+
+### Retired settings (2026-10-20)
+
+Non-MPU6050 builds retain IDs 5/6/7/32 as `RETIRED` compatibility slots:
+Drift Memory, Memory Limit, Hold Assist, and Gyro LPF. They are unavailable
+to discovered menus, read-only, and fixed at 0/0/0/2 respectively. Keep their
+min/max/default identical so profile application is also safe. Catalog clamps
+sanitize imported storage and stale writes; controller memory/hold behavior is
+compiled out. The QMI gyro starts with hardware LPF bypassed. Software smoothing
+remains adjustable with a default of zero (existing tunes are not reset).
+
+`OPENDRIFT_IMU_MPU6050` intentionally retains the original definitions, defaults,
+filter choices, and controller behavior. Shared Lua groups still list these IDs
+so MPU6050 parameters appear normally; other targets omit them through discovery.
+
 ## Validation and safety limits
 
 Configuration values are validated by `ParameterStore` using the catalog.

@@ -48,6 +48,14 @@ public:
     void setRotation(uint8_t rotation);
 
     void update();
+    void suspend(bool value)
+    {
+        suspended = value;
+        pressed = false;
+        trackingTouch = false;
+        gestureReported = false;
+        gesture = 0;
+    }
 
     bool isOnline() const;
 
@@ -64,6 +72,7 @@ public:
 
 
 private:
+    bool suspended = false;
 
     #if !defined(OPENDRIFT_BOARD_AMOLED_164)
     CST816S touch;

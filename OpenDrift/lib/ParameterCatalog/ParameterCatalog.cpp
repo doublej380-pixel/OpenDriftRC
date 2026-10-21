@@ -13,6 +13,7 @@ namespace OpenDriftParameters
         constexpr uint16_t D = DISPLAY_BOARD_ONLY;
         constexpr uint16_t G = GPIO_OUTPUT;
         constexpr uint16_t F = PROFILE;
+        constexpr uint16_t T = RETIRED;
 
         const Definition DEFINITIONS[] =
         {
@@ -20,13 +21,24 @@ namespace OpenDriftParameters
             {Id::DEADBAND, "deadband", "Deadband", Type::NUMBER, 0.0f, 100.0f, Defaults::DEADBAND, 0.1f, 1, "dps", nullptr, P | F},
             {Id::MAX_CORRECTION, "gyroMaxPct", "Max Correction", Type::NUMBER, 0.0f, 100.0f, Defaults::MAX_CORRECTION, 1.0f, 0, "%", nullptr, P | F},
             {Id::SMOOTHING, "gyroSmooth", "Smoothing", Type::NUMBER, 0.0f, 1.0f, Defaults::SMOOTHING, 0.01f, 2, "", nullptr, P | F},
+            #if defined(OPENDRIFT_IMU_MPU6050)
             {Id::DRIFT_MEMORY, "gyroIGain", "Drift Memory", Type::NUMBER, 0.0f, 20.0f, Defaults::DRIFT_MEMORY, 0.01f, 2, "", nullptr, P | F},
             {Id::MEMORY_LIMIT, "gyroILim", "Memory Limit", Type::NUMBER, 0.0f, 500.0f, Defaults::MEMORY_LIMIT, 5.0f, 0, "us", nullptr, P | F},
             {Id::HOLD_ASSIST, "gyroHold", "Hold Assist", Type::NUMBER, 0.0f, 100.0f, Defaults::HOLD_ASSIST, 1.0f, 0, "%", nullptr, P | F},
+            #else
+            // Keep IDs/storage slots for old tunes and profiles, but force off.
+            {Id::DRIFT_MEMORY, "gyroIGain", "Drift Memory (retired)", Type::NUMBER, 0.0f, 0.0f, Defaults::DRIFT_MEMORY, 0.01f, 2, "", nullptr, P | F | R | T},
+            {Id::MEMORY_LIMIT, "gyroILim", "Memory Limit (retired)", Type::NUMBER, 0.0f, 0.0f, Defaults::MEMORY_LIMIT, 5.0f, 0, "us", nullptr, P | F | R | T},
+            {Id::HOLD_ASSIST, "gyroHold", "Hold Assist (retired)", Type::NUMBER, 0.0f, 0.0f, Defaults::HOLD_ASSIST, 1.0f, 0, "%", nullptr, P | F | R | T},
+            #endif
             {Id::COUNTERSTEER, "counterAssist", "Countersteer", Type::NUMBER, 0.0f, 100.0f, Defaults::COUNTERSTEER, 1.0f, 0, "%", nullptr, P | F},
             {Id::TRANSITION_SPEED, "tailSpeedC", "Transition Speed", Type::NUMBER, 0.0f, 100.0f, Defaults::TRANSITION_SPEED, 1.0f, 0, "%", nullptr, P | F},
             {Id::PREDICTION, "prediction", "Prediction", Type::NUMBER, 0.0f, 100.0f, Defaults::PREDICTION, 1.0f, 0, "%", nullptr, P | F},
+            #if defined(OPENDRIFT_IMU_MPU6050)
             {Id::SERVO_QUIET, "quiet", "Servo Quiet", Type::NUMBER, 0.0f, 50.0f, Defaults::SERVO_QUIET, 1.0f, 0, "us", nullptr, P},
+            #else
+            {Id::SERVO_QUIET, "quiet", "Servo Quiet (retired)", Type::NUMBER, 0.0f, 0.0f, 0.0f, 1.0f, 0, "us", nullptr, P | R | T},
+            #endif
             {Id::STEERING_TRAVEL, "strTravel", "Steering Travel", Type::NUMBER, 0.0f, 100.0f, Defaults::STEERING_TRAVEL, 1.0f, 0, "%", nullptr, P | F},
             {Id::SERVO_TRAVEL, "travel", "Servo Travel", Type::NUMBER, 1.0f, 100.0f, Defaults::SERVO_TRAVEL, 1.0f, 0, "%", nullptr, P},
             {Id::SERVO_CENTER, "center", "Servo Center", Type::NUMBER, 1000.0f, 2000.0f, Defaults::SERVO_CENTER, 1.0f, 0, "us", nullptr, P},
@@ -40,7 +52,11 @@ namespace OpenDriftParameters
             {Id::GPIO_6, "auxCh6", "GPIO6", Type::SELECTION, 0.0f, 16.0f, 0.0f, 1.0f, 0, "", "-;1;2;3;4;5;6;7;8;9;10;11;12;13;14;15;16", P | A | G},
             {Id::GPIO_7, "auxCh7", "GPIO7", Type::SELECTION, 0.0f, 16.0f, 0.0f, 1.0f, 0, "", "-;1;2;3;4;5;6;7;8;9;10;11;12;13;14;15;16", P | A | G},
             {Id::GPIO_8, "auxCh8", "GPIO8", Type::SELECTION, 0.0f, 16.0f, 0.0f, 1.0f, 0, "", "-;1;2;3;4;5;6;7;8;9;10;11;12;13;14;15;16", P | A | G},
+            #if defined(OPENDRIFT_IMU_MPU6050)
             {Id::SERVO_RATE, "loopHz", "Servo Rate*", Type::SELECTION, 0.0f, 1.0f, 0.0f, 1.0f, 0, "", "250 Hz;333 Hz", P},
+            #else
+            {Id::SERVO_RATE, "loopHz", "Servo Rate (fixed)", Type::SELECTION, 1.0f, 1.0f, 1.0f, 1.0f, 0, "", nullptr, P | R | T},
+            #endif
             {Id::ANTI_WOBBLE, "huntStrength", "Anti Wobble", Type::NUMBER, 0.0f, 100.0f, Defaults::ANTI_WOBBLE, 1.0f, 0, "%", nullptr, P | F},
             {Id::ENDPOINT_STATUS, "", "Endpoints", Type::STATUS, 0.0f, 2.0f, 0.0f, 1.0f, 0, "", "NOT CAL;PARTIAL;CALIBRATED", R},
             {Id::CAPTURE_LEFT, "", "Capture Left", Type::ACTION, 0.0f, 1.0f, 0.0f, 1.0f, 0, "", "READY;CAPTURE", NONE},
@@ -50,7 +66,7 @@ namespace OpenDriftParameters
             #if defined(OPENDRIFT_IMU_MPU6050)
             {Id::GYRO_LPF, "gyroLpf", "Gyro LPF", Type::SELECTION, 0.0f, 2.0f, Defaults::GYRO_LPF, 1.0f, 0, "", "20 Hz;98 Hz;256 Hz", P},
             #else
-            {Id::GYRO_LPF, "gyroLpf", "Gyro LPF", Type::SELECTION, 0.0f, 2.0f, Defaults::GYRO_LPF, 1.0f, 0, "", "24 Hz;120 Hz;Off", P},
+            {Id::GYRO_LPF, "gyroLpf", "Gyro LPF (retired)", Type::SELECTION, 2.0f, 2.0f, Defaults::GYRO_LPF, 1.0f, 0, "", nullptr, P | R | T},
             #endif
             {Id::CHANNEL_3_GAIN_MIN, "ch3GainLo", "CH3 Gain Min", Type::NUMBER, 0.0f, 6.0f, Defaults::CHANNEL_3_GAIN_MIN, 0.05f, 2, "x", nullptr, P},
             {Id::CHANNEL_3_GAIN_MAX, "ch3GainHi", "CH3 Gain Max", Type::NUMBER, 0.0f, 6.0f, Defaults::CHANNEL_3_GAIN_MAX, 0.05f, 2, "x", nullptr, P},
@@ -107,6 +123,7 @@ namespace OpenDriftParameters
 
     bool isAvailable(const Definition& definition)
     {
+        if((definition.flags & RETIRED) != 0) return false;
         if((definition.flags & AMOLED_ONLY) != 0)
         {
             #if !defined(OPENDRIFT_BOARD_AMOLED_164)
@@ -149,6 +166,7 @@ namespace OpenDriftParameters
     {
         const Definition* definition = find(id);
         if(definition == nullptr) return value;
+        if((definition->flags & RETIRED) != 0) return definition->defaultValue;
         if(value < definition->minimum) return definition->minimum;
         if(value > definition->maximum) return definition->maximum;
         return value;
@@ -158,6 +176,7 @@ namespace OpenDriftParameters
     {
         const Definition* definition = find(id);
         if(definition == nullptr) return value;
+        if((definition->flags & RETIRED) != 0) return (int)definition->defaultValue;
         const int minimum = lroundf(definition->minimum);
         const int maximum = lroundf(definition->maximum);
         if(value < minimum) return minimum;

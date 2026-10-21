@@ -115,9 +115,12 @@ other drivers prefer more assistance. These are preferences, not defects.
   gain control overrides saved gain, and displays must show this accurately.
 - Transition Speed was recentered around a neutral setting of 50, then
   reworked to affect reversal timing without losing usefulness at high gain.
-- Sensor LPF choices are 24 Hz, 120 Hz, and Off. Software smoothing can be
-  zero for a genuine bypass. More filtering is not automatically more stable:
-  phase lag and scheduling matter.
+- As of 2026-10-20, non-MPU6050 development builds retire Drift Memory,
+  Memory Limit, Hold Assist, and the gyro LPF selector. QMI gyro LPF is bypassed;
+  optional software smoothing defaults to zero. Reserved IDs and fixed values
+  prevent old tunes/profiles from reactivating removed behavior. MPU6050 builds
+  retain their previous controls and defaults. More filtering is not automatically
+  more stable: phase lag and scheduling matter.
 
 ### Wobble investigation and community work
 
@@ -237,8 +240,9 @@ unless explicitly authorized for release.
 
 CRSF channel mapping: 1 steering, 2 throttle, 3 gain. Link loss returns outputs
 to neutral; throttle arming includes a neutral hold. Keep these safety paths.
-250 Hz is the broader-compatibility default; 333 Hz is opt-in for supported
-servos. ESC output has its own 50/250/333 Hz selection. Verify manufacturer
+As of the October 20 development cleanup, steering/control is fixed at 333 Hz;
+old 250 Hz settings migrate and the selector is retired. ESC output retains
+its own 50/250/333 Hz selection. Verify manufacturer
 support, do not assume a digital servo accepts any rate.
 
 ## IMU facts and the failed locking experiment

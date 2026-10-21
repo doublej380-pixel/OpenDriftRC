@@ -50,6 +50,13 @@ public:
         uint8_t antiWobbleScale;
         uint8_t gyroLpfMode;
         bool gyroReverse;
+        int radioSteeringTravel;
+        float channel3GainMin;
+        float channel3GainMax;
+        int servoCenter;
+        int servoTravel;
+        int servoQuiet;
+        bool servoReverse;
     };
 
     bool begin();
@@ -312,7 +319,7 @@ private:
 
     char backgroundName[BACKGROUND_NAME_LENGTH] = {0};
 
-    bool wifiEnabled = true;
+    bool wifiEnabled = OpenDriftParameters::Defaults::WIFI_ON_BOOT;
 
     uint32_t wifiTimeout = 40000;
 

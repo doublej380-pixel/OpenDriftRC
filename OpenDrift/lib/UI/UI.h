@@ -47,6 +47,7 @@ public:
     #endif
 
     void requestRefresh();
+    void setDrivingSleep(bool sleeping);
 
     void setCalibrationCallback(
         void (*callback)()
@@ -74,6 +75,7 @@ public:
 
 
 private:
+    bool drivingSleep = false;
 
     #if defined(OPENDRIFT_BOARD_AMOLED_164)
     static constexpr int UI_CANVAS_WIDTH = 456;

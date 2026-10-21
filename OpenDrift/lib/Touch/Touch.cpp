@@ -91,6 +91,7 @@ static bool readTouchBytes(
 
 void Touch::update()
 {
+    if(suspended) return;
     gesture = NONE;
 
     if(!touchOnline)

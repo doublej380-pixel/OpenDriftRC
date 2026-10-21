@@ -1,4 +1,5 @@
 #include "CrsfParameterDevice.h"
+#include "DriveArming.h"
 
 #include <math.h>
 
@@ -283,6 +284,19 @@ void CrsfParameterDevice::writeParameter(
     uint8_t destination
 )
 {
+    if(writesLocked)
+    {
+        // Consume rather than queue a driving-time write for later execution.
+        sendParameter(parameter, destination);
+        return;
+    }
+    #if defined(OPENDRIFT_CH4_ARMING)
+    if(parameter >= 28 && parameter <= 31)
+    {
+        sendParameter(parameter, destination);
+        return;
+    }
+    #endif
     int32_t value = 0;
     uint8_t valueLength = 0;
     const OpenDriftParameters::Definition* definition =

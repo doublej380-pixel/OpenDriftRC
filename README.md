@@ -29,7 +29,7 @@ Visit [opendriftrc.com](https://opendriftrc.com) for the project overview, [wiri
 - Persistent AMOLED theme engine with light/dark text, seven accent palettes,
   and background-aware translucent control panels, based on work contributed
   by [J3vb](https://github.com/J3vb).
-- Dedicated 250 Hz or 333 Hz IMU/control/steering task isolated from UI, WiFi, and logging work.
+- Dedicated 333 Hz IMU/control/steering task isolated from UI, WiFi, and logging work.
 - Continuous yaw-acceleration prediction with throttle-informed look-ahead.
 - Quiet-drift reference feedback that yields to driver steering and throttle changes.
 - Receiver steering input.
@@ -37,7 +37,6 @@ Visit [opendriftrc.com](https://opendriftrc.com) for the project overview, [wiri
 - Receiver gyro gain input.
 - Selectable GPIO 18 gyro-gain input or throttle passthrough output.
 - Servo output with center, reverse, and travel settings.
-- Servo quiet band for direct-drive steering buzz.
 - Physical servo endpoint calibration for max left, center, and max right.
 - Separate radio steering travel limit.
 - Separate servo reverse and gyro reverse.
@@ -46,8 +45,6 @@ Visit [opendriftrc.com](https://opendriftrc.com) for the project overview, [wiri
   - deadband
   - maximum correction
   - smoothing
-  - Drift Memory and limit
-  - Hold Assist
   - Prediction
   - Countersteer Assist
   - Transition Speed
@@ -104,7 +101,7 @@ CRSF targets repurpose the receiver pins:
 | --- | ---: | --- | --- |
 | CRSF receiver TX | 17 | Input | Native CRSF channel and link frames |
 | CRSF receiver RX | 18 | Output | Full-duplex parameter telemetry |
-| Steering servo / servo port | 15 | Output | Selectable 250/333 Hz servo PWM |
+| Steering servo / servo port | 15 | Output | Fixed 333 Hz servo PWM |
 | ESC throttle / throttle port | 16 | Output | Standard 50 Hz ESC PWM with active-neutral failsafe |
 
 AMOLED V2 instead uses GPIO 1 for CRSF RX and GPIO 2 for CRSF TX while retaining GPIO 15 steering-servo output and GPIO 16 ESC output. All CRSF targets use the same full-duplex implementation and the
@@ -218,20 +215,18 @@ Use `GYRO REV` when normal steering direction is correct, but the gyro counter-s
 
 Fast controller behavior:
 
-- `SMOOTHING`: the software yaw low-pass; `0.00` bypasses it completely.
-- `GYRO LPF`: QMI8658 hardware filtering at `24 Hz`, lower-latency `120 Hz`, or `Off` for controlled testing.
+- `SMOOTHING`: the optional software yaw low-pass; defaults to `0.00` (bypass).
+- QMI8658 gyro hardware LPF is bypassed; its selector is retired.
 - `PREDICTION`: continuous yaw-acceleration look-ahead.
-- `SERVO QUIET`: suppresses very small physical servo-command changes.
 
 ### Assistance
 
 Slow quiet-drift behavior:
 
 - `COUNTERSTEER`: chooses how much additional steady countersteer OpenDrift carries. Zero preserves the driver-led base response; higher values reduce the steering load on the driver without increasing fast yaw damping.
-- `HOLD ASSIST`: controls how firmly the quiet-drift reference is retained.
-- `DRIFT MEMORY`: feedback for deviation from a learned quiet-drift reference.
-
-The Drift Memory limit remains available in the web configurator as an advanced limit.
+Hold Assist, Drift Memory, and Memory Limit are retired on non-MPU6050 builds.
+Old saved values and profiles cannot reactivate them. The experimental MPU6050
+targets retain their original controls, defaults, and 20/98/256 Hz filter choices.
 
 ### Tail Response
 
@@ -255,12 +250,9 @@ Conservative first-power values:
 | Gain | 1.50 |
 | Deadband | 4.0 |
 | Max correction | 100% |
-| Smoothing | 0.01 |
+| Smoothing | 0.00 |
 | Countersteer Assist | 100 |
 | Driver Priority | 0 |
-| Drift memory | 0.00 |
-| Memory limit | 80 |
-| Hold Assist | 0 |
 | Prediction | 0 |
 
 Tune symptoms:
@@ -274,8 +266,6 @@ Tune symptoms:
 | Car is stable but the driver carries too much countersteer | Raise Countersteer Assist in steps of 10 |
 | Gyro feels too hands-on during a settled drift | Lower Countersteer Assist |
 | High gain feels restrictive near full steering | Add Driver Priority in steps of 5; start below 20 |
-| Long drift slowly wanders | Add Hold Assist, then minimal Drift Memory |
-| Transition carries the old drift | Lower Hold Assist or Drift Memory |
 | Mid-drift wheel oscillation | Lower gain first; verify servo and chassis |
 | Feels slow or lazy | Lower smoothing slightly or raise gain |
 
@@ -346,6 +336,14 @@ Physical endpoint calibration and steering travel are separate on purpose:
 
 Shows WiFi state and connected client count.
 
+AMOLED development builds default to **WiFi off** on fresh installs and factory
+reset. Turn it on from this page when needed. Existing saved boot preferences
+are preserved; change "Enable WiFi on boot" in the web configurator if desired.
+When off, the radio driver is stopped/deinitialized, mDNS is stopped, and the
+HTTP client/listener closes. Health checks and HTTP request polling do not run.
+The small route table and shared networking framework allocations can remain
+in memory; "off" does not mean the firmware has zero networking-related RAM.
+
 - `WIFI ON/OFF`: toggles the access point.
 
 When WiFi is enabled, connect to the `OpenDrift` network and open:
@@ -360,15 +358,15 @@ Basic firmware/system information. Tap the GPIO 18 mode button to switch between
 
 The Profiles page lists the driving profiles created in the web configurator. Tap a profile to activate its complete driving tune. Swipe vertically when more than four profiles exist; the list supports up to 12 profiles.
 
-Profiles save gain, deadband, max correction, smoothing, Prediction, Countersteer Assist, Driver Priority, Hold Assist, Drift Memory and its limit, and radio steering travel. Trackside adjustments automatically save back to the active profile.
+Profiles save gain, deadband, max correction, smoothing, Prediction, Countersteer Assist, Driver Priority, and radio steering travel. Retired fields remain reserved for compatibility but are forced off on non-MPU6050 builds. Trackside adjustments automatically save back to the active profile.
 
 Hardware and installation settings remain global, including gyro/servo direction, physical steering endpoints, servo center and travel, WiFi, logging, and GPIO mode. Switching surfaces therefore cannot disturb the car's physical setup.
 
 ### Control and servo rate
 
-OpenDrift defaults to **250 Hz** for broad digital-servo compatibility. **333 Hz** reduces the output interval from 4 ms to about 3 ms and can sharpen a fast supported servo, but it must only be used when the servo manufacturer explicitly rates the servo for 333 Hz operation. An unsupported update rate can cause heat, buzzing, erratic steering, or servo damage.
+Current development firmware uses **333 Hz only** for steering/control, with an approximately 3 ms interval. **Use only a servo explicitly rated for 333 Hz.** Digital does not automatically mean compatible; an unsupported update rate can cause heat, buzzing, erratic steering, or servo damage. Existing 250 Hz settings migrate to 333 Hz on installation.
 
-The setting is global and appears on the AMOLED System page, in the web configurator, and in the CRSF/EdgeTX parameter list. Restart OpenDrift after changing it so both the control task and steering PWM start at the selected rate.
+The screen and web configurator show the fixed rate; there is no rate selector in the radio menu. Throttle output retains its independent 50/250/333 Hz setting and is not forced to the steering rate.
 
 ## Web Configurator
 
@@ -390,13 +388,9 @@ Current web settings:
 - Transition Speed
 - Driver Priority
 - Anti Wobble
-- Drift memory
-- Memory limit
-- Hold Assist
 - Servo reverse
 - Servo center
 - Servo travel
-- Servo quiet band
 - Steering max left / center / max right
 - Radio steering travel
 - Gain channel low / high
@@ -497,10 +491,10 @@ Log rows include:
 - Correction saturation state
 - Steering input and calibrated steering command
 - Servo output
-- Servo quiet band
+- Reserved Servo Quiet field (zero; command suppression is retired)
 - Throttle input
 - Gain input and active gain
-- Active deadband, max correction, smoothing, Prediction, Countersteer Assist, Driver Priority, Hold Assist, Drift Memory, and memory limit
+- Active deadband, max correction, smoothing, Prediction, Countersteer Assist, and Driver Priority (retired memory/hold fields remain zero for CSV compatibility)
 - Driver Priority scale and effective live direct gain
 - Predicted yaw, quiet-drift reference, reference error, steady countersteer contribution, and memory correction
 - Driver steering activity and throttle-prediction blend
@@ -526,11 +520,11 @@ The CSV can be pasted into a spreadsheet or plotted to see whether the car spun 
 
 ## Gyro Algorithm Overview
 
-OpenDrift v1.0 runs this path at the selected 250 Hz or 333 Hz rate:
+Current development firmware runs this path at the fixed 333 Hz rate:
 
 1. Read receiver steering, throttle, and IMU yaw.
 2. Subtract calibrated gyro offset and apply soft deadband.
-3. Apply the selected hardware gyro LPF and optional software yaw low-pass.
+3. Bypass QMI gyro hardware LPF and apply optional software yaw low-pass.
 4. Estimate short-horizon yaw from filtered yaw acceleration.
 5. Extend that horizon when throttle predicts application or a longer off-throttle load change.
 6. Shape damping briefly during deliberate direction changes without changing the hard correction ceiling.
@@ -538,16 +532,20 @@ OpenDrift v1.0 runs this path at the selected 250 Hz or 333 Hz rate:
 8. Convert predicted yaw directly into correction with Gain.
 9. Learn a slow yaw reference while driver steering and throttle are quiet.
 10. Add optional Countersteer Assist from the slow learned reference only.
-11. Apply Drift Memory only to error from that reference.
-12. Prevent memory from pushing farther into correction saturation.
-13. Limit signed gyro movement to the configured full-span Max Correction
+11. Limit signed gyro movement to the configured full-span Max Correction
     percentage, then mix it with driver steering and clamp the combined command.
-14. Apply the calibrated physical endpoint map as the final hard servo limit.
+12. Apply the calibrated physical endpoint map as the final hard servo limit.
 
 Driver steering activity and throttle changes make the slow reference yield
 immediately. Neither disables the fast direct damping path.
 
 ## Signal Loss Behavior
+
+Current CRSF development builds also require [CH4 arming](OpenDrift/docs/ARMING.md).
+CH4 low holds steering centered and throttle neutral with the screen usable;
+CH4 high requests drive after a neutral hold and sleeps the AMOLED/UI. Physical
+endpoint capture/reset is unavailable under the selected strict parked lock.
+Read the bench checklist before installing this development firmware.
 
 The standard PWM builds retain the existing do-nothing behavior: if steering
 input disappears, OpenDrift does not send a new servo command.
@@ -566,9 +564,8 @@ Use the [Technical Tuning Reference](OpenDrift/docs/Tuning.md) rather than tunin
 - Establish a mechanically sound car before blaming the gyro.
 - Set the servo's internal anti-wobble only as high as it can run without buzzing; high servo torque/power can amplify internal oscillation.
 - Treat Gain as the primary surface-dependent setting and store each surface in a profile.
-- Tune entries with Gain, Max Correction, and Smoothing before adding slow reference feedback.
+- Tune entries with Gain, Max Correction, and optional Smoothing.
 - Add Prediction in small steps only after the direct response is understood.
-- Use Hold Assist for sustained-drift reference retention, then add only the minimum Drift Memory required.
 - Use Countersteer Assist to choose driver-led versus gyro-led settled drifts without retuning Gain.
 - Connect throttle sensing so OpenDrift can anticipate power and load changes.
 

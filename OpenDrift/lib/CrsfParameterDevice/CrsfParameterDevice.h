@@ -25,6 +25,7 @@ public:
     );
 
     void update();
+    void setWritesLocked(bool locked) { writesLocked = locked; }
 
     bool consumeSettingsChanged();
 
@@ -69,6 +70,7 @@ private:
     ControlDiagnostics* controlDiagnostics = nullptr;
     void (*usbMaintenanceCallback)() = nullptr;
     bool settingsChanged = false;
+    bool writesLocked = false;
 
     void processFrame(
         const CrsfInput::ExtendedFrame& frame

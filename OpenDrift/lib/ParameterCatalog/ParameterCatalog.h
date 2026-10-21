@@ -72,7 +72,9 @@ namespace OpenDriftParameters
         AMOLED_ONLY = 1 << 2,
         DISPLAY_BOARD_ONLY = 1 << 3,
         GPIO_OUTPUT = 1 << 4,
-        PROFILE = 1 << 5
+        PROFILE = 1 << 5,
+        // Hidden compatibility tombstones: fixed values, never new controls.
+        RETIRED = 1 << 6
     };
 
     struct Definition
@@ -113,12 +115,24 @@ namespace OpenDriftParameters
 
     namespace Defaults
     {
+        #if defined(OPENDRIFT_BOARD_AMOLED_164)
+        static constexpr bool WIFI_ON_BOOT = false;
+        #else
+        static constexpr bool WIFI_ON_BOOT = true;
+        #endif
         static constexpr float GYRO_GAIN = 1.5f;
         static constexpr float DEADBAND = 2.0f;
         static constexpr int MAX_CORRECTION = 100;
+        #if defined(OPENDRIFT_IMU_MPU6050)
         static constexpr float SMOOTHING = 0.10f;
-        static constexpr float DRIFT_MEMORY = 0.0f;
         static constexpr int MEMORY_LIMIT = 120;
+        static constexpr int GYRO_LPF = 0;
+        #else
+        static constexpr float SMOOTHING = 0.0f;
+        static constexpr int MEMORY_LIMIT = 0;
+        static constexpr int GYRO_LPF = 2;
+        #endif
+        static constexpr float DRIFT_MEMORY = 0.0f;
         static constexpr int HOLD_ASSIST = 0;
         static constexpr int COUNTERSTEER = 100;
         static constexpr int TRANSITION_SPEED = 50;
@@ -128,7 +142,6 @@ namespace OpenDriftParameters
         static constexpr int SERVO_TRAVEL = 100;
         static constexpr int SERVO_CENTER = 1500;
         static constexpr int ANTI_WOBBLE = 50;
-        static constexpr int GYRO_LPF = 0;
         static constexpr float CHANNEL_3_GAIN_MIN = 0.5f;
         static constexpr float CHANNEL_3_GAIN_MAX = 3.0f;
         static constexpr int DRIVER_PRIORITY = 0;

@@ -1,4 +1,5 @@
 #include "UI.h"
+#include "DriveArming.h"
 
 #if defined(OPENDRIFT_BOARD_AMOLED_164)
 #include <esp_heap_caps.h>
@@ -950,6 +951,39 @@ void UI::setThrottleRadio(
 void UI::requestRefresh()
 {
     refreshRequested = true;
+}
+
+void UI::setDrivingSleep(bool sleeping)
+{
+    if(drivingSleep == sleeping || display == nullptr) return;
+    drivingSleep = sleeping;
+    lastTouchState = false;
+    heldRepeatButton = 0;
+    nextRepeatAt = 0;
+    steeringCalibrationResetStartedAt = 0;
+    steeringCalibrationResetPoint = -1;
+    #if defined(OPENDRIFT_USB_MAINTENANCE)
+    usbMaintenanceHoldStartedAt = 0;
+    #endif
+    #if defined(OPENDRIFT_BOARD_AMOLED_164)
+    swipePreviewActive = false;
+    #endif
+    if(sleeping)
+    {
+        display->waitDMA();
+        display->sleep();
+    }
+    else
+    {
+        display->wakeup();
+        #if defined(OPENDRIFT_BOARD_AMOLED_164)
+        appliedBrightnessLevel = 0xFF;
+        lastTouchMs = millis();
+        displayDimmed = false;
+        swallowTouchUntilRelease = true;
+        #endif
+        requestRefresh();
+    }
 }
 
 
@@ -2488,7 +2522,7 @@ void UI::drawSystemPage(
     );
 
     lcd->drawString(
-        "RATE (REBOOT)",
+        "FIXED RATE",
         22,
         64
     );
@@ -2523,16 +2557,8 @@ void UI::drawSystemPage(
         OD_TEXT
     );
 
-    drawAmoledButton(
-        lcd,
-        150,
-        54,
-        240,
-        38,
-        settings.getControlLoopHz() == 333 ? "333 HZ" : "250 HZ",
-        settings.getControlLoopHz() == 333 ? OD_AMBER : OD_CYAN,
-        2
-    );
+    lcd->setTextColor(OD_MUTED);
+    lcd->drawString("333 HZ", 150, 54);
 
     drawAmoledButton(
         lcd,
@@ -2815,21 +2841,18 @@ void UI::drawResponsePage(
 
     drawAmoledRowPanel(lcd, 48, 48);
     drawAmoledRowPanel(lcd, 110, 48);
-    drawAmoledRowPanel(lcd, 172, 48);
 
     lcd->setTextSize(2);
     lcd->setTextColor(OD_MUTED);
     lcd->drawString("SMOOTH", 22, 58);
     lcd->drawString("PREDICT", 22, 120);
-    lcd->drawString("SERVO QUIET", 22, 182);
 
     lcd->setTextSize(3);
     lcd->setTextColor(OD_TEXT);
     lcd->drawFloat(settings.getGyroSmoothing(), 2, 146, 48);
     lcd->drawNumber(settings.getPredictionStrength(), 146, 110);
-    lcd->drawNumber(settings.getServoQuiet(), 146, 172);
 
-    for(int row = 0; row < 3; row++)
+    for(int row = 0; row < 2; row++)
     {
         int y = 48 + (row * 62);
         drawAmoledButton(lcd, 276, y, 70, 48, "-", OD_WARM);
@@ -2854,13 +2877,6 @@ void UI::drawResponsePage(
         1,
         TFT_YELLOW
     );
-    drawRoundAdjustRow(
-        lcd,
-        "SERVO QUIET",
-        String(settings.getServoQuiet()),
-        2,
-        TFT_YELLOW
-    );
     #endif
 
     drawPageDots();
@@ -2877,22 +2893,16 @@ void UI::drawDriftAssistPage(
     drawAmoledHeader(lcd, "Assistance", OD_BLUE);
 
     drawAmoledRowPanel(lcd, 48, 48);
-    drawAmoledRowPanel(lcd, 110, 48);
-    drawAmoledRowPanel(lcd, 172, 48);
 
     lcd->setTextSize(2);
     lcd->setTextColor(OD_MUTED);
     lcd->drawString("COUNTERSTEER", 22, 58);
-    lcd->drawString("HOLD ASSIST", 22, 120);
-    lcd->drawString("DRIFT MEM", 22, 182);
 
     lcd->setTextSize(3);
     lcd->setTextColor(OD_TEXT);
     lcd->drawNumber(settings.getGyroCounterSteerAssist(), 146, 48);
-    lcd->drawNumber(settings.getGyroHoldBoost(), 146, 110);
-    lcd->drawFloat(settings.getGyroIntegralGain(), 2, 146, 172);
 
-    for(int row = 0; row < 3; row++)
+    for(int row = 0; row < 1; row++)
     {
         int y = 48 + (row * 62);
         drawAmoledButton(lcd, 276, y, 70, 48, "-", OD_BLUE);
@@ -2908,20 +2918,6 @@ void UI::drawDriftAssistPage(
         "COUNTERSTEER",
         String(settings.getGyroCounterSteerAssist()),
         0,
-        ROUND_CYAN
-    );
-    drawRoundAdjustRow(
-        lcd,
-        "HOLD ASSIST",
-        String(settings.getGyroHoldBoost()),
-        1,
-        ROUND_CYAN
-    );
-    drawRoundAdjustRow(
-        lcd,
-        "DRIFT MEMORY",
-        String(settings.getGyroIntegralGain(), 2),
-        2,
         ROUND_CYAN
     );
     #endif
@@ -3148,13 +3144,9 @@ void UI::drawExperimentalPage(
         TFT_MAGENTA
     );
 
-    drawRoundAdjustRow(
-        lcd,
-        "RATE (REBOOT)",
-        settings.getControlLoopHz() == 333 ? "333 HZ" : "250 HZ",
-        2,
-        TFT_MAGENTA
-    );
+    lcd->setTextSize(2);
+    lcd->setTextColor(TFT_MAGENTA);
+    lcd->drawCenterString("333 HZ FIXED", 120, 171);
     #endif
 
     drawPageDots();
@@ -3267,7 +3259,7 @@ void UI::drawProfilesPage(
             String summary =
                 "G " + String(settings.getProfileValue(*profile, OpenDriftParameters::Id::GYRO_GAIN), 2) +
                 "   PRED " + String((int)settings.getProfileValue(*profile, OpenDriftParameters::Id::PREDICTION)) +
-                "   HOLD " + String((int)settings.getProfileValue(*profile, OpenDriftParameters::Id::HOLD_ASSIST));
+                "   CS " + String((int)settings.getProfileValue(*profile, OpenDriftParameters::Id::COUNTERSTEER));
 
             lcd->drawRightString(
                 summary.c_str(),
@@ -3940,6 +3932,10 @@ void UI::drawSteeringCalibrationPage(
                 )
             )
         );
+
+    #if defined(OPENDRIFT_CH4_ARMING)
+    status = calibrationSaved ? "SAVED - STEERING LOCKED" : "PARKED: STEERING LOCKED";
+    #endif
 
     uint16_t statusColor =
         calibrationSaved
@@ -5680,6 +5676,12 @@ bool UI::captureSteeringCalibration(
     Settings& settings
 )
 {
+    #if defined(OPENDRIFT_CH4_ARMING)
+    // Strict parked steering lock: never capture a forced-center pulse as an
+    // endpoint. An explicit bench-calibration policy must be chosen first.
+    steeringCalibrationError = true;
+    return false;
+    #endif
     if(settings.isSteeringCalibrated())
     {
         steeringCalibrationError = false;
@@ -5762,11 +5764,6 @@ int8_t UI::repeatButtonAt(
         if(buttonPressed(x, y, 364, 110, 70, 48))
             return 24;
 
-        if(buttonPressed(x, y, 276, 172, 70, 48))
-            return 25;
-
-        if(buttonPressed(x, y, 364, 172, 70, 48))
-            return 26;
     }
 
     if(page == PAGE_DRIFT_ASSIST)
@@ -5777,17 +5774,6 @@ int8_t UI::repeatButtonAt(
         if(buttonPressed(x, y, 364, 48, 70, 48))
             return 28;
 
-        if(buttonPressed(x, y, 276, 110, 70, 48))
-            return 19;
-
-        if(buttonPressed(x, y, 364, 110, 70, 48))
-            return 20;
-
-        if(buttonPressed(x, y, 276, 172, 70, 48))
-            return 15;
-
-        if(buttonPressed(x, y, 364, 172, 70, 48))
-            return 16;
     }
 
     if(page == PAGE_EXPERIMENTAL)
@@ -5846,11 +5832,6 @@ int8_t UI::repeatButtonAt(
         if(buttonPressed(x, y, 170, 116, 44, 30))
             return 24;
 
-        if(buttonPressed(x, y, 26, 171, 44, 30))
-            return 25;
-
-        if(buttonPressed(x, y, 170, 171, 44, 30))
-            return 26;
     }
 
     if(page == PAGE_DRIFT_ASSIST)
@@ -5861,17 +5842,6 @@ int8_t UI::repeatButtonAt(
         if(buttonPressed(x, y, 170, 61, 44, 30))
             return 28;
 
-        if(buttonPressed(x, y, 26, 116, 44, 30))
-            return 19;
-
-        if(buttonPressed(x, y, 170, 116, 44, 30))
-            return 20;
-
-        if(buttonPressed(x, y, 26, 171, 44, 30))
-            return 15;
-
-        if(buttonPressed(x, y, 170, 171, 44, 30))
-            return 16;
     }
 
     if(page == PAGE_EXPERIMENTAL)
@@ -5888,11 +5858,6 @@ int8_t UI::repeatButtonAt(
         if(buttonPressed(x, y, 170, 116, 44, 30))
             return 32;
 
-        if(buttonPressed(x, y, 26, 171, 44, 30))
-            return 33;
-
-        if(buttonPressed(x, y, 170, 171, 44, 30))
-            return 34;
     }
 
     return 0;
@@ -6175,17 +6140,6 @@ bool UI::applyRepeatButton(
             );
             break;
 
-        case 25:
-            settings.setServoQuiet(
-                settings.getServoQuiet() - 1
-            );
-            break;
-
-        case 26:
-            settings.setServoQuiet(
-                settings.getServoQuiet() + 1
-            );
-            break;
 
         case 27:
             settings.setGyroCounterSteerAssist(
@@ -6247,13 +6201,6 @@ bool UI::applyRepeatButton(
             );
             break;
 
-        case 33:
-            settings.setControlLoopHz(250);
-            break;
-
-        case 34:
-            settings.setControlLoopHz(333);
-            break;
 
         case 35:
             settings.setDriverPriority(
@@ -7147,7 +7094,9 @@ void UI::update(
             fabsf(gyro.getFilteredYaw()) < 5.0f
         )
         {
+            #if !defined(OPENDRIFT_CH4_ARMING)
             settings.clearSteeringCalibration();
+            #endif
 
             captureSteeringCalibration(
                 currentPoint,
@@ -7383,28 +7332,6 @@ void UI::update(
             lastTouchState =
                 touched;
 
-            return;
-        }
-
-        if(
-            page == PAGE_SYSTEM &&
-            buttonPressed(
-                x,
-                y,
-                150,
-                54,
-                240,
-                38
-            )
-        )
-        {
-            settings.setControlLoopHz(
-                settings.getControlLoopHz() == 250 ? 333 : 250
-            );
-
-            drawSystemPage(settings);
-
-            lastTouchState = touched;
             return;
         }
 

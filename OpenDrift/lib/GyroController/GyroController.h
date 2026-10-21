@@ -32,6 +32,8 @@ public:
     void abortCalibration();
     void reverseYawFrame();
     bool isCalibrating() const;
+    // Clear motion/filter history without changing the stationary bias.
+    void resetMotionState() { resetDynamicState(); }
     CalibrationState getCalibrationState() const;
 
     void setGain(float gain);

@@ -55,6 +55,7 @@ void ControlDiagnostics::stop()
 
 void ControlDiagnostics::record(const Record& value)
 {
+    if(!capturing.load(std::memory_order_relaxed)) return;
     portENTER_CRITICAL(&mux);
     if(capturing)
     {
@@ -67,10 +68,7 @@ void ControlDiagnostics::record(const Record& value)
 
 bool ControlDiagnostics::isCapturing() const
 {
-    portENTER_CRITICAL(&mux);
-    const bool value = capturing;
-    portEXIT_CRITICAL(&mux);
-    return value;
+    return capturing.load(std::memory_order_relaxed);
 }
 
 size_t ControlDiagnostics::count() const

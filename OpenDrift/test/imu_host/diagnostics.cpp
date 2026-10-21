@@ -5,6 +5,9 @@ uint32_t hostTime = 1000;
 int main()
 {
     ControlDiagnostics capture;
+    ControlDiagnostics::Record idle = {};
+    capture.record(idle);
+    assert(capture.count() == 0 && capture.getCapacity() == 0);
     assert(!capture.beginExport());
     assert(capture.start());
     ControlDiagnostics::Record row = {};

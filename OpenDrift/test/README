@@ -9,3 +9,29 @@ in the development cycle.
 
 More information about PlatformIO Unit Testing:
 - https://docs.platformio.org/en/latest/advanced/unit-testing/index.html
+
+Parameter retirement / MPU6050 exception (run from the firmware directory):
+
+g++ -std=c++11 -Itest/imu_host -Ilib/ParameterCatalog -Ilib/ParameterStore test/imu_host/parameter_retirement.cpp lib/ParameterCatalog/ParameterCatalog.cpp lib/ParameterStore/ParameterStore.cpp -o /tmp/opendrift-parameters
+/tmp/opendrift-parameters
+
+Repeat with -DOPENDRIFT_IMU_MPU6050 to verify that target retains the old controls
+and defaults. Tests cover defaults, stale writes, legacy storage import, profile
+application, and persistence without touching real NVS or requiring hardware.
+
+Servo output regression (normal targets, no electrical timing simulation):
+
+g++ -std=c++11 -Itest/servo_host -Itest/imu_host -Ilib/Servo test/servo_host/test.cpp lib/Servo/Servo.cpp -o /tmp/opendrift-servo-test
+/tmp/opendrift-servo-test
+
+Wi-Fi manager lifecycle (fake radio/netif APIs, not actual DHCP/RF validation):
+
+g++ -std=c++11 -Itest/wifi_host -Itest/imu_host -Ilib/WIFIManager test/wifi_host/test.cpp lib/WIFIManager/WIFIManager.cpp -o /tmp/opendrift-wifi-test
+/tmp/opendrift-wifi-test
+
+CH4 interlocks and touch polling suspension:
+
+g++ -std=c++11 -Ilib/DriveArming test/imu_host/drive_arming.cpp -o /tmp/opendrift-drive-arming
+/tmp/opendrift-drive-arming
+g++ -std=c++11 -DOPENDRIFT_BOARD_AMOLED_164 -Itest/imu_host -Ilib/Touch test/imu_host/touch_suspend.cpp lib/Touch/Touch.cpp -o /tmp/opendrift-touch-suspend
+/tmp/opendrift-touch-suspend

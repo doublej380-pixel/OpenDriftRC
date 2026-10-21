@@ -20,6 +20,8 @@
 #include "Servo.h"
 #include "EscOutput.h"
 #include "GyroController.h"
+#include "DriveArming.h"
+#include <atomic>
 #include "WIFIManager.h"
 #include "Settings.h"
 #include "RadioInput.h"
@@ -83,6 +85,15 @@ AuxChannelOutputs auxChannelOutputs;
 BlackboxLogger blackbox;
 ControlDiagnostics controlDiagnostics;
 
+#if defined(OPENDRIFT_CH4_ARMING)
+DriveArming driveArming;
+std::atomic<bool> driveArmed{false};
+std::atomic<bool> driveSleepRequested{false};
+std::atomic<bool> drivePeripheralsReady{false};
+std::atomic<uint8_t> driveArmReason{DriveArming::NO_LINK};
+bool driveConfigurationLocked = false; // Main-loop-owned peripheral state.
+#endif
+
 #if defined(OPENDRIFT_BOARD_AMOLED_164)
 Backgrounds backgrounds;
 BlackboxArchive blackboxArchive;
@@ -100,8 +111,13 @@ bool lastBlackboxEnabled = false;
 
 bool blackboxStartAttempted = false;
 
+#if defined(OPENDRIFT_IMU_MPU6050)
 static uint32_t controlLoopHz = 250;
 static uint32_t controlLoopPeriodMs = 4;
+#else
+static uint32_t controlLoopHz = 333;
+static uint32_t controlLoopPeriodMs = 3;
+#endif
 static uint8_t appliedDisplayRotation = 0xFF;
 
 #if defined(OPENDRIFT_BOARD_AMOLED_164)
@@ -929,6 +945,14 @@ void updateCrsfThrottleOutput(
     bool signalValid
 )
 {
+    #if defined(OPENDRIFT_CH4_ARMING)
+    // DriveArming already requires a neutral hold. Do not impose a second
+    // independent timer that could leave steering armed but throttle stuck.
+    crsfThrottleArmed = signalValid && throttleOutputActive;
+    crsfThrottleOutputArmed = crsfThrottleArmed;
+    if(!signalValid) crsfThrottleNeutralSinceMs = 0;
+    return;
+    #endif
     if(!signalValid)
     {
         crsfThrottleArmed = false;
@@ -1045,11 +1069,12 @@ int mapSteeringPulse(
 
 int applyRadioSteeringTravel(
     int steeringCommand,
-    Settings& settings
+    Settings& settings,
+    const Settings::ControllerSnapshot* snapshot = nullptr
 )
 {
     int travel =
-        settings.getRadioSteeringTravel();
+        snapshot ? snapshot->radioSteeringTravel : settings.getRadioSteeringTravel();
 
     int offset =
         steeringCommand - 1500;
@@ -1070,7 +1095,8 @@ int applyRadioSteeringTravel(
 
 float mapGainPulse(
     int pulse,
-    Settings& settings
+    Settings& settings,
+    const Settings::ControllerSnapshot* snapshot = nullptr
 )
 {
     int gainMin =
@@ -1097,10 +1123,12 @@ float mapGainPulse(
         /
         (float)(gainMax - gainMin);
 
+    const float rangeMin = snapshot ? snapshot->channel3GainMin : settings.getChannel3GainMin();
+    const float rangeMax = snapshot ? snapshot->channel3GainMax : settings.getChannel3GainMax();
     return
-        settings.getChannel3GainMin() +
+        rangeMin +
         (
-            (settings.getChannel3GainMax() - settings.getChannel3GainMin())
+            (rangeMax - rangeMin)
             * normalized
         );
 }
@@ -1181,6 +1209,9 @@ void runControlIteration()
             mapGainPulse(
                 gainRadio.getPulseWidth(),
                 settings
+                #if !defined(OPENDRIFT_IMU_MPU6050)
+                , &controllerSettings
+                #endif
             )
         );
     }
@@ -1282,10 +1313,32 @@ void runControlIteration()
             applyRadioSteeringTravel(
                 driverCommand,
                 settings
+                #if !defined(OPENDRIFT_IMU_MPU6050)
+                , &controllerSettings
+                #endif
             );
     }
 
     bool imuHealthy = imu.isHealthy();
+    #if defined(OPENDRIFT_CH4_ARMING)
+    const bool wasArmed = driveArming.isArmed();
+    const bool driveAllowed = driveArming.update(
+        millis(), crsfSignal, crsf.getChannelMicroseconds(3), throttlePulse,
+        imu.isYawValid() && i2cMisses < 3 && !gyro.isCalibrating() && !gyroCalibrationRequested,
+        drivePeripheralsReady.load(std::memory_order_acquire));
+    driveArmed.store(driveAllowed, std::memory_order_release);
+    driveArmReason.store(driveArming.getReason(), std::memory_order_relaxed);
+    driveSleepRequested.store(driveArming.wantsDrive(), std::memory_order_release);
+    if(wasArmed != driveAllowed) gyro.resetMotionState();
+    if(!driveAllowed)
+    {
+        driverCommand = steeringCommand = 1500;
+        throttlePulse = 1500;
+        throttleOutputPulse = 1500;
+    }
+    #else
+    const bool driveAllowed = true;
+    #endif
     float yaw = 0.0f;
 
     if(i2cReady)
@@ -1315,13 +1368,14 @@ void runControlIteration()
         gyro.update(
             controllerYaw,
             driverCommand,
-            steeringSignal,
+            steeringSignal && driveAllowed,
             throttlePulse,
-            throttleSignal
+            throttleSignal && driveAllowed
         );
+    if(!driveAllowed) gyroCorrection = 0;
 
     int requestedGyroCorrection =
-        gyro.getRequestedCorrection();
+        driveAllowed ? gyro.getRequestedCorrection() : 0;
 
     int limitedGyroCorrection =
         (int)roundf(gyroCorrection);
@@ -1332,7 +1386,7 @@ void runControlIteration()
     float servoCommand =
         steeringServo.getPosition();
 
-    if(steeringSignal)
+    if(steeringSignal || !driveAllowed)
     {
         // Steering Travel scales only the driver's command. Max Correction
         // independently controls gyro authority, and physical calibration is
@@ -1352,6 +1406,26 @@ void runControlIteration()
             correctionSaturated ||
             appliedGyroCorrection != limitedGyroCorrection;
 
+        #if !defined(OPENDRIFT_IMU_MPU6050)
+        // Calibration has its own lock/version domain. Check its physical
+        // endpoints each tick, even if no catalog parameter changed.
+        static Settings::SteeringCalibration appliedCalibration;
+        static uint32_t appliedSettingsGeneration = UINT32_MAX;
+        if(appliedSettingsGeneration != controllerSettingsGeneration ||
+           appliedCalibration.calibrated != calibration.calibrated ||
+           appliedCalibration.min != calibration.min ||
+           appliedCalibration.center != calibration.center ||
+           appliedCalibration.max != calibration.max)
+        {
+            steeringServo.configure(
+                controllerSettings.servoCenter, controllerSettings.servoReverse,
+                controllerSettings.servoTravel, controllerSettings.servoQuiet,
+                calibration.calibrated, calibration.min, calibration.center,
+                calibration.max);
+            appliedSettingsGeneration = controllerSettingsGeneration;
+            appliedCalibration = calibration;
+        }
+        #else
         steeringServo.configure(
             settings.getServoCenter(),
             settings.getServoReverse(),
@@ -1362,6 +1436,7 @@ void runControlIteration()
             calibration.center,
             calibration.max
         );
+        #endif
 
         steeringServo.writeMicroseconds(
             servoCommand
@@ -1375,7 +1450,7 @@ void runControlIteration()
     }
 
     #if defined(OPENDRIFT_INPUT_CRSF)
-    else if(lastCrsfSignal)
+    if(!steeringSignal && lastCrsfSignal)
     {
         // Do not hold the last steering command after a receiver loss.
         steeringServo.center();
@@ -1391,9 +1466,9 @@ void runControlIteration()
     // The main loop owns throttle PWM attachment and removal so peripheral
     // setup never runs inside this high-priority task.
     crsfThrottlePulseSnapshot = throttleOutputPulse;
-    crsfThrottleSignalSnapshot = throttleSignal;
+    crsfThrottleSignalSnapshot = throttleSignal && driveAllowed;
 
-    if(!throttleSignal)
+    if(!throttleSignal || !driveAllowed)
     {
         crsfThrottleArmed = false;
         crsfThrottleOutputArmed = false;
@@ -1456,6 +1531,8 @@ void runControlIteration()
         &controlTelemetryMux
     );
 
+    if(controlDiagnostics.isCapturing())
+    {
     const auto& sample = imu.getSampleDiagnostics();
     controlDiagnostics.record({
         iterationStartedUs, intervalUs, micros() - iterationStartedUs, busWaitUs,
@@ -1469,6 +1546,7 @@ void runControlIteration()
             (sample.locked ? 8 : 0) | (steeringSignal ? 16 : 0)),
         imu.getGyroLpfMode()
     });
+    }
 }
 
 
@@ -2594,6 +2672,64 @@ void setup()
     }
 }
 
+#if defined(OPENDRIFT_CH4_ARMING)
+void serviceDriveMode()
+{
+    static uint8_t lastReason = 0xFF;
+    static uint32_t lastReasonReportMs = 0;
+    const uint8_t reason = driveArmReason.load(std::memory_order_relaxed);
+    if(reason != lastReason && millis() - lastReasonReportMs >= 500U)
+    {
+        Serial.printf("Arm status: %s; CH4=%u us throttle=%u us UIready=%u\n",
+            DriveArming::reasonName(static_cast<DriveArming::Reason>(reason)),
+            crsf.getChannelMicroseconds(3), crsf.getChannelMicroseconds(1),
+            (unsigned)drivePeripheralsReady.load(std::memory_order_acquire));
+        lastReason = reason;
+        lastReasonReportMs = millis();
+    }
+    static bool lastReportedArmed = false;
+    const bool armed = driveArmed.load(std::memory_order_acquire);
+    if(armed != lastReportedArmed)
+    {
+        Serial.println(armed ? "Drive mode: ARMED" : "Drive mode: DISARMED");
+        lastReportedArmed = armed;
+    }
+    const bool wanted = driveSleepRequested.load(std::memory_order_acquire);
+    bool busy = false;
+    #if defined(OPENDRIFT_BOARD_AMOLED_164)
+    busy = blackboxArchive.isSaving();
+    #endif
+    if(!wanted)
+    {
+        // Revoke permission before any wake delays or parked configuration.
+        drivePeripheralsReady.store(false, std::memory_order_release);
+        if(driveConfigurationLocked)
+        {
+            #if !defined(OPENDRIFT_HEADLESS)
+            ui.setDrivingSleep(false);
+            touch.suspend(false);
+            #endif
+            driveConfigurationLocked = false;
+            Serial.println("Drive mode: PARKED (CH4 off / safety lock)");
+        }
+    }
+    else if(!busy)
+    {
+        if(!driveConfigurationLocked)
+        {
+            #if !defined(OPENDRIFT_HEADLESS)
+            touch.suspend(true);
+            ui.setDrivingSleep(true);
+            #endif
+            driveConfigurationLocked = true;
+            Serial.println("Drive mode: awaiting neutral; configuration suspended");
+        }
+        drivePeripheralsReady.store(true, std::memory_order_release);
+    }
+    else drivePeripheralsReady.store(false, std::memory_order_release);
+}
+#endif
+
 void loop()
 {
     static unsigned long lastHeartbeatMs = 0;
@@ -2726,7 +2862,14 @@ void loop()
     }
     #endif
 
+    #if defined(OPENDRIFT_CH4_ARMING)
+    serviceDriveMode();
+    #endif
+
     #if defined(OPENDRIFT_INPUT_CRSF)
+    #if defined(OPENDRIFT_CH4_ARMING)
+    crsfParameters.setWritesLocked(driveConfigurationLocked);
+    #endif
     crsfParameters.update();
 
     if(crsfParameters.consumeSettingsChanged())
@@ -2779,7 +2922,11 @@ void loop()
         touch.isOnline() &&
         touchPollNowMs - lastTouchPollMs >= touchPollIntervalMs;
 
-    if(touchRecoveryDue || touchPollDue)
+    if((touchRecoveryDue || touchPollDue)
+        #if defined(OPENDRIFT_CH4_ARMING)
+        && !driveConfigurationLocked
+        #endif
+    )
     {
         bool touchBusReady =
             i2cBusMutex == nullptr ||
@@ -2816,9 +2963,16 @@ void loop()
     // SETTINGS
     //-------------------
 
+    #if defined(OPENDRIFT_CH4_ARMING)
+    if(!driveConfigurationLocked)
+    #endif
     settings.update();
 
     updateBlackboxAvailability();
+
+    #if !defined(OPENDRIFT_IMU_MPU6050)
+    imu.setLoggingMetricsEnabled(settings.getBlackboxEnabled() && blackbox.isReady());
+    #endif
 
     //-------------------
     // WIFI
@@ -2847,11 +3001,21 @@ void loop()
 
     if(wifi.isEnabled())
     {
+        #if defined(OPENDRIFT_CH4_ARMING)
+        if(!driveConfigurationLocked)
+        #endif
         webConfig.update();
+    }
+    else if(webConfig.isRunning())
+    {
+        webConfig.stop();
     }
 
     // Web and CRSF writes become visible immediately. AMOLED touch uses the
     // same rotation so its hit targets continue to follow the rendered UI.
+    #if defined(OPENDRIFT_CH4_ARMING)
+    if(!driveConfigurationLocked)
+    #endif
     applyDisplayRotation();
 
     configurePin18Mode();
@@ -2920,6 +3084,9 @@ void loop()
     // UI
     //-------------------
 
+    #if defined(OPENDRIFT_CH4_ARMING)
+    if(!driveConfigurationLocked)
+    #endif
     ui.update(
         touch,
         gyro,
@@ -2956,6 +3123,9 @@ void loop()
         #endif
 
     const bool archiveParkCandidate =
+        #if defined(OPENDRIFT_CH4_ARMING)
+        !driveArmed.load(std::memory_order_acquire) &&
+        #endif
         settings.getBlackboxEnabled() &&
         telemetry.steeringSignal &&
         telemetry.throttleSignal &&

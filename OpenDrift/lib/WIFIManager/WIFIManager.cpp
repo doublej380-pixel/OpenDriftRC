@@ -32,6 +32,13 @@ void WiFiManager::begin(
     {
         enable();
     }
+    else
+    {
+        // Do not initialize an AP, DHCP, or mDNS on an off-by-default boot.
+        // Arduino's WIFI_OFF path stops/deinitializes an active Wi-Fi driver.
+        if(enabled) disable();
+        else WiFi.mode(WIFI_OFF);
+    }
 }
 
 bool WiFiManager::startAccessPoint()
@@ -215,6 +222,8 @@ void WiFiManager::restartAccessPoint()
 
     if(!startAccessPoint())
     {
+        // AP startup may have enabled the driver before a later stage failed.
+        WiFi.mode(WIFI_OFF);
         enabled = false;
         Serial.println("WiFi recovery failed; toggle WiFi to retry");
     }

@@ -35,10 +35,10 @@ bool IMU::begin(bool tryLocking)
         qmi.configGyroscope(
             SensorQMI8658::GYR_RANGE_1024DPS,
             SensorQMI8658::GYR_ODR_896_8Hz,
-            SensorQMI8658::LPF_MODE_0
+            SensorQMI8658::LPF_OFF
         ))) return false;
 
-    gyroLpfMode = 0;
+    gyroLpfMode = 2;
     lpfRetryMode = 0;
     lpfRetryCount = 0;
     lpfLastAttemptMs = 0;
@@ -62,7 +62,7 @@ bool IMU::begin(bool tryLocking)
             SensorQMI8658::LPF_MODE_0))) return false;
         if(!stage("async gyroscope config", qmi.configGyroscope(
             SensorQMI8658::GYR_RANGE_1024DPS, SensorQMI8658::GYR_ODR_896_8Hz,
-            SensorQMI8658::LPF_MODE_0))) return false;
+            SensorQMI8658::LPF_OFF))) return false;
         if(!stage("async mode", qmi.disableSyncSampleMode())) return false;
     }
     if(!tryLocking)
@@ -72,7 +72,7 @@ bool IMU::begin(bool tryLocking)
     }
     if(!stage("enable accelerometer", qmi.enableAccelerometer())) return false;
     if(!stage("enable gyroscope", qmi.enableGyroscope())) return false;
-    return stage("register verification", verifyGyroConfiguration(0));
+    return stage("register verification", verifyGyroConfiguration(2));
 }
 
 
@@ -352,17 +352,6 @@ void IMU::update()
     gyroReadFailures = 0;
     accelReadFailures = 0;
 
-    accelMagnitude = sqrtf(
-        (accelX * accelX) +
-        (accelY * accelY) +
-        (accelZ * accelZ)
-    );
-
-    tiltRate = sqrtf(
-        (gyroX * gyroX) +
-        (gyroY * gyroY)
-    );
-
     if(!accelFilterReady)
     {
         slowAccelX = accelX;
@@ -390,6 +379,18 @@ void IMU::update()
         (deltaY * deltaY) +
         (deltaZ * deltaZ)
     );
+
+    // accelDelta and its continuous baseline are required by parked detection.
+    // Everything below is logging-only and must not cost control time when idle.
+    if(!loggingMetricsEnabled.load(std::memory_order_relaxed))
+    {
+        accelMagnitude = 0;
+        tiltRate = 0;
+        surfaceDisturbanceScore = 0;
+        return;
+    }
+    accelMagnitude = sqrtf(accelX * accelX + accelY * accelY + accelZ * accelZ);
+    tiltRate = sqrtf(gyroX * gyroX + gyroY * gyroY);
 
     // Terrain detector used to release settled-drift features during a hard
     // compression, unload, or pitch/roll impulse. It never creates steering

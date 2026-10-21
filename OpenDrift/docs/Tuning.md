@@ -1,5 +1,11 @@
 # OpenDrift v1.0 Tuning
 
+Current development builds (2026-10-20) retire Drift Memory, Memory Limit,
+Hold Assist, and the QMI gyro LPF selector. QMI gyro LPF is bypassed and
+software Smoothing defaults to zero. Existing saved smoothing is preserved.
+The experimental MPU6050 targets are exempt: their original controls,
+20/98/256 Hz filter choices, and defaults remain unchanged.
+
 > **Technical reference:** This document records the complete tuning behavior
 > and current test workflow. The shorter public guide is available at
 > [opendriftrc.com/tuning](https://opendriftrc.com/tuning/).
@@ -8,7 +14,7 @@ OpenDrift v1.0 is a clean-sheet controller built from extensive track testing.
 It uses a deliberately short control path so each adjustment has a clear job.
 
 OpenDrift v1.0 runs the IMU, control calculation, and steering output in a dedicated
-250 Hz or 333 Hz task. Display, touch, Wi-Fi, web configuration, and logging run outside
+333 Hz task. Display, touch, Wi-Fi, web configuration, and logging run outside
 the control task. The steering servo output uses the same selected rate; throttle passthrough
 remains 50 Hz.
 
@@ -58,9 +64,8 @@ The active path is intentionally short:
 8. Apply direct yaw correction using Gain.
 9. While the driver and throttle are quiet, learn a slow drift reference.
 10. Add optional Countersteer Assist from that slow reference.
-11. Apply Drift Memory only to deviation from that reference.
-12. Clamp correction with saturation-aware memory behavior.
-13. Add correction to receiver steering and send it to the servo.
+11. Clamp correction to the configured authority.
+12. Add correction to receiver steering and enforce physical servo endpoints.
 
 Driver steering activity and throttle changes make the slow reference follow
 the car quickly. They do not disable the fast direct damping path.
@@ -74,12 +79,8 @@ the car quickly. They do not disable the fast direct damping path.
 | Deadband | Removes very small corrected yaw near zero |
 | Max Correction | Maximum gyro correction as a percentage of the full calibrated endpoint-to-endpoint steering span; `50%` is center-to-endpoint authority and `100%` can override one endpoint all the way to the other |
 | Smoothing | Broad software yaw low-pass; `0.00` bypasses it and larger values add filtering and phase delay |
-| Gyro LPF | QMI8658 hardware bandwidth: original 24 Hz, low-latency 120 Hz, or Off |
 | Countersteer Assist | Adds slow settled-drift countersteer without increasing fast damping; `0` preserves the base response |
 | Prediction | Continuous yaw-acceleration look-ahead from 0–100 |
-| Hold Assist | Controls how slowly a quiet-drift reference follows yaw |
-| Drift Memory | Feedback strength for error from the quiet-drift reference |
-| Memory Limit | Maximum Drift Memory contribution in microseconds |
 | Steering Travel | Scales driver steering only; it does not reduce gyro authority |
 | Transition Speed | Correction-reversal timing; lower is slower and smoother, higher is faster and sharper |
 | Driver Priority | Progressively reduces only fast direct gyro gain as steering moves away from center; `0` preserves full gyro response and `10-20` is the recommended first test range |
@@ -92,14 +93,9 @@ the chassis response develops.
 
 ### Gyro filtering
 
-The EdgeTX tool and web configurator expose three QMI8658 hardware modes:
-
-- `24 Hz` (`gyro_lpf_mode=0`) is the original low-bandwidth response.
-- `120 Hz` (`gyro_lpf_mode=1`) reduces phase delay while retaining hardware filtering.
-- `Off` (`gyro_lpf_mode=2`) exposes the unfiltered sensor bandwidth.
-
-`Smoothing 0.00` also bypasses the broad software filter. Change one filter at
-a time and retune Gain after changing bandwidth. Anti Wobble remains useful
+The QMI8658 gyro hardware LPF is always bypassed (`gyro_lpf_mode=2`), with no
+user selector. `Smoothing 0.00` bypasses the optional broad software filter
+and is the new default. Anti Wobble remains useful
 because it is a narrow wheel-mode notch rather than a broad yaw low-pass.
 
 ### Transition Speed
@@ -119,7 +115,7 @@ Driver Priority is tuned after Gain and Transition Speed. At `0`, the existing
 controller is unchanged. Increasing it progressively yields fast direct gyro
 gain to the driver as the steering command moves away from center; a value of
 `20` retains 80% of direct gain at full steering and 90% at half steering.
-Countersteer Assist, Drift Memory, Max Correction, and physical endpoints are
+Countersteer Assist, Max Correction, and physical endpoints are
 not reduced. Start at `10`, then test `20`. Excessive priority can remove useful
 stabilization near full countersteer, so the experimental range is capped at
 `50`.
@@ -133,15 +129,11 @@ Use a stand or hold the chassis with the wheels clear before driving.
 | Gain | `1.50` |
 | Deadband | `4` |
 | Max Correction | `100%` |
-| Smoothing | `0.01` |
+| Smoothing | `0.00` |
 | Countersteer Assist | `100` |
 | Driver Priority | `0` |
 | Prediction | `0` |
-| Hold Assist | `0` |
-| Drift Memory | `0.00` |
-| Memory Limit | `80` |
-| Servo Quiet | `0` |
-| Control / servo rate | `250 Hz` |
+| Control / servo rate | `333 Hz` (fixed; supported servos only) |
 | Transition Speed | `50` |
 | Anti Wobble | `50` |
 
@@ -157,8 +149,6 @@ Begin with low-speed entries:
 4. If the signal is visibly noisy, add Smoothing in steps of `0.01`. Do not use
    smoothing to repair a control oscillation.
 5. If the car is stable but the driver carries too much of the settled countersteer, add Countersteer Assist in steps of `10`.
-6. Once entries and transitions are clean, add Hold Assist in steps of `5`.
-7. Add Drift Memory last in steps of `0.05`.
 
 Change one setting at a time.
 
@@ -174,15 +164,12 @@ Change one setting at a time.
 | Transition feels held back or rotates too slowly | Raise Transition Speed |
 | Stable drift requires too much sustained driver countersteer | Raise Countersteer Assist |
 | Gyro feels too hands-on after the drift settles | Lower Countersteer Assist |
-| Long drift slowly wanders after entries are already good | Add Hold Assist |
-| Quiet drift reference is present but does not correct enough | Add Drift Memory |
-| Transition carries the old drift | Lower Hold Assist or Drift Memory |
 | Mid-drift wheel oscillation | Lower Gain first and verify the servo and chassis; then raise Anti Wobble from its default `50` in steps of `10` |
 | Correction sits at Max Correction | More gain will not add authority; inspect travel and geometry |
 
 ## Control and servo rate
 
-Use **250 Hz** unless the servo documentation explicitly lists 333 Hz support. It is the compatibility setting and works with a broader range of digital servos. **333 Hz** shortens the command interval from 4 ms to about 3 ms and may improve response on a supported fast servo. Sending 333 Hz to an unsupported servo can cause buzzing, heat, erratic motion, or damage. Restart OpenDrift after changing the rate.
+Steering/control now uses **333 Hz only**, about 3 ms per command. The old 250 Hz selector is retired and saved settings migrate automatically. Use only a servo explicitly rated for 333 Hz: unsupported servos can buzz, overheat, move erratically, or suffer damage. Throttle output remains independently selectable; this change does not force the ESC to 333 Hz.
 
 ## Current v1.0 CSV fields
 
@@ -206,7 +193,7 @@ the retired alpha-era tuning fields:
 | `effective_direct_gain` | Live base Gain after Driver Priority scaling |
 | `countersteer_assist` | Saved Countersteer Assist setting from 0–100 |
 | `countersteer_us` | Additional slow-reference countersteer contribution |
-| `memory_feedback_us` | Drift Memory correction after its limit |
+| `memory_feedback_us` | Reserved CSV field; zero on non-MPU6050 builds |
 | `driver_activity_blend` | Driver steering-change activity |
 | `steering_activity_us_s` | Filtered receiver steering rate |
 | `transition_speed` | Saved correction-reversal speed from 0–100; start at `50` |

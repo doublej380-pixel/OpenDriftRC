@@ -1263,23 +1263,19 @@ float GyroController::update(
         }
         else
         {
-            float holdStrength =
-                holdBoost
-                /
-                100.0f;
-
+            #if defined(OPENDRIFT_IMU_MPU6050)
+            float referenceTimeConstant =
+                0.045f + quietBlend * (0.18f + 2.20f * (holdBoost / 100.0f));
+            #else
+            // Countersteer still needs its slow reference, but the retired
+            // Hold Assist must not extend the reference time constant.
             float referenceTimeConstant =
                 0.045f
                 +
                 quietBlend
                 *
-                (
-                    0.18f
-                    +
-                    2.20f
-                    *
-                    holdStrength
-                );
+                0.18f;
+            #endif
 
             float referenceAmount =
                 1.0f -
@@ -1296,30 +1292,20 @@ float GyroController::update(
         }
     }
 
-    float referenceError =
-        driftReferenceReady
-        ?
-        filteredYaw - driftReferenceYaw
-        :
-        0.0f;
-
+    float referenceError = driftReferenceReady
+        ? filteredYaw - driftReferenceYaw : 0.0f;
+    #if defined(OPENDRIFT_IMU_MPU6050)
     integralAccumulator = referenceError;
-
-    float memoryCorrection =
-        referenceError
-        *
-        integralGain
-        *
-        MEMORY_GAIN_SCALE
-        *
-        settledBlend;
-
-    integralCorrection =
-        constrain(
-            (int)roundf(memoryCorrection),
-            -integralLimit,
-            integralLimit
-        );
+    float memoryCorrection = referenceError * integralGain
+        * MEMORY_GAIN_SCALE * settledBlend;
+    integralCorrection = constrain((int)roundf(memoryCorrection),
+        -integralLimit, integralLimit);
+    #else
+    // Drift Memory is retired. Keep zero-valued diagnostics/legacy accessors
+    // without a hidden feedback path that old tunes could reactivate.
+    integralAccumulator = 0.0f;
+    integralCorrection = 0;
+    #endif
 
     // Run the notch continuously, even while its output is bypassed. This
     // keeps its history aligned with measured motion and prevents a kick when

@@ -1,6 +1,7 @@
 #pragma once
 
 #include <Arduino.h>
+#include <atomic>
 #include <freertos/FreeRTOS.h>
 #include <freertos/portmacro.h>
 
@@ -32,7 +33,7 @@ private:
     Record* records = nullptr;
     size_t capacity = 0;
     size_t used = 0;
-    bool capturing = false;
+    std::atomic<bool> capturing{false};
     bool exporting = false;
     uint32_t startedUs = 0;
     mutable portMUX_TYPE mux = portMUX_INITIALIZER_UNLOCKED;
